@@ -315,6 +315,71 @@ Recommended mobile implementation order:
 11. supplier payment
 12. sales return / purchase return
 
+## Route Plan
+
+Recommended Expo Router structure:
+
+```text
+app/
+  _layout.tsx
+  login.tsx
+
+  (tabs)/
+    _layout.tsx
+    index.tsx
+    sales/index.tsx
+    purchase/index.tsx
+    docs/index.tsx
+    me/index.tsx
+
+  sales/
+    order/create.tsx
+    order/[orderName].tsx
+    delivery/create.tsx
+    invoice/create.tsx
+    payment/create.tsx
+    return/create.tsx
+
+  purchase/
+    order/create.tsx
+    order/[orderName].tsx
+    receipt/create.tsx
+    invoice/create.tsx
+    payment/create.tsx
+    return/create.tsx
+
+  common/
+    product-search.tsx
+    customer-select.tsx
+    supplier-select.tsx
+    success.tsx
+```
+
+## Route Design Rules
+
+- `login.tsx` should stay outside tabs
+- tabs should only contain first-level entry pages
+- sales and purchase flows should use dedicated route groups instead of overloading tab pages
+- shared picker pages should be placed under `common/*`
+- detailed transaction pages should be reachable from both the home page and later document pages
+
+## Tab Plan
+
+Recommended first-phase tabs:
+
+- `index`
+  - home and quick actions
+- `sales/index`
+  - sales module entry
+- `purchase/index`
+  - purchase module entry
+- `docs/index`
+  - document query and recent records
+- `me/index`
+  - current user, environment info, and logout
+
+If the first release needs fewer tabs, `docs` can temporarily move into the home page and the tab count can be reduced to four.
+
 ## Run
 
 - Web preview:
