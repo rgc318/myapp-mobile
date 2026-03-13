@@ -8,14 +8,16 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/providers/auth-provider';
 
 export default function MeTabScreen() {
-  const { signOut, username } = useAuth();
+  const { profile, roles, signOut, username } = useAuth();
   const borderColor = useThemeColor({}, 'border');
   const surface = useThemeColor({}, 'surface');
   const separatorColor = useThemeColor({}, 'surfaceMuted');
   const tintColor = useThemeColor({}, 'tint');
 
-  const displayName = username || '未登录';
+  const displayName = profile?.fullName || username || '未登录';
   const avatarLabel = displayName.slice(0, 1).toUpperCase();
+  const profileHint = profile?.email || profile?.mobileNo || '当前已登录，可继续处理销售、采购和收付款流程。';
+  const roleHint = roles.length ? roles.slice(0, 2).join(' · ') : '角色信息将在读取成功后显示';
 
   const handleSignOut = async () => {
     await signOut();
@@ -29,7 +31,8 @@ export default function MeTabScreen() {
         </View>
         <View style={styles.profileBody}>
           <ThemedText type="subtitle">{displayName}</ThemedText>
-          <ThemedText>当前已登录，可继续处理销售、采购和收付款流程。</ThemedText>
+          <ThemedText>{profileHint}</ThemedText>
+          <ThemedText style={styles.roleHint}>{roleHint}</ThemedText>
         </View>
       </View>
 
@@ -125,6 +128,10 @@ const styles = StyleSheet.create({
   profileBody: {
     flex: 1,
     gap: 4,
+  },
+  roleHint: {
+    color: '#71859D',
+    fontSize: 12,
   },
   groupCard: {
     borderRadius: 18,

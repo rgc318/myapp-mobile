@@ -125,12 +125,21 @@ Detailed request and response fields should be checked in the backend API docume
 ### Settings
 
 - Goal:
-  - let the operator view and adjust the current backend base URL
+  - let the operator view and adjust the current backend base URL and app-side operational defaults
 - Main result:
   - avoid editing source code when switching between local, LAN, and other test environments
+  - allow the app to reuse default company, default warehouse, and default flow modes
 - Notes:
   - current implementation supports runtime base URL override
   - web can persist the override in browser local storage
+  - current settings page also manages:
+    - default company
+    - default warehouse
+    - sales flow mode
+    - purchase flow mode
+  - these values are frontend-side operator preferences, not backend system settings
+  - company and warehouse are validated against backend master data before saving
+  - company/warehouse candidate selection already supports backend search suggestions
 
 ### Me
 
@@ -157,8 +166,12 @@ Detailed request and response fields should be checked in the backend API docume
   - show current operator/account information in a dedicated page
 - Required fields:
   - current username
+  - display name
+  - email
+  - mobile number
   - login status
   - current auth mode
+  - current roles
 - Notes:
   - this page should stay focused on account-facing data
   - environment/system fields should not be mixed into it
@@ -170,6 +183,7 @@ Detailed request and response fields should be checked in the backend API docume
 - Required fields:
   - current backend base URL
   - current auth mode when useful for diagnosis
+  - current role count
   - client/runtime values needed for troubleshooting
 - Notes:
   - this page is for environment confirmation and debugging support
@@ -209,6 +223,7 @@ Detailed request and response fields should be checked in the backend API docume
 - Key actions:
   - create step-by-step order
   - optionally support later direct flow entry
+  - read default company and default warehouse from app preferences as initial values
 - Success result:
   - receive `order`
 
@@ -295,6 +310,7 @@ Detailed request and response fields should be checked in the backend API docume
 - Key actions:
   - create printable purchase order
   - allow price and quantity confirmation before sending to supplier
+  - read default company and default warehouse from app preferences as initial values
 - Success result:
   - receive `purchase_order`
 
@@ -313,6 +329,7 @@ Detailed request and response fields should be checked in the backend API docume
   - partial receiving
   - remove unavailable items
   - adjust factual received price
+  - read default warehouse and purchase flow mode from app preferences
 - Success result:
   - receive `purchase_receipt`
 
@@ -464,6 +481,33 @@ The current user module already includes:
 - account info page
 - system info page
 - settings page with backend base URL override
+- user profile fetch
+- user role fetch
+
+## Current Settings Module Status
+
+The current settings module already includes:
+
+- backend base URL override
+- default company
+- default warehouse
+- sales flow mode
+- purchase flow mode
+
+Current behavior:
+
+- flow mode changes can be applied directly from the option chips
+- company and warehouse can be selected from backend-backed candidate suggestions
+- company and warehouse are validated against backend master data before saving
+- invalid company/warehouse values show field-level error state and field-level error copy
+- these settings are currently stored as frontend-side operator preferences
+- they are not yet written back into ERPNext user defaults or global settings
+
+Planned boundary:
+
+- mobile should focus on choosing and using existing company/warehouse values
+- mobile should not yet create or edit warehouse master data
+- warehouse/company master data maintenance remains better suited to web admin or ERPNext native backend
 
 Current visual direction:
 
