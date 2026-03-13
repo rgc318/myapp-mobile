@@ -70,6 +70,8 @@ Detailed request and response fields should be checked in the backend API docume
 ## First Phase Pages
 
 - Login
+- Settings
+- Me
 - Home
 - Product Search
 - Sales Order
@@ -94,7 +96,13 @@ Detailed request and response fields should be checked in the backend API docume
 - Main result:
   - create a valid session for later gateway calls
 - Notes:
-  - actual login integration can be decided later, but the page must reserve username/password flow first
+  - current implementation uses ERPNext built-in session login
+  - login endpoint: `POST /api/method/login`
+  - session restore endpoint: `GET /api/method/frappe.auth.get_logged_user`
+  - logout endpoint: `POST /api/method/logout`
+  - frontend should use `EXPO_PUBLIC_API_BASE_URL` to point to the current backend
+  - for local web preview, default backend target is `http://localhost:8080`
+  - web preview additionally stores the last logged-in username in browser local storage to improve refresh recovery
 
 ### Home
 
@@ -107,6 +115,28 @@ Detailed request and response fields should be checked in the backend API docume
   - pending tasks
 - Key requirement:
   - actions should be one tap away, not hidden in deep menu trees
+
+### Settings
+
+- Goal:
+  - let the operator view and adjust the current backend base URL
+- Main result:
+  - avoid editing source code when switching between local, LAN, and other test environments
+- Notes:
+  - current implementation supports runtime base URL override
+  - web can persist the override in browser local storage
+
+### Me
+
+- Goal:
+  - collect user and environment information into one stable place
+- Required fields:
+  - current username
+  - current backend base URL
+  - current client name
+- Key actions:
+  - open settings page
+  - sign out
 
 ### Product Search
 

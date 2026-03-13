@@ -5,25 +5,39 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#1677FF';
+const tintColorDark = '#91CAFF';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    text: '#1F2A37',
+    background: '#F4F8FC',
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    icon: '#7B8BA1',
+    tabIconDefault: '#7B8BA1',
     tabIconSelected: tintColorLight,
+    surface: '#FFFFFF',
+    surfaceMuted: '#EEF4FB',
+    border: '#D6E4F0',
+    success: '#2F7D4A',
+    warning: '#B7791F',
+    danger: '#D14343',
+    accentSoft: '#E8F1FF',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    text: '#EAF2FF',
+    background: '#111827',
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#A6B4C8',
+    tabIconDefault: '#A6B4C8',
     tabIconSelected: tintColorDark,
+    surface: '#182331',
+    surfaceMuted: '#223247',
+    border: '#334A63',
+    success: '#68B27F',
+    warning: '#E3AC53',
+    danger: '#F08A8A',
+    accentSoft: '#193153',
   },
 };
 
@@ -39,7 +53,7 @@ export const Fonts = Platform.select({
     mono: 'ui-monospace',
   },
   default: {
-    sans: 'normal',
+    sans: 'sans-serif',
     serif: 'serif',
     rounded: 'normal',
     mono: 'monospace',
