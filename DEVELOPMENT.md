@@ -100,6 +100,9 @@ Detailed request and response fields should be checked in the backend API docume
   - login endpoint: `POST /api/method/login`
   - session restore endpoint: `GET /api/method/frappe.auth.get_logged_user`
   - logout endpoint: `POST /api/method/logout`
+  - auth layer already reserves optional token mode
+  - if future login response contains `token` or `access_token`, frontend will automatically switch to token mode
+  - if no token is returned, frontend keeps using ERPNext session mode
   - frontend should use `EXPO_PUBLIC_API_BASE_URL` to point to the current backend
   - for local web preview, default backend target is `http://localhost:8080`
   - web preview additionally stores the last logged-in username in browser local storage to improve refresh recovery

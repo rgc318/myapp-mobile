@@ -9,7 +9,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/providers/auth-provider';
 
 export default function MeTabScreen() {
-  const { signOut, username } = useAuth();
+  const { authMode, signOut, username } = useAuth();
   const borderColor = useThemeColor({}, 'border');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
 
@@ -29,6 +29,7 @@ export default function MeTabScreen() {
         <ThemedText>myapp-mobile / Expo Router</ThemedText>
         <ThemedText>后端联调目标：myapp.api.gateway.*</ThemedText>
         <ThemedText>当前后端地址：{getApiBaseUrl()}</ThemedText>
+        <ThemedText>当前认证模式：{authMode === 'token' ? 'Token' : 'Session'}</ThemedText>
       </View>
 
       <Link href={'/settings' as Href} style={[styles.secondaryLink, { borderColor }]}>

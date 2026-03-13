@@ -7,6 +7,32 @@ export type LoginParams = {
   password: string;
 };
 
+export type AuthMode = 'session' | 'token';
+
+export type LoginResult = {
+  token: string | null;
+  mode: AuthMode;
+};
+
+function extractToken(payload: any): string | null {
+  const candidates = [
+    payload?.token,
+    payload?.access_token,
+    payload?.data?.token,
+    payload?.data?.access_token,
+    payload?.message?.token,
+    payload?.message?.access_token,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
 export async function loginWithPassword({ username, password }: LoginParams) {
   const apiBaseUrl = getApiBaseUrl();
   let response: Response;
@@ -35,8 +61,9 @@ export async function loginWithPassword({ username, password }: LoginParams) {
   }
 
   const payload = await response.json().catch(() => ({}));
+  const token = extractToken(payload);
 
-  if (!response.ok || payload?.message !== 'Logged In') {
+  if (!response.ok || (!token && payload?.message !== 'Logged In')) {
     const message =
       payload?.message ||
       payload?.exc ||
@@ -44,10 +71,13 @@ export async function loginWithPassword({ username, password }: LoginParams) {
     throw new Error(String(message));
   }
 
-  return payload;
+  return {
+    token,
+    mode: token ? 'token' : 'session',
+  } satisfies LoginResult;
 }
 
-export async function getLoggedUser() {
+export async function getLoggedUser(authToken?: string | null) {
   const apiBaseUrl = getApiBaseUrl();
   let response: Response;
 
@@ -55,6 +85,7 @@ export async function getLoggedUser() {
     response = await fetch(`${apiBaseUrl}/api/method/frappe.auth.get_logged_user`, {
       headers: {
         Accept: 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
       credentials: 'include',
     });
@@ -71,13 +102,14 @@ export async function getLoggedUser() {
   return payload.message;
 }
 
-export async function logoutFromSession() {
+export async function logoutFromSession(authToken?: string | null) {
   const apiBaseUrl = getApiBaseUrl();
 
   await fetch(`${apiBaseUrl}/api/method/logout`, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
     credentials: 'include',
   }).catch(() => undefined);
