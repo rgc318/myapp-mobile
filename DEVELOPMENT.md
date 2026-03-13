@@ -87,6 +87,47 @@ Detailed request and response fields should be checked in the backend API docume
 - Supplier Payment
 - Purchase Return
 
+## Current Reference Sources
+
+This mobile project is now being adjusted against local screenshot references instead of abstract style guessing.
+
+- Reference screenshots:
+  - `/home/rgc318/python-project/frappe_docker/reference_photos`
+- Current implementation screenshots:
+  - `/home/rgc318/python-project/frappe_docker/screenshots`
+
+Current key references for active work:
+
+- Home workbench:
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/home-dashboard-overview.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/home-dashboard-overview-02.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/home-dashboard-overview-03.jpg`
+- Sales order / billing:
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/sales-order-form-full.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/sales-order-form-full-02.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/sales-order-form-full-03.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/sales-order-form-shipping-section.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/sales-order-form-shipping-summary.jpg`
+- Auxiliary reference pages:
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/product-list-page.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/customer-selection-page.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/settings-page.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/account-info-page.jpg`
+  - `/home/rgc318/python-project/frappe_docker/reference_photos/my-profile-page.jpg`
+
+Use references as:
+
+- layout reference
+- information hierarchy reference
+- spacing-density reference
+- action ordering reference
+
+Do not use references as:
+
+- a full visual copy target
+- a branding copy target
+- a reason to remove existing backend-driven business capability
+
 ## Page Requirements
 
 ### Login
@@ -121,6 +162,12 @@ Detailed request and response fields should be checked in the backend API docume
   - pending tasks
 - Key requirement:
   - actions should be one tap away, not hidden in deep menu trees
+- Current design direction:
+  - top search should be a real input, not a fake navigation field
+  - quick shortcuts should use icon-above/text-below layout
+  - shortcut area should be compact and consistent
+  - detailed explanatory text should move below the shortcut zone
+  - the page should feel like a workbench, not a documentation card page
 
 ### Settings
 
@@ -140,6 +187,8 @@ Detailed request and response fields should be checked in the backend API docume
   - these values are frontend-side operator preferences, not backend system settings
   - company and warehouse are validated against backend master data before saving
   - company/warehouse candidate selection already supports backend search suggestions
+  - field-level validation is preferred over weak page-level notice text
+  - settings UI should use grouped-list logic rather than stacked heavy cards
 
 ### Me
 
@@ -192,7 +241,7 @@ Detailed request and response fields should be checked in the backend API docume
 ### Product Search
 
 - Goal:
-  - search products and add them into a sales order quickly
+  - act as a dedicated search tool page, not the primary order container
 - API:
   - `myapp.api.gateway.search_product`
 - Required fields to display:
@@ -203,14 +252,18 @@ Detailed request and response fields should be checked in the backend API docume
   - `price`
 - Key actions:
   - search by code, barcode, or keyword
-  - choose quantity
-  - choose warehouse if needed
-  - send selected items into sales order creation
+  - review stock/price summary
+  - optionally add searched items into order draft
+- Current design notes:
+  - this page should visually read as a search page first
+  - it should not spend too much first-screen height on large title blocks
+  - the main search input should be the visual focus
+  - this page is now a helper page, not the main order page
 
 ### Sales Order
 
 - Goal:
-  - create a sales order and allow the operator to confirm customer, quantity, price, and warehouse
+  - create a sales order as the core document and allow the operator to confirm customer, quantity, price, warehouse, date, and remarks
 - API:
   - `myapp.api.gateway.create_order`
 - Required fields:
@@ -220,12 +273,63 @@ Detailed request and response fields should be checked in the backend API docume
   - price
   - warehouse
   - company
+  - posting date
+  - remarks
 - Key actions:
   - create step-by-step order
-  - optionally support later direct flow entry
+  - search products inside the order page
+  - add products into the current order
+  - edit quantity and price directly in the order lines
+  - remove order lines
   - read default company and default warehouse from app preferences as initial values
 - Success result:
   - receive `order`
+- Current design notes:
+  - the order page is document-centered
+  - product area should be the visual main body
+  - customer/company/warehouse/date are supporting metadata, not the primary visual block
+  - earlier iterations had the metadata section occupying too much vertical space; that layout should not be reused
+  - company/warehouse should use searchable dropdown selection rather than plain text input
+  - bottom fixed actions are acceptable if they improve speed for order save/settlement
+
+## Current Implementation Notes
+
+The current mobile implementation already includes:
+
+- auth/session layer with optional future token reservation
+- user profile and role reading
+- local operator preferences:
+  - backend base URL
+  - default company
+  - default warehouse
+  - sales flow mode
+  - purchase flow mode
+- backend validation before saving company/warehouse preferences
+- home page workbench rework in progress
+- product search page rework in progress
+- sales order page rework in progress
+
+Current real business-code pieces already added:
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/gateway.ts`
+  - mobile gateway request wrapper
+  - product search
+  - sales-order creation
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/sales-order-draft.ts`
+  - local sales-order draft storage
+  - line quantity/price updates
+  - line removal
+
+## Design Lessons From This Round
+
+These points came directly from comparing our implementation screenshots with the local references:
+
+- Referencing other apps should improve structure, not erase product identity
+- Overusing a generic page shell makes very different pages look equally heavy
+- Search pages, settings pages, and order pages should not share the same page hierarchy
+- If metadata blocks take half a screen, the document loses focus
+- If shortcuts are rendered as text rows or unstable inline layouts, the home page loses visual clarity
+- Search and selection interactions must behave like real inputs and dropdowns, not fake boxes
 
 ### Delivery
 

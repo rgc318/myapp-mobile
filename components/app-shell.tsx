@@ -19,6 +19,7 @@ type AppShellProps = {
   children?: ReactNode;
   actions?: ActionLink[];
   contentCard?: boolean;
+  compactHeader?: boolean;
 };
 
 export function AppShell({
@@ -27,6 +28,7 @@ export function AppShell({
   children,
   actions = [],
   contentCard = true,
+  compactHeader = false,
 }: AppShellProps) {
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
@@ -40,7 +42,7 @@ export function AppShell({
       <ThemedView
         lightColor={surfaceMuted}
         darkColor={surfaceMuted}
-        style={[styles.header, { borderColor }]}>
+        style={[compactHeader ? styles.headerCompact : styles.header, { borderColor }]}>
         <ThemedText style={[styles.eyebrow, { color: tintColor }]}>RGC WHOLESALE FLOW</ThemedText>
         <ThemedText type="title">{title}</ThemedText>
         <ThemedText style={styles.description}>{description}</ThemedText>
@@ -89,6 +91,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
     padding: 22,
+  },
+  headerCompact: {
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
   },
   eyebrow: {
     fontSize: 12,
