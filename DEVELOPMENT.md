@@ -72,6 +72,8 @@ Detailed request and response fields should be checked in the backend API docume
 - Login
 - Settings
 - Me
+- Account Info
+- System Info
 - Home
 - Product Search
 - Sales Order
@@ -106,6 +108,7 @@ Detailed request and response fields should be checked in the backend API docume
   - frontend should use `EXPO_PUBLIC_API_BASE_URL` to point to the current backend
   - for local web preview, default backend target is `http://localhost:8080`
   - web preview additionally stores the last logged-in username in browser local storage to improve refresh recovery
+  - local web preview requires backend `allow_cors` to include `http://localhost:8081`
 
 ### Home
 
@@ -132,14 +135,45 @@ Detailed request and response fields should be checked in the backend API docume
 ### Me
 
 - Goal:
-  - collect user and environment information into one stable place
-- Required fields:
-  - current username
-  - current backend base URL
-  - current client name
+  - act as the user-module overview page rather than carrying every detail directly
+- Current structure:
+  - profile summary
+  - account and system entry group
+  - settings/help entry group
+  - sign-out action group
 - Key actions:
+  - open account info page
+  - open system info page
   - open settings page
   - sign out
+- UI direction:
+  - use grouped mobile settings/list patterns
+  - prefer row-based grouped lists over stacked marketing-style cards
+  - keep separators light and inset
+
+### Account Info
+
+- Goal:
+  - show current operator/account information in a dedicated page
+- Required fields:
+  - current username
+  - login status
+  - current auth mode
+- Notes:
+  - this page should stay focused on account-facing data
+  - environment/system fields should not be mixed into it
+
+### System Info
+
+- Goal:
+  - show current environment and runtime information in a dedicated page
+- Required fields:
+  - current backend base URL
+  - current auth mode when useful for diagnosis
+  - client/runtime values needed for troubleshooting
+- Notes:
+  - this page is for environment confirmation and debugging support
+  - it should stay separate from user/account details
 
 ### Product Search
 
@@ -356,14 +390,17 @@ Recommended Expo Router structure:
 app/
   _layout.tsx
   login.tsx
+  account-info.tsx
+  system-info.tsx
+  settings.tsx
 
   (tabs)/
     _layout.tsx
     index.tsx
-    sales/index.tsx
-    purchase/index.tsx
-    docs/index.tsx
-    me/index.tsx
+    sales.tsx
+    purchase.tsx
+    docs.tsx
+    me.tsx
 
   sales/
     order/create.tsx
@@ -391,10 +428,12 @@ app/
 ## Route Design Rules
 
 - `login.tsx` should stay outside tabs
+- account, system, and settings pages should stay outside tabs
 - tabs should only contain first-level entry pages
 - sales and purchase flows should use dedicated route groups instead of overloading tab pages
 - shared picker pages should be placed under `common/*`
 - detailed transaction pages should be reachable from both the home page and later document pages
+- the `me` tab should remain an overview page, while detailed user information should be pushed into subpages
 
 ## Tab Plan
 
@@ -412,6 +451,24 @@ Recommended first-phase tabs:
   - current user, environment info, and logout
 
 If the first release needs fewer tabs, `docs` can temporarily move into the home page and the tab count can be reduced to four.
+
+## Current User Module Status
+
+The current user module already includes:
+
+- ERPNext session login
+- session restore on app bootstrap
+- logout
+- optional token-aware auth fallback in frontend handling
+- me page
+- account info page
+- system info page
+- settings page with backend base URL override
+
+Current visual direction:
+
+- login page and me page are under active UI refinement
+- user-module pages should align with mainstream mobile grouped-settings patterns instead of heavy stacked-card layouts
 
 ## Run
 

@@ -18,9 +18,16 @@ type AppShellProps = {
   description: string;
   children?: ReactNode;
   actions?: ActionLink[];
+  contentCard?: boolean;
 };
 
-export function AppShell({ title, description, children, actions = [] }: AppShellProps) {
+export function AppShell({
+  title,
+  description,
+  children,
+  actions = [],
+  contentCard = true,
+}: AppShellProps) {
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
@@ -53,13 +60,19 @@ export function AppShell({ title, description, children, actions = [] }: AppShel
         </View>
       ) : null}
 
-      {children ? (
+      {children && contentCard ? (
         <ThemedView
           lightColor={surface}
           darkColor={surface}
           style={[styles.section, { borderColor }]}>
           {children}
         </ThemedView>
+      ) : null}
+
+      {children && !contentCard ? (
+        <View style={styles.contentPlain}>
+          {children}
+        </View>
       ) : null}
     </ScrollView>
   );
@@ -100,5 +113,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
     padding: 20,
+  },
+  contentPlain: {
+    gap: 12,
   },
 });
