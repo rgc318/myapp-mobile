@@ -380,7 +380,12 @@ Current boundary / known gap:
 
 - frontend shipping fields are now present in the sales-order page
 - customer default shipping/contact lookup has been added in frontend master-data helpers
-- however, sales-order submit payload is not yet writing shipping/contact fields into `create_order` because backend field naming still needs confirmation
+- however, sales-order submit payload is not yet writing shipping/contact fields into `create_order`
+- backend order-level field names for shipping address, contact person, and contact phone are still not confirmed in the current handoff/API docs
+- until those backend fields are confirmed, the following feature must be treated as partial only:
+  - order-page display of shipping defaults
+  - order-page editing of shipping/contact values
+- current implemented behavior is frontend-local only for those three fields
 - this should be aligned before treating shipping-info submission as complete
 
 Known implementation cautions:
