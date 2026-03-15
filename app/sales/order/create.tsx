@@ -1,13 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
@@ -15,21 +9,18 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getAppPreferences } from '@/lib/app-preferences';
 import {
-  addItemToSalesOrderDraft,
-  clearSalesOrderDraft,
   getSalesOrderDraft,
   removeSalesOrderDraftItem,
+  restoreSalesOrderDraftItem,
   updateSalesOrderDraftField,
   updateSalesOrderDraftQty,
+  type SalesOrderDraftItem,
 } from '@/lib/sales-order-draft';
 import { useAuth } from '@/providers/auth-provider';
-import {
-  createSalesOrder,
-  searchProducts,
-  type ProductSearchItem,
-} from '@/services/gateway';
+import { createSalesOrder } from '@/services/gateway';
 import {
   checkLinkOptionExists,
+  getCustomerShippingDetails,
   searchLinkOptions,
   type LinkOption,
 } from '@/services/master-data';
@@ -124,59 +115,16 @@ function SummaryRow({
   );
 }
 
-function SearchResultRow({
-                           item,
-                           onAdd,
-                         }: {
-  item: ProductSearchItem;
-  onAdd: (item: ProductSearchItem) => void;
-}) {
-  const borderColor = useThemeColor({}, 'border');
-  const tintColor = useThemeColor({}, 'tint');
-  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
-
-  return (
-    <View style={[styles.searchResultRow, { borderColor }]}>
-      <View
-        style={[styles.searchResultThumb, { backgroundColor: surfaceMuted }]}>
-        <IconSymbol color={tintColor} name="shippingbox.fill" size={18} />
-      </View>
-
-      <View style={styles.searchResultMain}>
-        <ThemedText numberOfLines={1} type="defaultSemiBold">
-          {item.itemName || item.itemCode}
-        </ThemedText>
-        <ThemedText style={styles.searchResultMeta}>
-          {item.itemCode} · 库存 {item.stockQty ?? '-'} · {item.uom || '件'}
-        </ThemedText>
-      </View>
-
-      <View style={styles.searchResultAside}>
-        <ThemedText style={styles.searchResultPrice} type="defaultSemiBold">
-          ¥ {item.price ?? '-'}
-        </ThemedText>
-        <Pressable onPress={() => onAdd(item)} style={styles.textActionButton}>
-          <ThemedText
-            style={[styles.textAction, { color: tintColor }]}
-            type="defaultSemiBold">
-            加入
-          </ThemedText>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 function SalesItemRow({
-                        itemCode,
-                        itemName,
-                        price,
-                        qty,
-                        warehouse,
-                        onChangePrice,
-                        onChangeQty,
-                        onRemove,
-                      }: {
+  itemCode,
+  itemName,
+  price,
+  qty,
+  warehouse,
+  onChangePrice,
+  onChangeQty,
+  onRemove,
+}: {
   itemCode: string;
   itemName: string;
   price: number | null;
@@ -186,11 +134,47 @@ function SalesItemRow({
   onChangeQty: (value: string) => void;
   onRemove: () => void;
 }) {
+  const [qtyText, setQtyText] = useState(String(qty));
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const dangerColor = useThemeColor({}, 'danger');
+  const tintColor = useThemeColor({}, 'tint');
   const lineAmount = (price ?? 0) * qty;
+
+  useEffect(() => {
+    setQtyText(String(qty));
+  }, [qty]);
+
+  const commitQty = (rawValue: string) => {
+    const normalized = rawValue.replace(/[^0-9]/g, '');
+
+    if (!normalized) {
+      setQtyText(String(qty));
+      return;
+    }
+
+    const nextQty = Math.max(1, Number(normalized) || qty);
+    setQtyText(String(nextQty));
+    onChangeQty(String(nextQty));
+  };
+
+  const handleDecrease = () => {
+    if (qty <= 1) {
+      setQtyText('1');
+      return;
+    }
+
+    const nextQty = Math.max(1, qty - 1);
+    setQtyText(String(nextQty));
+    onChangeQty(String(nextQty));
+  };
+
+  const handleIncrease = () => {
+    const nextQty = qty + 1;
+    setQtyText(String(nextQty));
+    onChangeQty(String(nextQty));
+  };
 
   return (
     <View style={[styles.itemRow, { backgroundColor: surface, borderColor }]}>
@@ -199,46 +183,67 @@ function SalesItemRow({
       </View>
 
       <View style={styles.itemMain}>
-        <View style={styles.itemTitleRow}>
-          <ThemedText numberOfLines={1} style={styles.itemTitle} type="defaultSemiBold">
-            {itemName || itemCode}
-          </ThemedText>
-          <ThemedText style={styles.itemAmountInline} type="defaultSemiBold">
-            ¥ {formatMoney(lineAmount)}
-          </ThemedText>
+        <View style={styles.itemHeaderRow}>
+          <View style={styles.itemHeaderCopy}>
+            <ThemedText numberOfLines={1} style={styles.itemTitle} type="defaultSemiBold">
+              {itemName || itemCode}
+            </ThemedText>
+            <ThemedText style={styles.itemSubline}>{'\u7f16\u7801 '} {itemCode}</ThemedText>
+            <ThemedText style={styles.itemSubline}>{'\u4ed3\u5e93 '} {warehouse || '\u672a\u6307\u5b9a\u4ed3\u5e93'}</ThemedText>
+          </View>
+
+          <View style={styles.itemHeaderAside}>
+            <ThemedText style={styles.itemAmountInline} type="defaultSemiBold">
+              {'\u00A5'} {formatMoney(lineAmount)}
+            </ThemedText>
+            <Pressable onPress={onRemove} style={[styles.removeButton, { borderColor }]}> 
+              <ThemedText style={[styles.textAction, { color: dangerColor }]}>{'\u5220\u9664'}</ThemedText>
+            </Pressable>
+          </View>
         </View>
 
-        <ThemedText style={styles.itemSubline}>编码 {itemCode}</ThemedText>
-        <ThemedText style={styles.itemSubline}>
-          仓库 {warehouse || '未设置'}
-        </ThemedText>
-
         <View style={styles.itemEditRow}>
-          <View style={styles.itemEditBlock}>
-            <ThemedText style={styles.itemEditLabel}>数量</ThemedText>
-            <TextInput
-              keyboardType="numeric"
-              onChangeText={onChangeQty}
-              style={[styles.itemInput, { backgroundColor: surfaceMuted, borderColor }]}
-              value={String(qty)}
-            />
+          <View style={styles.itemEditBlockCompact}>
+            <ThemedText style={styles.itemEditLabel}>{'\u6570\u91cf'}</ThemedText>
+            <View style={[styles.qtyStepper, { backgroundColor: surfaceMuted, borderColor }]}> 
+              <Pressable
+                disabled={qty <= 1}
+                onPress={handleDecrease}
+                style={[styles.qtyActionButton, qty <= 1 && styles.qtyActionButtonDisabled]}>
+                <ThemedText style={[styles.qtyActionText, { color: tintColor }]} type="defaultSemiBold">
+                  -
+                </ThemedText>
+              </Pressable>
+              <TextInput
+                keyboardType="number-pad"
+                onBlur={() => commitQty(qtyText)}
+                onChangeText={(value) => setQtyText(value.replace(/[^0-9]/g, ''))}
+                onSubmitEditing={() => commitQty(qtyText)}
+                returnKeyType="done"
+                selectTextOnFocus
+                style={styles.qtyInput}
+                value={qtyText}
+              />
+              <Pressable onPress={handleIncrease} style={styles.qtyActionButton}>
+                <ThemedText style={[styles.qtyActionText, { color: tintColor }]} type="defaultSemiBold">
+                  +
+                </ThemedText>
+              </Pressable>
+            </View>
           </View>
 
-          <View style={styles.itemEditBlock}>
-            <ThemedText style={styles.itemEditLabel}>单价</ThemedText>
-            <TextInput
-              keyboardType="numeric"
-              onChangeText={onChangePrice}
-              style={[styles.itemInput, { backgroundColor: surfaceMuted, borderColor }]}
-              value={price === null ? '' : String(price)}
-            />
+          <View style={styles.itemEditBlockPrice}>
+            <ThemedText style={styles.itemEditLabel}>{'\u5355\u4ef7'}</ThemedText>
+            <View style={[styles.priceInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
+              <ThemedText style={styles.pricePrefix}>{'\u00A5'}</ThemedText>
+              <TextInput
+                keyboardType="numeric"
+                onChangeText={onChangePrice}
+                style={styles.priceInput}
+                value={price === null ? '' : String(price)}
+              />
+            </View>
           </View>
-
-          <Pressable onPress={onRemove} style={styles.removeButton}>
-            <ThemedText style={[styles.textAction, { color: dangerColor }]}>
-              删除
-            </ThemedText>
-          </Pressable>
         </View>
       </View>
     </View>
@@ -249,20 +254,24 @@ export default function SalesOrderCreateScreen() {
   const router = useRouter();
   const preferences = getAppPreferences();
   const { profile } = useAuth();
+  const isFocused = useIsFocused();
 
-  const [customer, setCustomer] = useState('Palmer Productions Ltd.');
+  const [customer, setCustomer] = useState('');
   const [company, setCompany] = useState(preferences.defaultCompany);
   const [remarks, setRemarks] = useState('');
-  const [searchText, setSearchText] = useState('');
-  const [searchResults, setSearchResults] = useState<ProductSearchItem[]>([]);
+  const [shippingAddress, setShippingAddress] = useState('');
+  const [shippingContact, setShippingContact] = useState('');
+  const [shippingPhone, setShippingPhone] = useState('');
+  const [isLoadingShippingInfo, setIsLoadingShippingInfo] = useState(false);
   const [draftItems, setDraftItems] = useState(getSalesOrderDraft());
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<MessageTone>('info');
   const [customerError, setCustomerError] = useState('');
   const [companyError, setCompanyError] = useState('');
   const [showOrderMeta, setShowOrderMeta] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingRemovedItem, setPendingRemovedItem] = useState<SalesOrderDraftItem | null>(null);
+  const removeUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const postingDate = new Date().toISOString().slice(0, 10);
 
@@ -276,6 +285,77 @@ export default function SalesOrderCreateScreen() {
 
   const syncDraft = () => {
     setDraftItems([...getSalesOrderDraft()]);
+  };
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
+    setDraftItems([...getSalesOrderDraft()]);
+  }, [isFocused]);
+
+  useEffect(() => () => {
+    if (removeUndoTimerRef.current) {
+      clearTimeout(removeUndoTimerRef.current);
+    }
+  }, []);
+
+
+  useEffect(() => {
+    const trimmedCustomer = customer.trim();
+
+    if (!trimmedCustomer) {
+      setShippingAddress('');
+      setShippingContact('');
+      setShippingPhone('');
+      setIsLoadingShippingInfo(false);
+      return;
+    }
+
+    let active = true;
+    setIsLoadingShippingInfo(true);
+
+    void getCustomerShippingDetails(trimmedCustomer)
+      .then((details) => {
+        if (!active) {
+          return;
+        }
+
+        setShippingAddress(details.shippingAddress);
+        setShippingContact(details.contactPerson);
+        setShippingPhone(details.contactPhone);
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingShippingInfo(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [customer]);
+
+  const clearPendingRemovedItem = () => {
+    if (removeUndoTimerRef.current) {
+      clearTimeout(removeUndoTimerRef.current);
+      removeUndoTimerRef.current = null;
+    }
+
+    setPendingRemovedItem(null);
+  };
+
+  const queueUndoForRemovedItem = (item: SalesOrderDraftItem) => {
+    if (removeUndoTimerRef.current) {
+      clearTimeout(removeUndoTimerRef.current);
+    }
+
+    setPendingRemovedItem(item);
+    removeUndoTimerRef.current = setTimeout(() => {
+      setPendingRemovedItem(null);
+      removeUndoTimerRef.current = null;
+    }, 4000);
   };
 
   const setStatusMessage = (text: string, tone: MessageTone) => {
@@ -300,45 +380,6 @@ export default function SalesOrderCreateScreen() {
 
   const loadCustomers = (query: string) => searchLinkOptions('Customer', query);
   const loadCompanies = (query: string) => searchLinkOptions('Company', query);
-
-  const addProduct = (item: ProductSearchItem) => {
-    addItemToSalesOrderDraft(item);
-    syncDraft();
-    setStatusMessage('', 'info');
-  };
-
-  const handleSearch = async () => {
-    const keyword = searchText.trim();
-
-    if (!keyword) {
-      setSearchResults([]);
-      setStatusMessage('请先输入商品名称或商品编码。', 'error');
-      return;
-    }
-
-    setIsSearching(true);
-    setStatusMessage('', 'info');
-
-    try {
-      const rows = await searchProducts(keyword, {
-        company: company || undefined,
-        limit: 12,
-      });
-      setSearchResults(rows);
-
-      if (!rows.length) {
-        setStatusMessage('没有找到匹配的商品。', 'info');
-      }
-    } catch (error) {
-      setSearchResults([]);
-      setStatusMessage(
-        error instanceof Error ? error.message : '搜索失败，请稍后重试。',
-        'error',
-      );
-    } finally {
-      setIsSearching(false);
-    }
-  };
 
   const validateLinks = async () => {
     let valid = true;
@@ -383,6 +424,24 @@ export default function SalesOrderCreateScreen() {
     return valid;
   };
 
+  const handleUndoRemove = () => {
+    if (!pendingRemovedItem) {
+      return;
+    }
+
+    restoreSalesOrderDraftItem(pendingRemovedItem);
+    syncDraft();
+    setStatusMessage(`\u5df2\u6062\u590d ${pendingRemovedItem.itemName || pendingRemovedItem.itemCode}`, 'success');
+    clearPendingRemovedItem();
+  };
+
+  const handleRemoveItem = (item: SalesOrderDraftItem) => {
+    removeSalesOrderDraftItem(item.draftKey);
+    syncDraft();
+    setStatusMessage(`\u5df2\u5220\u9664 ${item.itemName || item.itemCode}`, 'info');
+    queueUndoForRemovedItem(item);
+  };
+
   const handleSubmit = async () => {
     setStatusMessage('', 'info');
 
@@ -397,7 +456,7 @@ export default function SalesOrderCreateScreen() {
       await createSalesOrder({
         customer,
         company,
-        posting_date: postingDate,
+        transaction_date: postingDate,
         remarks: remarks.trim() || undefined,
         items: draftItems.map((item) => ({
           item_code: item.itemCode,
@@ -408,11 +467,7 @@ export default function SalesOrderCreateScreen() {
         })),
       });
 
-      clearSalesOrderDraft();
       syncDraft();
-      setSearchResults([]);
-      setSearchText('');
-      setRemarks('');
       setStatusMessage('销售单已创建。', 'success');
     } catch (error) {
       setStatusMessage(
@@ -507,7 +562,7 @@ export default function SalesOrderCreateScreen() {
         <View
           style={[styles.quickActionsCard, { backgroundColor: surface, borderColor }]}>
           <Pressable
-            onPress={() => setStatusMessage('请使用下方搜索框添加商品。', 'info')}
+            onPress={() => router.push('/common/product-search')}
             style={styles.quickActionButton}>
             <View style={[styles.quickActionIcon, { backgroundColor: accentSoft }]}>
               <IconSymbol color={tintColor} name="cart.fill.badge.plus" size={18} />
@@ -516,7 +571,7 @@ export default function SalesOrderCreateScreen() {
               <ThemedText style={styles.quickActionLabel} type="defaultSemiBold">
                 选择商品
               </ThemedText>
-              <ThemedText style={styles.quickActionHint}>搜索后加入本单</ThemedText>
+                <ThemedText style={styles.quickActionHint}>进入商品搜索页选择</ThemedText>
             </View>
           </Pressable>
 
@@ -548,51 +603,24 @@ export default function SalesOrderCreateScreen() {
             </View>
           </View>
 
-          <View style={[styles.searchBar, { backgroundColor: surfaceMuted, borderColor }]}>
-            <IconSymbol color={tintColor} name="magnifyingglass" size={16} />
-            <TextInput
-              onChangeText={setSearchText}
-              placeholder="搜索商品名称 / 商品编号"
-              placeholderTextColor="#9CA3AF"
-              style={styles.searchInput}
-              value={searchText}
-            />
-            <Pressable
-              onPress={handleSearch}
-              style={[styles.searchButton, { backgroundColor: tintColor }]}>
-              {isSearching ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.searchButtonText} type="defaultSemiBold">
-                  搜索
-                </ThemedText>
-              )}
-            </Pressable>
-          </View>
-
           {!!message && (
             <ThemedText style={[styles.bannerText, { color: messageColor }]}>
               {message}
             </ThemedText>
           )}
 
-          {searchResults.length > 0 && (
-            <View style={styles.resultList}>
-              {searchResults.map((item) => (
-                <SearchResultRow item={item} key={item.itemCode} onAdd={addProduct} />
-              ))}
+          {pendingRemovedItem ? (
+            <View style={[styles.undoBanner, { backgroundColor: accentSoft }]}> 
+              <ThemedText style={styles.undoBannerText}>
+                {'商品已从当前订单移除'}
+              </ThemedText>
+              <Pressable onPress={handleUndoRemove} style={styles.undoButton}>
+                <ThemedText style={[styles.undoButtonText, { color: tintColor }]} type="defaultSemiBold">
+                  {'撤销'}
+                </ThemedText>
+              </Pressable>
             </View>
-          )}
-
-          {isSearching && !searchResults.length && (
-            <ThemedText style={styles.mutedHint}>正在搜索...</ThemedText>
-          )}
-
-          {!draftItems.length && !searchResults.length && !isSearching && (
-            <ThemedText style={styles.emptyText}>
-              还没有销售商品，请先选择商品。
-            </ThemedText>
-          )}
+          ) : null}
 
           {!!draftItems.length && (
             <>
@@ -605,22 +633,21 @@ export default function SalesOrderCreateScreen() {
                   <SalesItemRow
                     itemCode={item.itemCode}
                     itemName={item.itemName}
-                    key={item.itemCode}
+                    key={item.draftKey}
                     onChangePrice={(value) => {
                       updateSalesOrderDraftField(
-                        item.itemCode,
+                        item.draftKey,
                         'price',
                         value === '' ? null : Number(value) || 0,
                       );
                       syncDraft();
                     }}
                     onChangeQty={(value) => {
-                      updateSalesOrderDraftQty(item.itemCode, Number(value) || 0);
+                      updateSalesOrderDraftQty(item.draftKey, Number(value) || 0);
                       syncDraft();
                     }}
                     onRemove={() => {
-                      removeSalesOrderDraftItem(item.itemCode);
-                      syncDraft();
+                      handleRemoveItem(item);
                     }}
                     price={item.price}
                     qty={item.qty}
@@ -675,17 +702,58 @@ export default function SalesOrderCreateScreen() {
             <View style={styles.foldBody}>
               <TopFieldRow
                 errorText={companyError}
-                helperText="默认发货方公司，通常无需频繁调整"
-                label="公司"
+                helperText={'\u9ed8\u8ba4\u53d1\u8d27\u516c\u53f8\uff0c\u901a\u5e38\u65e0\u9700\u9891\u7e41\u8c03\u6574'}
+                label={'\u516c\u53f8'}
                 loadOptions={loadCompanies}
                 onChangeText={setCompany}
-                placeholder="请选择公司"
+                placeholder={'\u8bf7\u9009\u62e9\u516c\u53f8'}
                 value={company}
               />
 
+              <View style={styles.shippingGrid}>
+                <View style={styles.shippingFieldBlock}>
+                  <ThemedText style={styles.shippingFieldLabel} type="defaultSemiBold">{'\u6536\u8d27\u8054\u7cfb\u4eba'}</ThemedText>
+                  <TextInput
+                    onChangeText={setShippingContact}
+                    placeholder={'\u4ece\u5ba2\u6237\u8d44\u6599\u5e26\u5165\uff0c\u53ef\u4e34\u65f6\u4fee\u6539'}
+                    placeholderTextColor="#9CA3AF"
+                    style={[styles.shippingInput, { backgroundColor: surfaceMuted, borderColor }]}
+                    value={shippingContact}
+                  />
+                </View>
+
+                <View style={styles.shippingFieldBlock}>
+                  <ThemedText style={styles.shippingFieldLabel} type="defaultSemiBold">{'\u8054\u7cfb\u7535\u8bdd'}</ThemedText>
+                  <TextInput
+                    keyboardType="phone-pad"
+                    onChangeText={setShippingPhone}
+                    placeholder={'\u4ece\u5ba2\u6237\u8d44\u6599\u5e26\u5165\uff0c\u53ef\u4e34\u65f6\u4fee\u6539'}
+                    placeholderTextColor="#9CA3AF"
+                    style={[styles.shippingInput, { backgroundColor: surfaceMuted, borderColor }]}
+                    value={shippingPhone}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.shippingFieldBlock}>
+                <ThemedText style={styles.shippingFieldLabel} type="defaultSemiBold">{'\u6536\u8d27\u5730\u5740'}</ThemedText>
+                <TextInput
+                  multiline
+                  numberOfLines={4}
+                  onChangeText={setShippingAddress}
+                  placeholder={'\u9009\u5b9a\u5ba2\u6237\u540e\u81ea\u52a8\u5e26\u51fa\uff0c\u672c\u5355\u53ef\u4ee5\u4e34\u65f6\u4fee\u6539'}
+                  placeholderTextColor="#9CA3AF"
+                  style={[styles.shippingTextarea, { backgroundColor: surfaceMuted, borderColor }]}
+                  textAlignVertical="top"
+                  value={shippingAddress}
+                />
+              </View>
+
               <View style={[styles.infoNotice, { backgroundColor: surfaceMuted }]}>
                 <ThemedText style={styles.infoNoticeText}>
-                  仓库信息跟随商品明细携带，系统会在提交时自动带出。
+                  {isLoadingShippingInfo
+                    ? '\u6b63\u5728\u8bfb\u53d6\u5ba2\u6237\u9ed8\u8ba4\u6536\u8d27\u4fe1\u606f...'
+                    : '\u6536\u8d27\u4fe1\u606f\u9ed8\u8ba4\u4ece\u5ba2\u6237\u8d44\u6599\u5e26\u51fa\uff0c\u4f60\u53ef\u4ee5\u6309\u672c\u6b21\u8ba2\u5355\u9700\u8981\u4e34\u65f6\u4fee\u6539\uff0c\u4e0d\u4f1a\u56de\u5199\u5ba2\u6237\u6863\u6848\u3002'}
                 </ThemedText>
               </View>
             </View>
@@ -805,6 +873,8 @@ const styles = StyleSheet.create({
   },
   infoFieldBlock: {
     gap: 8,
+    position: 'relative',
+    zIndex: 40,
   },
   infoFieldLabel: {
     fontSize: 14,
@@ -812,10 +882,12 @@ const styles = StyleSheet.create({
   heroMetaGrid: {
     flexDirection: 'row',
     gap: 12,
+    zIndex: 1,
   },
   heroStatGrid: {
     flexDirection: 'row',
     gap: 12,
+    zIndex: 1,
   },
   heroMetaValue: {
     fontSize: 18,
@@ -897,67 +969,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  searchBar: {
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    minHeight: 48,
-    paddingHorizontal: 12,
-  },
-  searchInput: {
-    color: '#111827',
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 10,
-  },
-  searchButton: {
-    borderRadius: 999,
-    minWidth: 66,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  searchButtonText: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
+
+
+
+
   bannerText: {
     fontSize: 13,
   },
-  resultList: {
-    gap: 10,
-  },
-  searchResultRow: {
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
-    padding: 12,
-  },
-  searchResultThumb: {
+  undoBanner: {
     alignItems: 'center',
     borderRadius: 14,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  searchResultMain: {
+  undoBannerText: {
+    color: '#4B5563',
     flex: 1,
-    gap: 4,
+    fontSize: 13,
+    marginRight: 12,
   },
-  searchResultMeta: {
-    color: '#6B7280',
-    fontSize: 12,
+  undoButton: {
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
-  searchResultAside: {
-    alignItems: 'flex-end',
-    gap: 8,
+  undoButtonText: {
+    fontSize: 13,
   },
-  searchResultPrice: {
-    color: '#1F2937',
-  },
+
+
+
+
+
+
+
   textActionButton: {
     paddingVertical: 2,
   },
@@ -969,10 +1015,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 8,
   },
-  mutedHint: {
-    color: '#6B7280',
-    fontSize: 13,
-  },
+
   draftHint: {
     color: '#6B7280',
     fontSize: 13,
@@ -998,10 +1041,20 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
-  itemTitleRow: {
+  itemHeaderRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
+    gap: 12,
     justifyContent: 'space-between',
+  },
+  itemHeaderCopy: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  itemHeaderAside: {
+    alignItems: 'flex-end',
+    gap: 10,
   },
   itemTitle: {
     flex: 1,
@@ -1017,33 +1070,82 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   itemEditRow: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
-    marginTop: 6,
+    marginTop: 10,
   },
-  itemEditBlock: {
+  itemEditBlockCompact: {
+    flexShrink: 0,
+    gap: 4,
+    width: 110,
+  },
+  itemEditBlockPrice: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   itemEditLabel: {
     color: '#6B7280',
-    fontSize: 12,
+    fontSize: 11,
   },
-  itemInput: {
-    borderRadius: 12,
+  qtyStepper: {
+    alignItems: 'center',
+    borderRadius: 10,
     borderWidth: 1,
-    fontSize: 14,
-    minHeight: 40,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    flexDirection: 'row',
+    height: 36,
+    overflow: 'hidden',
+  },
+  qtyActionButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 36,
+    width: 30,
+  },
+  qtyActionButtonDisabled: {
+    opacity: 0.35,
+  },
+  qtyActionText: {
+    fontSize: 18,
+    lineHeight: 18,
+  },
+  qtyInput: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '600',
+    height: 36,
+    minWidth: 34,
+    paddingHorizontal: 2,
+    textAlign: 'center',
+    width: 42,
+  },
+  priceInputWrap: {
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 10,
+  },
+  pricePrefix: {
+    color: '#6B7280',
+    fontSize: 13,
+  },
+  priceInput: {
+    color: '#111827',
+    flex: 1,
+    fontSize: 15,
+    height: 36,
+    paddingVertical: 0,
   },
   removeButton: {
     alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 40,
-    minWidth: 44,
-    paddingHorizontal: 4,
+    minHeight: 30,
+    paddingHorizontal: 10,
   },
   sectionFooter: {
     alignItems: 'center',
@@ -1098,6 +1200,33 @@ const styles = StyleSheet.create({
   },
   foldBody: {
     gap: 12,
+  },
+  shippingGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  shippingFieldBlock: {
+    flex: 1,
+    gap: 6,
+  },
+  shippingFieldLabel: {
+    fontSize: 13,
+  },
+  shippingInput: {
+    borderRadius: 14,
+    borderWidth: 1,
+    fontSize: 14,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  shippingTextarea: {
+    borderRadius: 14,
+    borderWidth: 1,
+    fontSize: 14,
+    minHeight: 92,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   infoNotice: {
     borderRadius: 14,

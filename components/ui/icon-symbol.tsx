@@ -25,7 +25,10 @@ const MAPPING = {
   'gearshape.fill': 'settings',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
+  'chevron.left': 'chevron-left',
   'chevron.right': 'chevron-right',
+  'cart.fill.badge.plus': 'add-shopping-cart',
+  'barcode.viewfinder': 'qr-code-scanner',
 } as IconMapping;
 
 /**

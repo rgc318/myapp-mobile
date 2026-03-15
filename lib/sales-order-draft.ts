@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import type { ProductSearchItem } from '@/services/gateway';
 
 export type SalesOrderDraftItem = {
+  draftKey: string;
   itemCode: string;
   itemName: string;
   qty: number;
@@ -14,6 +15,30 @@ export type SalesOrderDraftItem = {
 const STORAGE_KEY = 'myapp-mobile.sales-order-draft';
 
 let memoryDraft: SalesOrderDraftItem[] = [];
+
+function buildDraftKey(item: {
+  itemCode: string;
+  warehouse: string | null;
+  uom: string | null;
+}) {
+  return [item.itemCode, item.warehouse ?? '', item.uom ?? ''].join('::');
+}
+
+function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
+  const itemCode = typeof item.itemCode === 'string' ? item.itemCode : '';
+  const warehouse = typeof item.warehouse === 'string' ? item.warehouse : null;
+  const uom = typeof item.uom === 'string' ? item.uom : null;
+
+  return {
+    draftKey: typeof item.draftKey === 'string' && item.draftKey ? item.draftKey : buildDraftKey({ itemCode, warehouse, uom }),
+    itemCode,
+    itemName: typeof item.itemName === 'string' ? item.itemName : itemCode,
+    qty: typeof item.qty === 'number' && Number.isFinite(item.qty) ? item.qty : 1,
+    price: typeof item.price === 'number' && Number.isFinite(item.price) ? item.price : null,
+    uom,
+    warehouse,
+  } satisfies SalesOrderDraftItem;
+}
 
 function canUseWebStorage() {
   return Platform.OS === 'web' && typeof window !== 'undefined' && !!window.localStorage;
@@ -28,7 +53,10 @@ export function getSalesOrderDraft() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        memoryDraft = JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        memoryDraft = Array.isArray(parsed)
+          ? parsed.map((item) => normalizeDraftItem(item)).filter((item) => item.itemCode)
+          : [];
       }
     } catch {
       memoryDraft = [];
@@ -48,7 +76,12 @@ function persistDraft(nextDraft: SalesOrderDraftItem[]) {
 
 export function addItemToSalesOrderDraft(item: ProductSearchItem) {
   const current = [...getSalesOrderDraft()];
-  const existing = current.find((entry) => entry.itemCode === item.itemCode);
+  const draftKey = buildDraftKey({
+    itemCode: item.itemCode,
+    warehouse: item.warehouse,
+    uom: item.uom,
+  });
+  const existing = current.find((entry) => entry.draftKey === draftKey);
 
   if (existing) {
     existing.qty += 1;
@@ -57,6 +90,7 @@ export function addItemToSalesOrderDraft(item: ProductSearchItem) {
   }
 
   current.push({
+    draftKey,
     itemCode: item.itemCode,
     itemName: item.itemName,
     qty: 1,
@@ -68,21 +102,36 @@ export function addItemToSalesOrderDraft(item: ProductSearchItem) {
   return current;
 }
 
-export function updateSalesOrderDraftQty(itemCode: string, qty: number) {
+export function restoreSalesOrderDraftItem(item: SalesOrderDraftItem) {
+  const current = [...getSalesOrderDraft()];
+  const normalized = normalizeDraftItem(item);
+  const existingIndex = current.findIndex((entry) => entry.draftKey === normalized.draftKey);
+
+  if (existingIndex >= 0) {
+    current[existingIndex] = normalized;
+  } else {
+    current.push(normalized);
+  }
+
+  persistDraft(current);
+  return current;
+}
+
+export function updateSalesOrderDraftQty(draftKey: string, qty: number) {
   const current = getSalesOrderDraft()
-    .map((item) => (item.itemCode === itemCode ? { ...item, qty } : item))
+    .map((item) => (item.draftKey === draftKey ? { ...item, qty } : item))
     .filter((item) => item.qty > 0);
   persistDraft(current);
   return current;
 }
 
 export function updateSalesOrderDraftField(
-  itemCode: string,
+  draftKey: string,
   field: 'price' | 'warehouse',
   value: number | string | null,
 ) {
   const current = getSalesOrderDraft().map((item) => {
-    if (item.itemCode !== itemCode) {
+    if (item.draftKey !== draftKey) {
       return item;
     }
 
@@ -96,8 +145,8 @@ export function updateSalesOrderDraftField(
   return current;
 }
 
-export function removeSalesOrderDraftItem(itemCode: string) {
-  const current = getSalesOrderDraft().filter((item) => item.itemCode !== itemCode);
+export function removeSalesOrderDraftItem(draftKey: string) {
+  const current = getSalesOrderDraft().filter((item) => item.draftKey !== draftKey);
   persistDraft(current);
   return current;
 }

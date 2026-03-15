@@ -1,73 +1,142 @@
-import { Link, useLocalSearchParams } from 'expo-router';
-import type { Href } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Image } from 'expo-image';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { addItemToSalesOrderDraft } from '@/lib/sales-order-draft';
+import {
+  addItemToSalesOrderDraft,
+  getSalesOrderDraft,
+  removeSalesOrderDraftItem,
+  updateSalesOrderDraftQty,
+  type SalesOrderDraftItem,
+} from '@/lib/sales-order-draft';
 import { searchProducts, type ProductSearchItem } from '@/services/gateway';
+
+function getProductResultKey(item: ProductSearchItem) {
+  return [item.itemCode, item.warehouse ?? '', item.uom ?? ''].join('::');
+}
+
+function getDraftItem(item: ProductSearchItem, draftItems: SalesOrderDraftItem[]) {
+  const key = getProductResultKey(item);
+  return draftItems.find((draftItem) => draftItem.draftKey === key) ?? null;
+}
 
 function ResultRow({
   item,
+  selectedQty,
   onAdd,
+  onDecrease,
 }: {
   item: ProductSearchItem;
+  selectedQty: number;
   onAdd: (item: ProductSearchItem) => void;
+  onDecrease: (item: ProductSearchItem) => void;
 }) {
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const successSoft = useThemeColor({}, 'accentSoft');
 
   return (
     <View style={[styles.resultRow, { backgroundColor: surface, borderColor }]}>
+      <View style={[styles.thumbWrap, { backgroundColor: surfaceMuted }]}>
+        {item.imageUrl ? (
+          <Image contentFit="cover" source={item.imageUrl} style={styles.thumbImage} />
+        ) : (
+          <IconSymbol color={tintColor} name="photo" size={20} />
+        )}
+      </View>
+
       <View style={styles.resultMain}>
         <View style={styles.resultTitleRow}>
           <ThemedText numberOfLines={1} style={styles.resultTitle} type="defaultSemiBold">
             {item.itemName || item.itemCode}
           </ThemedText>
           <View style={[styles.badge, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.badgeText}>{item.uom || '件'}</ThemedText>
+            <ThemedText style={styles.badgeText}>{item.uom || '\u4ef6'}</ThemedText>
           </View>
         </View>
 
-        <ThemedText style={styles.resultMeta}>编码：{item.itemCode}</ThemedText>
+        <ThemedText style={styles.resultMeta}>{'\u7f16\u7801\uff1a'} {item.itemCode}</ThemedText>
 
         <View style={styles.resultStats}>
-          <ThemedText style={styles.statText}>库存 {item.stockQty ?? '-'}</ThemedText>
-          <ThemedText style={styles.statText}>价格 {item.price ?? '-'}</ThemedText>
-          <ThemedText style={styles.statText}>{item.warehouse || '未指定仓库'}</ThemedText>
+          <ThemedText style={styles.statText}>{'\u5e93\u5b58\uff1a'} {item.stockQty ?? '-'}</ThemedText>
+          <ThemedText style={styles.statText}>{'\u4ef7\u683c\uff1a'} {item.price ?? '-'}</ThemedText>
+        </View>
+
+        <ThemedText style={styles.resultMeta}>{item.warehouse || '\u672a\u6307\u5b9a\u4ed3\u5e93'}</ThemedText>
+
+        <View style={styles.selectedRow}>
+          {selectedQty > 0 ? (
+            <View style={[styles.selectedPill, { backgroundColor: successSoft }]}>
+              <ThemedText style={[styles.selectedPillText, { color: tintColor }]} type="defaultSemiBold">
+                {'\u5df2\u52a0\u5165 '} {selectedQty} {' \u4ef6'}
+              </ThemedText>
+            </View>
+          ) : (
+            <ThemedText style={styles.selectedHint}>{'\u8fd8\u672a\u52a0\u5165\u8ba2\u5355'}</ThemedText>
+          )}
         </View>
       </View>
 
-      <Pressable onPress={() => onAdd(item)} style={[styles.addButton, { backgroundColor: tintColor }]}>
-        <ThemedText style={styles.addButtonText} type="defaultSemiBold">
-          加入
-        </ThemedText>
-      </Pressable>
+      {selectedQty > 0 ? (
+        <View style={[styles.stepper, { backgroundColor: surfaceMuted, borderColor }]}>
+          <Pressable onPress={() => onDecrease(item)} style={styles.stepperButton}>
+            <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
+              -
+            </ThemedText>
+          </Pressable>
+          <View style={styles.stepperValueWrap}>
+            <ThemedText style={styles.stepperValue} type="defaultSemiBold">
+              {selectedQty}
+            </ThemedText>
+          </View>
+          <Pressable onPress={() => onAdd(item)} style={styles.stepperButton}>
+            <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
+              +
+            </ThemedText>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable onPress={() => onAdd(item)} style={[styles.addButton, { backgroundColor: tintColor }]}>
+          <ThemedText style={styles.addButtonText} type="defaultSemiBold">
+            {'\u52a0\u5165\u8ba2\u5355'}
+          </ThemedText>
+        </Pressable>
+      )}
     </View>
   );
 }
 
 export default function ProductSearchScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ query?: string }>();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ProductSearchItem[]>([]);
   const [message, setMessage] = useState('');
+  const [draftItems, setDraftItems] = useState(() => getSalesOrderDraft());
   const [isLoading, setIsLoading] = useState(false);
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const tintColor = useThemeColor({}, 'tint');
 
+  const draftCount = draftItems.length;
+  const totalSelectedQty = useMemo(
+    () => draftItems.reduce((sum, item) => sum + item.qty, 0),
+    [draftItems],
+  );
+
   const handleSearch = async (rawQuery?: string) => {
     const nextQuery = (rawQuery ?? query).trim();
 
     if (!nextQuery) {
-      setMessage('请输入商品编码、条码或关键词。');
+      setMessage('\u8bf7\u8f93\u5165\u5546\u54c1\u7f16\u7801\u3001\u6761\u7801\u6216\u5173\u952e\u8bcd\u3002');
       setResults([]);
       return;
     }
@@ -77,21 +146,53 @@ export default function ProductSearchScreen() {
       setQuery(nextQuery);
       const items = await searchProducts(nextQuery);
       setResults(items);
-      setMessage(items.length ? `共找到 ${items.length} 个商品` : '没有找到匹配商品');
+      setMessage(
+        items.length
+          ? `\u5171\u627e\u5230 ${items.length} \u4e2a\u5546\u54c1\u3002`
+          : '\u6ca1\u6709\u627e\u5230\u5339\u914d\u5546\u54c1\u3002',
+      );
     } catch (error) {
       setResults([]);
-      setMessage(error instanceof Error ? error.message : '商品搜索失败。');
+      setMessage(error instanceof Error ? error.message : '\u5546\u54c1\u641c\u7d22\u5931\u8d25\u3002');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const syncDraftState = () => {
+    setDraftItems([...getSalesOrderDraft()]);
+  };
+
   const handleAdd = (item: ProductSearchItem) => {
     addItemToSalesOrderDraft(item);
-    setMessage(`已将 ${item.itemName || item.itemCode} 加入销售下单草稿。`);
+    const nextDraft = getSalesOrderDraft();
+    const nextQty = getDraftItem(item, nextDraft)?.qty ?? 0;
+    setDraftItems([...nextDraft]);
+    setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u52a0\u5165\u8ba2\u5355\uff0c\u5f53\u524d\u5df2\u9009 ${nextQty} \u4ef6\u3002`);
+  };
+
+  const handleDecrease = (item: ProductSearchItem) => {
+    const draftItem = getDraftItem(item, getSalesOrderDraft());
+    if (!draftItem) {
+      return;
+    }
+
+    if (draftItem.qty <= 1) {
+      removeSalesOrderDraftItem(draftItem.draftKey);
+      syncDraftState();
+      setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u4ece\u8ba2\u5355\u4e2d\u79fb\u9664\u3002`);
+      return;
+    }
+
+    updateSalesOrderDraftQty(draftItem.draftKey, draftItem.qty - 1);
+    const nextDraft = getSalesOrderDraft();
+    const nextQty = getDraftItem(item, nextDraft)?.qty ?? 0;
+    setDraftItems([...nextDraft]);
+    setMessage(`\u5df2\u8c03\u6574 ${item.itemName || item.itemCode} \u6570\u91cf\uff0c\u5f53\u524d\u4e3a ${nextQty} \u4ef6\u3002`);
   };
 
   useEffect(() => {
+    setDraftItems(getSalesOrderDraft());
     const initialQuery = typeof params.query === 'string' ? params.query.trim() : '';
     if (!initialQuery) {
       return;
@@ -99,14 +200,15 @@ export default function ProductSearchScreen() {
 
     setQuery(initialQuery);
     void handleSearch(initialQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.query]);
 
   return (
     <AppShell
       compactHeader
       contentCard={false}
-      description="输入关键词后直接搜索并加入下单草稿。"
-      title="商品搜索">
+      description={'\u641c\u7d22\u5546\u54c1\u540e\u52a0\u5165\u5f53\u524d\u8ba2\u5355\u8349\u7a3f\uff0c\u518d\u8fd4\u56de\u8ba2\u5355\u9875\u7ee7\u7eed\u586b\u5199\u6570\u91cf\u3001\u4ef7\u683c\u548c\u5907\u6ce8\u3002'}
+      title={'\u5546\u54c1\u641c\u7d22'}>
       <View style={[styles.searchCard, { backgroundColor: surface, borderColor }]}>
         <View style={[styles.searchInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
           <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
@@ -114,7 +216,7 @@ export default function ProductSearchScreen() {
             autoCorrect={false}
             onChangeText={setQuery}
             onSubmitEditing={() => void handleSearch()}
-            placeholder="搜索商品编码、条码或关键词"
+            placeholder={'\u641c\u7d22\u5546\u54c1\u7f16\u7801\u3001\u6761\u7801\u6216\u5173\u952e\u8bcd'}
             placeholderTextColor="rgba(31,42,55,0.45)"
             style={styles.searchInput}
             value={query}
@@ -123,27 +225,45 @@ export default function ProductSearchScreen() {
 
         <Pressable onPress={() => void handleSearch()} style={[styles.searchButton, { backgroundColor: tintColor }]}>
           <ThemedText style={styles.searchButtonText} type="defaultSemiBold">
-            {isLoading ? '搜索中...' : '开始搜索'}
+            {isLoading ? '\u641c\u7d22\u4e2d...' : '\u5f00\u59cb\u641c\u7d22'}
           </ThemedText>
         </Pressable>
       </View>
 
-      <View style={styles.searchMeta}>
-        <ThemedText style={styles.metaText}>{message || '输入关键词后即可搜索商品。'}</ThemedText>
-        <Link href={'/sales/order/create' as Href} style={[styles.orderLink, { borderColor, backgroundColor: surface }]}>
-          <ThemedText type="defaultSemiBold">查看下单草稿</ThemedText>
-        </Link>
+      <View style={[styles.selectionCard, { backgroundColor: surface, borderColor }]}>
+        <View style={styles.selectionCopy}>
+          <ThemedText type="defaultSemiBold">{'\u5f53\u524d\u8ba2\u5355\u8349\u7a3f'}</ThemedText>
+          <ThemedText style={styles.selectionHint}>
+            {'\u5df2\u52a0\u5165 '} {draftCount} {' \u9879\u5546\u54c1\uff0c\u5408\u8ba1 '} {totalSelectedQty} {' \u4ef6\uff0c\u9009\u5b8c\u540e\u8fd4\u56de\u8ba2\u5355\u9875\u7ee7\u7eed\u586b\u5199\u3002'}
+          </ThemedText>
+          <ThemedText style={styles.metaText}>
+            {message || '\u8f93\u5165\u5173\u952e\u8bcd\u540e\u5373\u53ef\u641c\u7d22\u5546\u54c1\uff0c\u627e\u5230\u540e\u53ef\u76f4\u63a5\u52a0\u51cf\u5546\u54c1\u6570\u91cf\u3002'}
+          </ThemedText>
+        </View>
+        <Pressable onPress={() => router.push('/sales/order/create')} style={[styles.returnButton, { backgroundColor: tintColor }]}>
+          <ThemedText style={styles.returnButtonText} type="defaultSemiBold">
+            {'\u8fd4\u56de\u8ba2\u5355\u9875'}
+          </ThemedText>
+        </Pressable>
       </View>
 
       <View style={styles.resultList}>
         {results.map((item) => (
-          <ResultRow item={item} key={item.itemCode} onAdd={handleAdd} />
+          <ResultRow
+            item={item}
+            key={getProductResultKey(item)}
+            onAdd={handleAdd}
+            onDecrease={handleDecrease}
+            selectedQty={getDraftItem(item, draftItems)?.qty ?? 0}
+          />
         ))}
 
         {!results.length && query.trim() ? (
           <View style={[styles.emptyState, { backgroundColor: surfaceMuted, borderColor }]}>
-            <ThemedText type="defaultSemiBold">没有找到匹配商品</ThemedText>
-            <ThemedText>你可以更换关键词，或者先检查商品编码是否正确。</ThemedText>
+            <ThemedText type="defaultSemiBold">{'\u6ca1\u6709\u627e\u5230\u5339\u914d\u5546\u54c1'}</ThemedText>
+            <ThemedText>
+              {'\u4f60\u53ef\u4ee5\u66f4\u6362\u5173\u952e\u8bcd\uff0c\u6216\u8005\u5148\u68c0\u67e5\u5546\u54c1\u7f16\u7801\u3001\u6761\u7801\u662f\u5426\u6b63\u786e\u3002'}
+            </ThemedText>
           </View>
         ) : null}
       </View>
@@ -184,23 +304,31 @@ const styles = StyleSheet.create({
   searchButtonText: {
     color: '#FFF',
   },
-  searchMeta: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
+  selectionCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 14,
+    padding: 16,
+  },
+  selectionCopy: {
+    gap: 6,
+  },
+  selectionHint: {
+    opacity: 0.76,
   },
   metaText: {
-    flex: 1,
     opacity: 0.7,
   },
-  orderLink: {
+  returnButton: {
+    alignItems: 'center',
     borderRadius: 14,
-    borderWidth: 1,
-    minHeight: 40,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    textDecorationLine: 'none',
+  },
+  returnButtonText: {
+    color: '#FFF',
   },
   resultList: {
     gap: 12,
@@ -212,6 +340,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     padding: 14,
+  },
+  thumbWrap: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 72,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 72,
+  },
+  thumbImage: {
+    height: '100%',
+    width: '100%',
   },
   resultMain: {
     flex: 1,
@@ -245,17 +385,59 @@ const styles = StyleSheet.create({
   statText: {
     opacity: 0.8,
   },
+  selectedRow: {
+    marginTop: 2,
+  },
+  selectedPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  selectedPillText: {
+    fontSize: 12,
+  },
+  selectedHint: {
+    opacity: 0.6,
+  },
   addButton: {
     alignItems: 'center',
     borderRadius: 14,
     justifyContent: 'center',
     minHeight: 42,
-    minWidth: 60,
+    minWidth: 96,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   addButtonText: {
     color: '#FFF',
+  },
+  stepper: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 44,
+    overflow: 'hidden',
+  },
+  stepperButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    width: 36,
+  },
+  stepperActionText: {
+    fontSize: 22,
+    lineHeight: 22,
+  },
+  stepperValueWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 32,
+    paddingHorizontal: 8,
+  },
+  stepperValue: {
+    fontSize: 16,
   },
   emptyState: {
     borderRadius: 18,

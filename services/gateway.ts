@@ -7,6 +7,7 @@ export type ProductSearchItem = {
   price: number | null;
   uom: string | null;
   warehouse: string | null;
+  imageUrl?: string | null;
 };
 
 export type SalesOrderItemInput = {
@@ -76,10 +77,23 @@ export async function searchProducts(
     .map((row: Record<string, unknown>) => ({
       itemCode: String(row.item_code ?? row.itemCode ?? ''),
       itemName: String(row.item_name ?? row.itemName ?? ''),
-      stockQty: typeof row.stock_qty === 'number' ? row.stock_qty : typeof row.actual_qty === 'number' ? row.actual_qty : null,
+      stockQty:
+        typeof row.stock_qty === 'number'
+          ? row.stock_qty
+          : typeof row.actual_qty === 'number'
+            ? row.actual_qty
+            : null,
       price: typeof row.price === 'number' ? row.price : typeof row.rate === 'number' ? row.rate : null,
       uom: typeof row.uom === 'string' ? row.uom : null,
       warehouse: typeof row.warehouse === 'string' ? row.warehouse : null,
+      imageUrl:
+        typeof row.image === 'string'
+          ? row.image
+          : typeof row.image_url === 'string'
+            ? row.image_url
+            : typeof row.item_image === 'string'
+              ? row.item_image
+              : null,
     }))
     .filter((row: ProductSearchItem) => row.itemCode);
 }
@@ -89,7 +103,7 @@ export async function createSalesOrder(payload: {
   company: string;
   items: SalesOrderItemInput[];
   immediate?: boolean;
-  posting_date?: string;
+  transaction_date?: string;
   remarks?: string;
 }) {
   return postGateway<any>('myapp.api.gateway.create_order', {
@@ -97,7 +111,7 @@ export async function createSalesOrder(payload: {
     company: payload.company,
     items: payload.items,
     immediate: payload.immediate ?? false,
-    posting_date: payload.posting_date,
+    transaction_date: payload.transaction_date,
     remarks: payload.remarks,
     request_id: randomRequestId('mobile-sales-order'),
   });

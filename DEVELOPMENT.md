@@ -320,6 +320,83 @@ Current real business-code pieces already added:
   - line quantity/price updates
   - line removal
 
+## Progress Snapshot (2026-03-15)
+
+Current active implementation focus remains:
+
+- product search page
+- sales order page
+- sales-order draft interaction
+
+What is already working in code now:
+
+- product search is now a dedicated helper page instead of an inline block inside the order page
+- the sales order page uses a document-centered layout and keeps product lines as the main visual body
+- the order page and product search page share the same sales-order draft state
+- product search can now:
+  - search products
+  - show current draft quantity per product
+  - add product to current order
+  - decrease selected quantity directly from the search result card
+- sales order lines can now:
+  - edit quantity with stepper-style controls
+  - edit unit price directly
+  - remove a line item
+  - undo a recent line removal from a lightweight in-page notice
+- save success no longer auto-clears the current order draft
+- returning from product search to sales order now refreshes the draft correctly
+- quick action icons for product selection and barcode entry have been fixed on non-iOS platforms
+
+Sales-order draft behavior now:
+
+- draft storage uses a composite key:
+  - `itemCode + warehouse + uom`
+- this avoids merging two lines that happen to use the same item code but different warehouse or UOM
+- legacy draft data without this key is normalized on read
+- current storage model:
+  - web: in-memory + localStorage
+  - native: in-memory only
+
+Current sales order interaction decisions:
+
+- product selection should happen in the dedicated product search page, not inside a dropdown under the order page
+- order-line deletion should not use a blocking confirmation dialog by default
+- current delete behavior is:
+  - remove immediately
+  - show lightweight undo affordance
+- order save should keep current content visible after success instead of clearing the document immediately
+
+Shipping section status:
+
+- the shipping section now includes editable fields for:
+  - consignee / contact person
+  - phone number
+  - shipping address
+- these values are intended to default from customer master data when a customer is selected
+- the operator may override them for the current order
+- override behavior is order-only and must not be treated as a customer-master update
+
+Current boundary / known gap:
+
+- frontend shipping fields are now present in the sales-order page
+- customer default shipping/contact lookup has been added in frontend master-data helpers
+- however, sales-order submit payload is not yet writing shipping/contact fields into `create_order` because backend field naming still needs confirmation
+- this should be aligned before treating shipping-info submission as complete
+
+Known implementation cautions:
+
+- Chinese copy has previously been damaged by local terminal/script encoding paths during edits
+- when updating user-facing copy, prefer stable UTF-safe editing paths and verify directly in the app UI
+- some older sections of the order page still contain historical text that should be cleaned in a later content pass
+
+Recommended next steps:
+
+1. Confirm backend field names for order-level shipping address, contact person, and phone
+2. Submit shipping/contact overrides together with sales-order creation
+3. Continue compressing sales-order line density so more items fit on one screen
+4. Normalize remaining sales-order Chinese copy that still carries encoding noise in source
+5. Expand the same interaction principles to delivery and invoice pages
+
 ## Design Lessons From This Round
 
 These points came directly from comparing our implementation screenshots with the local references:
