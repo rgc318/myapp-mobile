@@ -711,3 +711,85 @@ Note:
 
 - `npm run web` has already been verified in the current environment.
 - `npm run android` still requires Android SDK, `adb`, and the correct `ANDROID_HOME` / `ANDROID_SDK_ROOT`.
+
+
+## Progress Snapshot (2026-03-16)
+
+Current active implementation focus has expanded from order entry into query, detail, and settlement-adjacent flows that do not require backend contract changes.
+
+What is already working in code now:
+
+- product search is now split into two modes:
+  - lookup mode for home-page product lookup
+  - order mode for sales-order item selection
+- product lookup now supports:
+  - tapping into a dedicated product detail page
+  - basic master-data review
+  - lightweight product-field editing for safe frontend-supported fields
+- sales-order query is now available in the docs tab:
+  - search by order number
+  - search by customer
+  - enter order detail from the result list
+- sales-order detail page now includes:
+  - order header summary
+  - item list with image slots
+  - quantity / unit / price / line amount display
+  - shipping summary block
+  - editable remarks / contact person / delivery date
+- sales-invoice creation page is no longer a placeholder:
+  - create invoice from an existing sales order
+- sales-payment page is no longer a placeholder:
+  - record customer payment against a sales invoice
+- docs tab now supports two document-query branches:
+  - sales orders
+  - sales invoices
+
+Current document-query interaction decisions:
+
+- product lookup and document lookup must remain separate concerns
+- product lookup is for:
+  - product search
+  - stock / price review
+  - product detail entry
+- document lookup is for:
+  - sales-order lookup
+  - sales-invoice lookup
+  - later delivery / payment lookup
+- sales-order result cards should keep:
+  - left side for base document information
+  - right side for result information such as amount / status / outstanding-like hints
+
+Current order-detail implementation decisions:
+
+- line-item amount, quantity, and unit now use stronger visual hierarchy than plain text rows
+- order-detail money display should follow ERPNext-side currency first
+- `CNY` is intentionally displayed using the Chinese yuan wording in UI
+- unit display should use user-facing Chinese mappings where available
+
+Current known boundary / not-yet-complete areas:
+
+- settlement status is not yet a formally backend-confirmed state model
+- current invoice status display in query pages is a frontend inference based on available fields
+- sales-order page is still not the final accounting source of truth for settlement
+- whether an order should be treated as complete / settled must later be aligned against:
+  - sales invoice
+  - payment entry
+  - any later backend aggregation logic
+- delivery page is still not implemented beyond placeholder level
+- sales return page is still not implemented beyond placeholder level
+- purchase-side create / receipt / invoice / payment / return pages still remain largely placeholder-level
+
+Known implementation cautions from this round:
+
+- Windows terminal / script edit paths have repeatedly damaged Chinese UI copy when doing bulk rewrites
+- avoid large direct overwrite operations on user-facing Chinese-heavy pages unless the encoding path is fully controlled
+- for web preview, `expo-router` link composition can introduce layout/runtime issues if `Link` is used as a heavy layout container
+- prefer simpler navigation containers such as `Pressable + router.push(...)` when card layouts behave inconsistently on web
+
+Recommended next steps from the current state:
+
+1. Stabilize and lightly polish document-query card layout without changing page structure again
+2. Continue delivery page implementation using existing gateway contract
+3. Continue sales return implementation using existing gateway contract
+4. Extend invoice query into invoice detail / continue-payment flow
+5. Expand the same query/detail principles into purchase-side document pages

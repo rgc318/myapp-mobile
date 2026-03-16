@@ -72,7 +72,7 @@ export default function HomeScreen() {
 
   const handleSearch = () => {
     const query = searchText.trim();
-    router.push(query ? ({ pathname: '/common/product-search', params: { query } } as Href) : '/common/product-search');
+    router.push(query ? ({ pathname: '/common/product-search', params: { query, mode: 'lookup' } } as Href) : '/common/product-search?mode=lookup');
   };
 
   return (
@@ -110,7 +110,7 @@ export default function HomeScreen() {
               <ThemedText style={styles.primaryCardText}>销售开单</ThemedText>
             </Link>
           ) : null}
-          <Link href="/common/product-search" style={[styles.primaryCard, styles.primaryCardSoft]}>
+          <Link href="/common/product-search?mode=lookup" style={[styles.primaryCard, styles.primaryCardSoft]}>
             <ThemedText style={styles.primaryCardText}>商品查价</ThemedText>
           </Link>
         </View>

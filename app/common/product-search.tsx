@@ -7,6 +7,8 @@ import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getAppPreferences } from '@/lib/app-preferences';
+import { formatDisplayUom } from '@/lib/display-uom';
 import {
   addItemToSalesOrderDraft,
   getSalesOrderDraft,
@@ -30,11 +32,15 @@ function ResultRow({
   selectedQty,
   onAdd,
   onDecrease,
+  onOpenDetail,
+  isOrderMode,
 }: {
   item: ProductSearchItem;
   selectedQty: number;
   onAdd: (item: ProductSearchItem) => void;
   onDecrease: (item: ProductSearchItem) => void;
+  onOpenDetail: (item: ProductSearchItem) => void;
+  isOrderMode: boolean;
 }) {
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
@@ -43,7 +49,7 @@ function ResultRow({
   const successSoft = useThemeColor({}, 'accentSoft');
 
   return (
-    <View style={[styles.resultRow, { backgroundColor: surface, borderColor }]}>
+    <Pressable onPress={() => onOpenDetail(item)} style={[styles.resultRow, { backgroundColor: surface, borderColor }]}>
       <View style={[styles.thumbWrap, { backgroundColor: surfaceMuted }]}>
         {item.imageUrl ? (
           <Image contentFit="cover" source={item.imageUrl} style={styles.thumbImage} />
@@ -58,67 +64,78 @@ function ResultRow({
             {item.itemName || item.itemCode}
           </ThemedText>
           <View style={[styles.badge, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.badgeText}>{item.uom || '\u4ef6'}</ThemedText>
+            <ThemedText style={styles.badgeText}>{formatDisplayUom(item.uom)}</ThemedText>
           </View>
         </View>
 
-        <ThemedText style={styles.resultMeta}>{'\u7f16\u7801\uff1a'} {item.itemCode}</ThemedText>
+        <ThemedText style={styles.resultMeta}>{'编码：'} {item.itemCode}</ThemedText>
 
         <View style={styles.resultStats}>
-          <ThemedText style={styles.statText}>{'\u5e93\u5b58\uff1a'} {item.stockQty ?? '-'}</ThemedText>
-          <ThemedText style={styles.statText}>{'\u4ef7\u683c\uff1a'} {item.price ?? '-'}</ThemedText>
+          <ThemedText style={styles.statText}>{'库存：'} {item.stockQty ?? '-'}</ThemedText>
+          <ThemedText style={styles.statText}>{'价格：'} {item.price ?? '-'}</ThemedText>
         </View>
 
-        <ThemedText style={styles.resultMeta}>{item.warehouse || '\u672a\u6307\u5b9a\u4ed3\u5e93'}</ThemedText>
+        <ThemedText style={styles.resultMeta}>{item.warehouse || '未指定仓库'}</ThemedText>
 
-        <View style={styles.selectedRow}>
-          {selectedQty > 0 ? (
-            <View style={[styles.selectedPill, { backgroundColor: successSoft }]}>
-              <ThemedText style={[styles.selectedPillText, { color: tintColor }]} type="defaultSemiBold">
-                {'\u5df2\u52a0\u5165 '} {selectedQty} {' \u4ef6'}
-              </ThemedText>
-            </View>
-          ) : (
-            <ThemedText style={styles.selectedHint}>{'\u8fd8\u672a\u52a0\u5165\u8ba2\u5355'}</ThemedText>
-          )}
-        </View>
+        {!isOrderMode ? (
+          <ThemedText style={styles.detailHint}>{'点击查看商品详情'}</ThemedText>
+        ) : null}
+
+        {isOrderMode ? (
+          <View style={styles.selectedRow}>
+            {selectedQty > 0 ? (
+              <View style={[styles.selectedPill, { backgroundColor: successSoft }]}>
+                <ThemedText style={[styles.selectedPillText, { color: tintColor }]} type="defaultSemiBold">
+                  {'已加入 '} {selectedQty} {' 件'}
+                </ThemedText>
+              </View>
+            ) : (
+              <ThemedText style={styles.selectedHint}>{'还未加入订单'}</ThemedText>
+            )}
+          </View>
+        ) : null}
       </View>
 
-      {selectedQty > 0 ? (
-        <View style={[styles.stepper, { backgroundColor: surfaceMuted, borderColor }]}>
-          <Pressable onPress={() => onDecrease(item)} style={styles.stepperButton}>
-            <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
-              -
-            </ThemedText>
-          </Pressable>
-          <View style={styles.stepperValueWrap}>
-            <ThemedText style={styles.stepperValue} type="defaultSemiBold">
-              {selectedQty}
-            </ThemedText>
+      {isOrderMode ? (
+        selectedQty > 0 ? (
+          <View style={[styles.stepper, { backgroundColor: surfaceMuted, borderColor }]}>
+            <Pressable onPress={(event) => { event.stopPropagation(); onDecrease(item); }} style={styles.stepperButton}>
+              <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
+                -
+              </ThemedText>
+            </Pressable>
+            <View style={styles.stepperValueWrap}>
+              <ThemedText style={styles.stepperValue} type="defaultSemiBold">
+                {selectedQty}
+              </ThemedText>
+            </View>
+            <Pressable onPress={(event) => { event.stopPropagation(); onAdd(item); }} style={styles.stepperButton}>
+              <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
+                +
+              </ThemedText>
+            </Pressable>
           </View>
-          <Pressable onPress={() => onAdd(item)} style={styles.stepperButton}>
-            <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
-              +
+        ) : (
+          <Pressable onPress={(event) => { event.stopPropagation(); onAdd(item); }} style={[styles.addButton, { backgroundColor: tintColor }]}>
+            <ThemedText style={styles.addButtonText} type="defaultSemiBold">
+              {'加入订单'}
             </ThemedText>
           </Pressable>
-        </View>
-      ) : (
-        <Pressable onPress={() => onAdd(item)} style={[styles.addButton, { backgroundColor: tintColor }]}>
-          <ThemedText style={styles.addButtonText} type="defaultSemiBold">
-            {'\u52a0\u5165\u8ba2\u5355'}
-          </ThemedText>
-        </Pressable>
-      )}
-    </View>
+        )
+      ) : null}
+    </Pressable>
   );
 }
 
 export default function ProductSearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ query?: string }>();
+  const preferences = getAppPreferences();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ProductSearchItem[]>([]);
   const [message, setMessage] = useState('');
+  const mode = params.mode === 'order' ? 'order' : 'lookup';
+  const isOrderMode = mode === 'order';
   const [draftItems, setDraftItems] = useState(() => getSalesOrderDraft());
   const [isLoading, setIsLoading] = useState(false);
   const surface = useThemeColor({}, 'surface');
@@ -144,7 +161,10 @@ export default function ProductSearchScreen() {
     try {
       setIsLoading(true);
       setQuery(nextQuery);
-      const items = await searchProducts(nextQuery);
+      const items = await searchProducts(nextQuery, {
+        company: preferences.defaultCompany || undefined,
+        warehouse: preferences.defaultWarehouse || undefined,
+      });
       setResults(items);
       setMessage(
         items.length
@@ -169,6 +189,26 @@ export default function ProductSearchScreen() {
     const nextQty = getDraftItem(item, nextDraft)?.qty ?? 0;
     setDraftItems([...nextDraft]);
     setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u52a0\u5165\u8ba2\u5355\uff0c\u5f53\u524d\u5df2\u9009 ${nextQty} \u4ef6\u3002`);
+  };
+
+
+  const handleOpenDetail = (item: ProductSearchItem) => {
+    if (isOrderMode) {
+      return;
+    }
+
+    router.push({
+      pathname: '/common/product/[itemCode]',
+      params: {
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        price: item.price === null ? '' : String(item.price),
+        stockQty: item.stockQty === null ? '' : String(item.stockQty),
+        uom: item.uom ?? '',
+        warehouse: item.warehouse ?? '',
+        imageUrl: item.imageUrl ?? '',
+      },
+    });
   };
 
   const handleDecrease = (item: ProductSearchItem) => {
@@ -207,8 +247,8 @@ export default function ProductSearchScreen() {
     <AppShell
       compactHeader
       contentCard={false}
-      description={'\u641c\u7d22\u5546\u54c1\u540e\u52a0\u5165\u5f53\u524d\u8ba2\u5355\u8349\u7a3f\uff0c\u518d\u8fd4\u56de\u8ba2\u5355\u9875\u7ee7\u7eed\u586b\u5199\u6570\u91cf\u3001\u4ef7\u683c\u548c\u5907\u6ce8\u3002'}
-      title={'\u5546\u54c1\u641c\u7d22'}>
+      description={isOrderMode ? '\u641c\u7d22\u5546\u54c1\u540e\u52a0\u5165\u5f53\u524d\u8ba2\u5355\u8349\u7a3f\uff0c\u518d\u8fd4\u56de\u8ba2\u5355\u9875\u7ee7\u7eed\u586b\u5199\u6570\u91cf\u3001\u4ef7\u683c\u548c\u5907\u6ce8\u3002' : '\u7528\u4e8e\u67e5\u8be2\u5546\u54c1\u5e93\u5b58\u3001\u4ef7\u683c\u548c\u57fa\u7840\u4fe1\u606f\uff0c\u4e0d\u5173\u8054\u5f53\u524d\u8ba2\u5355\u8349\u7a3f\u3002'}
+      title={isOrderMode ? '\u5546\u54c1\u641c\u7d22' : '\u5546\u54c1\u67e5\u8be2'}>
       <View style={[styles.searchCard, { backgroundColor: surface, borderColor }]}>
         <View style={[styles.searchInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
           <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
@@ -230,6 +270,7 @@ export default function ProductSearchScreen() {
         </Pressable>
       </View>
 
+      {isOrderMode ? (
       <View style={[styles.selectionCard, { backgroundColor: surface, borderColor }]}>
         <View style={styles.selectionCopy}>
           <ThemedText type="defaultSemiBold">{'\u5f53\u524d\u8ba2\u5355\u8349\u7a3f'}</ThemedText>
@@ -246,14 +287,17 @@ export default function ProductSearchScreen() {
           </ThemedText>
         </Pressable>
       </View>
+      ) : null}
 
       <View style={styles.resultList}>
         {results.map((item) => (
           <ResultRow
+            isOrderMode={isOrderMode}
             item={item}
             key={getProductResultKey(item)}
             onAdd={handleAdd}
             onDecrease={handleDecrease}
+            onOpenDetail={handleOpenDetail}
             selectedQty={getDraftItem(item, draftItems)?.qty ?? 0}
           />
         ))}
@@ -399,6 +443,11 @@ const styles = StyleSheet.create({
   },
   selectedHint: {
     opacity: 0.6,
+  },
+  detailHint: {
+    color: '#2563EB',
+    fontSize: 12,
+    marginTop: 2,
   },
   addButton: {
     alignItems: 'center',

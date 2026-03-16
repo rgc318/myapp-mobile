@@ -562,7 +562,7 @@ export default function SalesOrderCreateScreen() {
         <View
           style={[styles.quickActionsCard, { backgroundColor: surface, borderColor }]}>
           <Pressable
-            onPress={() => router.push('/common/product-search')}
+            onPress={() => router.push('/common/product-search?mode=order')}
             style={styles.quickActionButton}>
             <View style={[styles.quickActionIcon, { backgroundColor: accentSoft }]}>
               <IconSymbol color={tintColor} name="cart.fill.badge.plus" size={18} />

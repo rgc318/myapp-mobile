@@ -18,6 +18,24 @@ export type SalesOrderItemInput = {
   uom?: string;
 };
 
+
+export type SalesInvoiceItemInput = {
+  item_code?: string;
+  qty?: number;
+  price?: number;
+  sales_order_item?: string;
+  so_detail?: string;
+};
+
+export type SalesPaymentInput = {
+  reference_doctype: string;
+  reference_name: string;
+  paid_amount: number;
+  mode_of_payment?: string;
+  reference_no?: string;
+  reference_date?: string;
+};
+
 type GatewayResponse<T> = {
   message?: {
     ok?: boolean;
@@ -29,6 +47,19 @@ type GatewayResponse<T> = {
 
 function randomRequestId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function toOptionalNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 }
 
 async function postGateway<T>(method: string, payload: Record<string, unknown>) {
@@ -78,14 +109,16 @@ export async function searchProducts(
       itemCode: String(row.item_code ?? row.itemCode ?? ''),
       itemName: String(row.item_name ?? row.itemName ?? ''),
       stockQty:
-        typeof row.stock_qty === 'number'
-          ? row.stock_qty
-          : typeof row.actual_qty === 'number'
-            ? row.actual_qty
-            : null,
-      price: typeof row.price === 'number' ? row.price : typeof row.rate === 'number' ? row.rate : null,
+        toOptionalNumber(row.stock_qty) ??
+        toOptionalNumber(row.actual_qty) ??
+        toOptionalNumber(row.qty) ??
+        null,
+      price: toOptionalNumber(row.price) ?? toOptionalNumber(row.rate) ?? null,
       uom: typeof row.uom === 'string' ? row.uom : null,
-      warehouse: typeof row.warehouse === 'string' ? row.warehouse : null,
+      warehouse:
+        typeof row.warehouse === 'string' && row.warehouse.trim()
+          ? row.warehouse
+          : options?.warehouse ?? null,
       imageUrl:
         typeof row.image === 'string'
           ? row.image
@@ -114,5 +147,35 @@ export async function createSalesOrder(payload: {
     transaction_date: payload.transaction_date,
     remarks: payload.remarks,
     request_id: randomRequestId('mobile-sales-order'),
+  });
+}
+
+
+export async function createSalesInvoice(payload: {
+  source_name: string;
+  invoice_items?: SalesInvoiceItemInput[];
+  due_date?: string;
+  remarks?: string;
+  update_stock?: boolean;
+}) {
+  return postGateway<any>('myapp.api.gateway.create_sales_invoice', {
+    source_name: payload.source_name,
+    invoice_items: payload.invoice_items,
+    due_date: payload.due_date,
+    remarks: payload.remarks,
+    update_stock: payload.update_stock ?? false,
+    request_id: randomRequestId('mobile-sales-invoice'),
+  });
+}
+
+export async function recordSalesPayment(payload: SalesPaymentInput) {
+  return postGateway<any>('myapp.api.gateway.update_payment_status', {
+    reference_doctype: payload.reference_doctype,
+    reference_name: payload.reference_name,
+    paid_amount: payload.paid_amount,
+    mode_of_payment: payload.mode_of_payment,
+    reference_no: payload.reference_no,
+    reference_date: payload.reference_date,
+    request_id: randomRequestId('mobile-sales-payment'),
   });
 }

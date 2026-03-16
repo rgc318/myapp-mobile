@@ -216,3 +216,395 @@ export async function getCustomerShippingDetails(customer: string): Promise<Cust
     contactPhone,
   };
 }
+
+
+export type ProductDetail = {
+  itemCode: string;
+  itemName: string;
+  itemGroup: string;
+  stockUom: string;
+  description: string;
+  imageUrl: string;
+  disabled: boolean;
+};
+
+export async function getProductDetail(itemCode: string): Promise<ProductDetail | null> {
+  const doc = await getDocFields('Item', itemCode, [
+    'item_code',
+    'item_name',
+    'item_group',
+    'stock_uom',
+    'description',
+    'image',
+    'disabled',
+  ]);
+
+  if (!doc) {
+    return null;
+  }
+
+  return {
+    itemCode:
+      typeof doc.item_code === 'string' && doc.item_code.trim()
+        ? doc.item_code.trim()
+        : itemCode,
+    itemName:
+      typeof doc.item_name === 'string' && doc.item_name.trim()
+        ? doc.item_name.trim()
+        : itemCode,
+    itemGroup: typeof doc.item_group === 'string' ? doc.item_group.trim() : '',
+    stockUom: typeof doc.stock_uom === 'string' ? doc.stock_uom.trim() : '',
+    description: typeof doc.description === 'string' ? doc.description.trim() : '',
+    imageUrl: typeof doc.image === 'string' ? doc.image.trim() : '',
+    disabled: doc.disabled === 1 || doc.disabled === '1' || doc.disabled === true,
+  };
+}
+
+export async function updateProductBasicInfo(payload: {
+  itemCode: string;
+  itemName: string;
+  description: string;
+}) {
+  const trimmedCode = payload.itemCode.trim();
+
+  if (!trimmedCode) {
+    throw new Error('Missing item code');
+  }
+
+  await Promise.all([
+    postFrappe('frappe.client.set_value', {
+      doctype: 'Item',
+      name: trimmedCode,
+      fieldname: 'item_name',
+      value: payload.itemName.trim(),
+    }),
+    postFrappe('frappe.client.set_value', {
+      doctype: 'Item',
+      name: trimmedCode,
+      fieldname: 'description',
+      value: payload.description.trim(),
+    }),
+  ]);
+
+  return getProductDetail(trimmedCode);
+}
+
+
+export type SalesOrderListItem = {
+  name: string;
+  customer: string;
+  company: string;
+  transactionDate: string;
+  grandTotal: number | null;
+  status: string;
+  docstatus: number;
+};
+
+export type SalesOrderDetail = SalesOrderListItem & {
+  currency: string;
+  deliveryDate: string;
+  remarks: string;
+  contactPerson: string;
+  contactDisplay: string;
+  addressDisplay: string;
+  customerAddress: string;
+  items: {
+    itemCode: string;
+    itemName: string;
+    qty: number | null;
+    rate: number | null;
+    amount: number | null;
+    warehouse: string;
+    uom: string;
+    imageUrl: string;
+  }[];
+};
+
+export async function listSalesOrders(query: string): Promise<SalesOrderListItem[]> {
+  const apiBaseUrl = getApiBaseUrl();
+  const trimmedQuery = query.trim();
+
+  const requestBody = (filters: unknown[]) => ({
+    doctype: 'Sales Order',
+    fields: ['name', 'customer', 'company', 'transaction_date', 'grand_total', 'status', 'docstatus'],
+    filters,
+    limit_page_length: 20,
+    order_by: 'modified desc',
+  });
+
+  try {
+    const responses = await Promise.all([
+      fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(requestBody(trimmedQuery ? [['name', 'like', `%${trimmedQuery}%`]] : [])),
+      }),
+      trimmedQuery
+        ? fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify(requestBody([['customer', 'like', `%${trimmedQuery}%`]])),
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const payloads = await Promise.all(
+      responses.map((response) => response?.json().catch(() => ({})) ?? Promise.resolve({})),
+    );
+
+    const rowMap = new Map<string, SalesOrderListItem>();
+
+    payloads.forEach((payload) => {
+      const rows = Array.isArray(payload?.message) ? payload.message : [];
+      rows.forEach((row: Record<string, unknown>) => {
+        const name = typeof row.name === 'string' ? row.name : '';
+        if (!name) {
+          return;
+        }
+
+        rowMap.set(name, {
+          name,
+          customer: typeof row.customer === 'string' ? row.customer : '',
+          company: typeof row.company === 'string' ? row.company : '',
+          transactionDate: typeof row.transaction_date === 'string' ? row.transaction_date : '',
+          grandTotal:
+            typeof row.grand_total === 'number'
+              ? row.grand_total
+              : typeof row.grand_total === 'string'
+                ? Number(row.grand_total) || null
+                : null,
+          status: typeof row.status === 'string' ? row.status : '',
+          docstatus: typeof row.docstatus === 'number' ? row.docstatus : Number(row.docstatus) || 0,
+        });
+      });
+    });
+
+    return [...rowMap.values()];
+  } catch {
+    return [];
+  }
+}
+
+export async function getDefaultCurrency(company?: string): Promise<string> {
+  if (company?.trim()) {
+    const companyDoc = await getDocFields('Company', company.trim(), ['default_currency']);
+    if (typeof companyDoc?.default_currency === 'string' && companyDoc.default_currency.trim()) {
+      return companyDoc.default_currency.trim();
+    }
+  }
+
+  const systemSettings = await getDocFields('System Settings', 'System Settings', ['currency']);
+  if (typeof systemSettings?.currency === 'string' && systemSettings.currency.trim()) {
+    return systemSettings.currency.trim();
+  }
+
+  return 'CNY';
+}
+
+export async function getSalesOrderDetail(orderName: string): Promise<SalesOrderDetail | null> {
+  const doc = await postFrappe('frappe.client.get', {
+    doctype: 'Sales Order',
+    name: orderName,
+  });
+
+  const order = doc?.message;
+  if (!order || typeof order !== 'object') {
+    return null;
+  }
+
+  const items = Array.isArray((order as Record<string, unknown>).items)
+    ? (order as Record<string, unknown>).items as Record<string, unknown>[]
+    : [];
+
+  const imageMap = new Map<string, string>();
+  await Promise.all(
+    items
+      .map((item) => (typeof item.item_code === 'string' ? item.item_code : ''))
+      .filter(Boolean)
+      .filter((code, index, list) => list.indexOf(code) === index)
+      .map(async (code) => {
+        const detail = await getProductDetail(code);
+        if (detail?.imageUrl) {
+          imageMap.set(code, detail.imageUrl);
+        }
+      }),
+  );
+
+  const currency =
+    typeof order.currency === 'string' && order.currency.trim()
+      ? order.currency.trim()
+      : await getDefaultCurrency(typeof order.company === 'string' ? order.company : '');
+
+  return {
+    name: typeof order.name === 'string' ? order.name : orderName,
+    customer: typeof order.customer === 'string' ? order.customer : '',
+    company: typeof order.company === 'string' ? order.company : '',
+    currency,
+    transactionDate: typeof order.transaction_date === 'string' ? order.transaction_date : '',
+    grandTotal:
+      typeof order.grand_total === 'number'
+        ? order.grand_total
+        : typeof order.grand_total === 'string'
+          ? Number(order.grand_total) || null
+          : null,
+    status: typeof order.status === 'string' ? order.status : '',
+    docstatus: typeof order.docstatus === 'number' ? order.docstatus : Number(order.docstatus) || 0,
+    deliveryDate: typeof order.delivery_date === 'string' ? order.delivery_date : '',
+    remarks: typeof order.remarks === 'string' ? order.remarks : '',
+    contactPerson: typeof order.contact_person === 'string' ? order.contact_person : '',
+    contactDisplay: typeof order.contact_display === 'string' ? order.contact_display : '',
+    addressDisplay: typeof order.address_display === 'string' ? order.address_display : '',
+    customerAddress: typeof order.customer_address === 'string' ? order.customer_address : '',
+    items: items.map((item) => ({
+      itemCode: typeof item.item_code === 'string' ? item.item_code : '',
+      itemName: typeof item.item_name === 'string' ? item.item_name : '',
+      qty:
+        typeof item.qty === 'number'
+          ? item.qty
+          : typeof item.qty === 'string'
+            ? Number(item.qty) || null
+            : null,
+      rate:
+        typeof item.rate === 'number'
+          ? item.rate
+          : typeof item.rate === 'string'
+            ? Number(item.rate) || null
+            : null,
+      amount:
+        typeof item.amount === 'number'
+          ? item.amount
+          : typeof item.amount === 'string'
+            ? Number(item.amount) || null
+            : null,
+      warehouse: typeof item.warehouse === 'string' ? item.warehouse : '',
+      uom: typeof item.uom === 'string' ? item.uom : '',
+      imageUrl: imageMap.get(typeof item.item_code === 'string' ? item.item_code : '') || '',
+    })),
+  };
+}
+
+
+export async function updateSalesOrderDetail(payload: {
+  orderName: string;
+  deliveryDate: string;
+  remarks: string;
+  contactPerson: string;
+}) {
+  const updates = [
+    ['delivery_date', payload.deliveryDate.trim()],
+    ['remarks', payload.remarks.trim()],
+    ['contact_person', payload.contactPerson.trim()],
+  ] as const;
+
+  for (const [fieldname, value] of updates) {
+    await postFrappe('frappe.client.set_value', {
+      doctype: 'Sales Order',
+      name: payload.orderName,
+      fieldname,
+      value,
+    });
+  }
+
+  return getSalesOrderDetail(payload.orderName);
+}
+
+
+export type SalesInvoiceListItem = {
+  name: string;
+  customer: string;
+  company: string;
+  postingDate: string;
+  grandTotal: number | null;
+  outstandingAmount: number | null;
+  status: string;
+  docstatus: number;
+  currency: string;
+};
+
+export async function listSalesInvoices(query: string): Promise<SalesInvoiceListItem[]> {
+  const apiBaseUrl = getApiBaseUrl();
+  const trimmedQuery = query.trim();
+
+  const requestBody = (filters: unknown[]) => ({
+    doctype: 'Sales Invoice',
+    fields: ['name', 'customer', 'company', 'posting_date', 'grand_total', 'outstanding_amount', 'status', 'docstatus', 'currency'],
+    filters,
+    limit_page_length: 20,
+    order_by: 'modified desc',
+  });
+
+  try {
+    const responses = await Promise.all([
+      fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(requestBody(trimmedQuery ? [['name', 'like', `%${trimmedQuery}%`]] : [])),
+      }),
+      trimmedQuery
+        ? fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify(requestBody([['customer', 'like', `%${trimmedQuery}%`]])),
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const payloads = await Promise.all(
+      responses.map((response) => response?.json().catch(() => ({})) ?? Promise.resolve({})),
+    );
+
+    const rowMap = new Map<string, SalesInvoiceListItem>();
+
+    payloads.forEach((payload) => {
+      const rows = Array.isArray(payload?.message) ? payload.message : [];
+      rows.forEach((row: Record<string, unknown>) => {
+        const name = typeof row.name === 'string' ? row.name : '';
+        if (!name) {
+          return;
+        }
+
+        rowMap.set(name, {
+          name,
+          customer: typeof row.customer === 'string' ? row.customer : '',
+          company: typeof row.company === 'string' ? row.company : '',
+          postingDate: typeof row.posting_date === 'string' ? row.posting_date : '',
+          grandTotal:
+            typeof row.grand_total === 'number'
+              ? row.grand_total
+              : typeof row.grand_total === 'string'
+                ? Number(row.grand_total) || null
+                : null,
+          outstandingAmount:
+            typeof row.outstanding_amount === 'number'
+              ? row.outstanding_amount
+              : typeof row.outstanding_amount === 'string'
+                ? Number(row.outstanding_amount) || null
+                : null,
+          status: typeof row.status === 'string' ? row.status : '',
+          docstatus: typeof row.docstatus === 'number' ? row.docstatus : Number(row.docstatus) || 0,
+          currency: typeof row.currency === 'string' ? row.currency : 'CNY',
+        });
+      });
+    });
+
+    return [...rowMap.values()];
+  } catch {
+    return [];
+  }
+}

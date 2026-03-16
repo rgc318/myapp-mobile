@@ -29,6 +29,7 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'cart.fill.badge.plus': 'add-shopping-cart',
   'barcode.viewfinder': 'qr-code-scanner',
+  photo: 'photo',
 } as IconMapping;
 
 /**
