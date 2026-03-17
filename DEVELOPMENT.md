@@ -147,12 +147,191 @@ This round focused on aligning the mobile frontend with the completed sales v2 b
   - the old page used to backfill item images through separate `Item` reads
   - after switching to the aggregated order-detail API, image rendering disappeared until the backend contract was updated to return item image fields
 
+- local Android build environment friction
+  - `npx expo prebuild -p android` only generates the native Android project and does not produce an APK by itself
+  - actual APK generation still requires running Gradle inside the generated `android/` project
+  - local Android build requires at least:
+    - JDK 17
+    - `JAVA_HOME`
+    - Android SDK / Gradle environment
+  - in this environment, `sdkman` was used to install and switch Java versions
+  - `sdkman` installation additionally required system packages:
+    - `unzip`
+    - `zip`
+
+- Gradle network/proxy behavior
+  - Gradle/JVM download traffic should not be assumed to automatically follow Windows or browser-level system proxy settings
+  - even when `npm`, `npx`, or Expo CLI can reach the network, Gradle may still fail while downloading its distribution or Android dependencies
+  - local Android build may therefore require explicit proxy configuration for Gradle/JVM, for example through:
+    - `android/gradle.properties`
+    - `GRADLE_OPTS`
+  - this is especially important in WSL or mixed Windows + WSL development setups
+
 ### Current Recommended Next Steps
 
 1. add a sales-order update v2 backend interface and migrate the detail-page save flow to it
 2. remove or explicitly mark legacy sales helpers in `master-data.ts` and old gateway wrappers
 3. continue aligning delivery/invoice/payment pages to the sales v2 contract
 4. finish product detail/edit paths on top of the new product service split
+
+## Local Android Build Notes
+
+If the team wants to produce a local Android development APK instead of using Expo Go:
+
+### What should be ready before packaging
+
+- Node.js
+  - current project should preferably use Node 20+
+- npm dependencies
+  - run `npm install` in `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile`
+- JDK
+  - recommended: JDK 17
+  - current local setup used `sdkman`
+- Android SDK
+  - for WSL-local packaging, install Android command-line tools, platform-tools, build-tools, platforms, and CMake in WSL
+- required system packages in WSL
+  - `zip`
+  - `unzip`
+
+### Current recommended local packaging route
+
+This project can be packaged fully inside WSL. The recommended sequence is:
+
+1. install and switch Java
+   - recommended tool: `sdkman`
+   - current verified version: `Temurin 17`
+
+2. generate the native Android project
+   - `npx expo prebuild -p android`
+   - note:
+     - this only generates the `android/` project
+     - it does **not** output an APK by itself
+
+3. install Android SDK components in WSL
+   - Android command-line tools
+   - `platform-tools`
+   - `platforms;android-36`
+   - `build-tools;36.0.0`
+   - `cmake;3.22.1`
+
+4. point the Android project to the SDK path
+   - file:
+     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/local.properties`
+   - current WSL example:
+     - `sdk.dir=/home/rgc318/Android/Sdk`
+
+5. build the debug APK
+   - `cd android`
+   - `./gradlew assembleDebug`
+
+6. expected APK output
+   - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/build/outputs/apk/debug/app-debug.apk`
+
+### Example environment variables for WSL
+
+Before running `sdkmanager` or `./gradlew`, the following environment is recommended:
+
+```bash
+export JAVA_HOME="$HOME/.sdkman/candidates/java/current"
+export PATH="$JAVA_HOME/bin:$PATH"
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+```
+
+### Minimal command reference
+
+Generate native Android project:
+
+```bash
+cd /home/rgc318/python-project/frappe_docker/frontend/myapp-mobile
+npx expo prebuild -p android
+```
+
+Build debug APK:
+
+```bash
+cd /home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android
+./gradlew assembleDebug
+```
+
+Check output:
+
+```bash
+ls -l /home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/build/outputs/apk/debug/
+```
+
+### Proxy and network notes
+
+- Gradle/JVM network access should not be assumed to automatically follow browser, Windows system proxy, or Node/Expo proxy behavior
+- even if `npm install` works, Gradle may still fail to download:
+  - Gradle distribution
+  - Maven dependencies
+  - Android SDK components
+- for this project, proxy settings may need to be configured explicitly in:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/gradle.properties`
+- typical configuration example:
+
+```properties
+systemProp.http.proxyHost=127.0.0.1
+systemProp.http.proxyPort=10808
+systemProp.https.proxyHost=127.0.0.1
+systemProp.https.proxyPort=10808
+systemProp.org.gradle.internal.http.connectionTimeout=120000
+systemProp.org.gradle.internal.http.socketTimeout=120000
+```
+
+- in mixed Windows + WSL environments, `127.0.0.1` may or may not be correct
+- if Gradle still cannot connect, verify whether the proxy process is actually reachable from WSL
+
+### Common packaging failures already seen in this project
+
+1. Java not found
+   - symptom:
+     - `JAVA_HOME is not set and no 'java' command could be found`
+   - meaning:
+     - JDK not installed or not exported into the current shell
+
+2. `expo prebuild` completed but no APK exists
+   - meaning:
+     - this is expected
+     - `prebuild` only generates native project files
+     - APK comes from `./gradlew assembleDebug`
+
+3. Android SDK location not found
+   - symptom:
+     - `SDK location not found`
+   - meaning:
+     - missing `ANDROID_HOME`
+     - or missing `android/local.properties`
+
+4. Gradle dependency download timeout
+   - symptom:
+     - Maven or Gradle distribution download timed out
+   - meaning:
+     - Gradle/JVM network path is not yet usable
+     - proxy or timeout settings likely need adjustment
+
+5. CMake executable missing
+   - symptom:
+     - `.../Android/Sdk/cmake/3.22.1/bin/cmake: No such file or directory`
+   - meaning:
+     - CMake package did not install correctly
+   - action:
+     - reinstall `cmake;3.22.1`
+
+### Files that should usually remain local and not be committed
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/local.properties`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/build`
+- IDE-local folders such as:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/.idea`
+
+Important cautions:
+
+- `expo prebuild` is not the same as APK packaging
+- Gradle dependency downloads may fail even when Node-based tooling works normally
+- if network access is unstable, Gradle/JVM proxy settings may need to be configured explicitly
 
 ## First Phase Pages
 
