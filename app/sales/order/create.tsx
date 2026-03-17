@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
@@ -21,6 +21,7 @@ import { createSalesOrder } from '@/services/gateway';
 import {
   checkLinkOptionExists,
   getCustomerShippingDetails,
+  getProductDetail,
   searchLinkOptions,
   type LinkOption,
 } from '@/services/master-data';
@@ -118,6 +119,7 @@ function SummaryRow({
 function SalesItemRow({
   itemCode,
   itemName,
+  imageUrl,
   price,
   qty,
   warehouse,
@@ -127,6 +129,7 @@ function SalesItemRow({
 }: {
   itemCode: string;
   itemName: string;
+  imageUrl?: string | null;
   price: number | null;
   qty: number;
   warehouse?: string | null;
@@ -178,9 +181,13 @@ function SalesItemRow({
 
   return (
     <View style={[styles.itemRow, { backgroundColor: surface, borderColor }]}>
-      <View style={[styles.itemThumb, { backgroundColor: surfaceMuted }]}>
-        <IconSymbol color="#28B7D7" name="shippingbox.fill" size={20} />
-      </View>
+      {imageUrl ? (
+        <Image source={{ uri: imageUrl }} style={styles.itemThumbImage} />
+      ) : (
+        <View style={[styles.itemThumb, { backgroundColor: surfaceMuted }]}>
+          <IconSymbol color="#28B7D7" name="shippingbox.fill" size={20} />
+        </View>
+      )}
 
       <View style={styles.itemMain}>
         <View style={styles.itemHeaderRow}>
@@ -300,6 +307,35 @@ export default function SalesOrderCreateScreen() {
       clearTimeout(removeUndoTimerRef.current);
     }
   }, []);
+  useEffect(() => {
+    const missingImageItems = draftItems.filter((item) => !item.imageUrl && item.itemCode);
+
+    if (!missingImageItems.length) {
+      return;
+    }
+
+    let active = true;
+
+    void Promise.all(
+      missingImageItems.map(async (item) => {
+        const detail = await getProductDetail(item.itemCode);
+        if (!active || !detail?.imageUrl) {
+          return;
+        }
+
+        restoreSalesOrderDraftItem({ ...item, imageUrl: detail.imageUrl });
+      }),
+    ).then(() => {
+      if (active) {
+        syncDraft();
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [draftItems]);
+
 
 
   useEffect(() => {
@@ -633,6 +669,7 @@ export default function SalesOrderCreateScreen() {
                   <SalesItemRow
                     itemCode={item.itemCode}
                     itemName={item.itemName}
+                    imageUrl={item.imageUrl}
                     key={item.draftKey}
                     onChangePrice={(value) => {
                       updateSalesOrderDraftField(
@@ -1027,25 +1064,31 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 12,
-    padding: 12,
+    gap: 14,
+    padding: 14,
   },
   itemThumb: {
     alignItems: 'center',
-    borderRadius: 16,
-    height: 48,
+    borderRadius: 18,
+    height: 60,
     justifyContent: 'center',
-    width: 48,
+    width: 60,
+  },
+  itemThumbImage: {
+    borderRadius: 18,
+    height: 60,
+    width: 60,
   },
   itemMain: {
     flex: 1,
-    gap: 4,
+    gap: 6,
   },
   itemHeaderRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
+    minHeight: 60,
   },
   itemHeaderCopy: {
     flex: 1,

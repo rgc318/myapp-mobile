@@ -736,6 +736,8 @@ What is already working in code now:
   - quantity / unit / price / line amount display
   - shipping summary block
   - editable remarks / contact person / delivery date
+- sales-order create page item cards now preserve and render product images from product search results
+- legacy draft items without image metadata are now hydrated from product detail lookup when possible
 - sales-invoice creation page is no longer a placeholder:
   - create invoice from an existing sales order
 - sales-payment page is no longer a placeholder:
@@ -758,6 +760,7 @@ Current document-query interaction decisions:
 - sales-order result cards should keep:
   - left side for base document information
   - right side for result information such as amount / status / outstanding-like hints
+- query-card layout changes should now stay incremental; avoid large structural rewrites unless the current layout is fully verified in UI first
 
 Current order-detail implementation decisions:
 

@@ -6,6 +6,7 @@ export type SalesOrderDraftItem = {
   draftKey: string;
   itemCode: string;
   itemName: string;
+  imageUrl?: string | null;
   qty: number;
   price: number | null;
   uom: string | null;
@@ -33,6 +34,7 @@ function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
     draftKey: typeof item.draftKey === 'string' && item.draftKey ? item.draftKey : buildDraftKey({ itemCode, warehouse, uom }),
     itemCode,
     itemName: typeof item.itemName === 'string' ? item.itemName : itemCode,
+    imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
     qty: typeof item.qty === 'number' && Number.isFinite(item.qty) ? item.qty : 1,
     price: typeof item.price === 'number' && Number.isFinite(item.price) ? item.price : null,
     uom,
@@ -85,6 +87,9 @@ export function addItemToSalesOrderDraft(item: ProductSearchItem) {
 
   if (existing) {
     existing.qty += 1;
+    if (!existing.imageUrl && item.imageUrl) {
+      existing.imageUrl = item.imageUrl;
+    }
     persistDraft(current);
     return current;
   }
@@ -93,6 +98,7 @@ export function addItemToSalesOrderDraft(item: ProductSearchItem) {
     draftKey,
     itemCode: item.itemCode,
     itemName: item.itemName,
+    imageUrl: item.imageUrl ?? null,
     qty: 1,
     price: item.price,
     uom: item.uom,
