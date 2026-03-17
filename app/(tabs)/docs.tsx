@@ -7,13 +7,42 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatCurrencyValue } from '@/lib/display-currency';
-import { listSalesInvoices, listSalesOrders, type SalesInvoiceListItem, type SalesOrderListItem } from '@/services/master-data';
+import { listSalesInvoices, type SalesInvoiceListItem } from '@/services/master-data';
+import { listSalesOrderSummaries, type SalesOrderSummaryItem } from '@/services/sales';
 
 type TabKey = 'orders' | 'invoices';
 
-function orderStatusText(item: SalesOrderListItem) {
+function orderStatusText(item: SalesOrderSummaryItem) {
+  if (item.status === 'cancelled') {
+    return '\u5df2\u53d6\u6d88';
+  }
+
+  if (item.completionStatus === 'completed') {
+    return '\u5df2\u5b8c\u6210';
+  }
+
+  if (item.paymentStatus === 'paid') {
+    return '\u5df2\u7ed3\u6e05';
+  }
+
+  if (item.fulfillmentStatus === 'shipped') {
+    return '\u5df2\u51fa\u8d27';
+  }
+
+  if (item.fulfillmentStatus === 'partial') {
+    return '\u90e8\u5206\u51fa\u8d27';
+  }
+
+  if (item.status === 'submitted' && item.fulfillmentStatus === 'pending') {
+    return '\u5f85\u51fa\u8d27';
+  }
+
+  if (item.status === 'draft') {
+    return '\u8349\u7a3f';
+  }
+
   if (item.status.trim()) {
-    return item.status;
+    return item.status === 'submitted' ? '\u5df2\u63d0\u4ea4' : item.status;
   }
 
   return item.docstatus === 1 ? '\u5df2\u63d0\u4ea4' : '\u8349\u7a3f';
@@ -35,7 +64,7 @@ export default function DocsTabScreen() {
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>('orders');
   const [query, setQuery] = useState('');
-  const [orders, setOrders] = useState<SalesOrderListItem[]>([]);
+  const [orders, setOrders] = useState<SalesOrderSummaryItem[]>([]);
   const [invoices, setInvoices] = useState<SalesInvoiceListItem[]>([]);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -53,7 +82,7 @@ export default function DocsTabScreen() {
       setQuery(keyword);
 
       if (activeTab === 'orders') {
-        const nextOrders = await listSalesOrders(keyword);
+        const nextOrders = await listSalesOrderSummaries(keyword);
         setOrders(nextOrders);
         setMessage(
           nextOrders.length
@@ -159,7 +188,11 @@ export default function DocsTabScreen() {
                       <ThemedText style={[styles.statusText, { color: tintColor }]} type="defaultSemiBold">{orderStatusText(order)}</ThemedText>
                     </View>
                     <ThemedText style={styles.amountText} type="defaultSemiBold">{formatCurrencyValue(order.grandTotal, 'CNY')}</ThemedText>
-                    <ThemedText style={styles.footerHint}>{'\u70b9\u51fb\u67e5\u770b\u8be6\u60c5'}</ThemedText>
+                    <ThemedText style={styles.footerHint}>
+                      {order.outstandingAmount !== null
+                        ? `\u672a\u6536 ${formatCurrencyValue(order.outstandingAmount, 'CNY')}`
+                        : '\u70b9\u51fb\u67e5\u770b\u8be6\u60c5'}
+                    </ThemedText>
                   </View>
                 </View>
               </Pressable>

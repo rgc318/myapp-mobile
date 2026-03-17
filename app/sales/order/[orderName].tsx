@@ -5,9 +5,11 @@ import { Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { normalizeAppError } from '@/lib/app-error';
 import { formatCurrencyValue } from '@/lib/display-currency';
 import { formatDisplayUom } from '@/lib/display-uom';
-import { getSalesOrderDetail, type SalesOrderDetail, updateSalesOrderDetail } from '@/services/master-data';
+import { type SalesOrderDetail as SalesOrderDetail, updateSalesOrderDetail } from '@/services/master-data';
+import { getSalesOrderDetailV2 } from '@/services/sales';
 
 
 function InfoRow({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
@@ -43,7 +45,7 @@ export default function SalesOrderDetailScreen() {
 
     let active = true;
 
-    void getSalesOrderDetail(orderName)
+    void getSalesOrderDetailV2(orderName)
       .then((nextDetail) => {
         if (!active) {
           return;
@@ -57,7 +59,8 @@ export default function SalesOrderDetailScreen() {
       })
       .catch((error) => {
         if (active) {
-          setMessage(error instanceof Error ? error.message : '\u8ba2\u5355\u8be6\u60c5\u8bfb\u53d6\u5931\u8d25\u3002');
+          const appError = normalizeAppError(error, '\u8ba2\u5355\u8be6\u60c5\u8bfb\u53d6\u5931\u8d25\u3002');
+          setMessage(appError.message);
         }
       })
 
@@ -71,8 +74,8 @@ export default function SalesOrderDetailScreen() {
     [detail],
   );
 
-  const shippingAddress = detail?.addressDisplay || detail?.customerAddress || '\u672a\u914d\u7f6e\u6536\u8d27\u5730\u5740';
-  const consignee = detail?.contactPerson || detail?.contactDisplay || '\u672a\u914d\u7f6e\u6536\u8d27\u4eba';
+  const shippingAddress = detail?.addressDisplay || '\u672a\u914d\u7f6e\u6536\u8d27\u5730\u5740';
+  const consignee = detail?.contactDisplay || detail?.contactPerson || '\u672a\u914d\u7f6e\u6536\u8d27\u4eba';
   const receivable = detail?.grandTotal ?? null;
   const currency = detail?.currency || 'CNY';
 

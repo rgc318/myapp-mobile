@@ -1,6 +1,11 @@
 import { Platform } from 'react-native';
 
-import { getApiBaseUrl } from '@/lib/config';
+import { saveStoredCsrfToken } from '@/lib/auth-storage';
+import {
+  getLoggedUserRequest,
+  loginWithSessionRequest,
+  logoutRequest,
+} from '@/lib/api-client';
 
 export type LoginParams = {
   username: string;
@@ -33,23 +38,32 @@ function extractToken(payload: any): string | null {
   return null;
 }
 
+function extractCsrfToken(payload: any): string | null {
+  const candidates = [
+    payload?.csrf_token,
+    payload?.data?.csrf_token,
+    payload?.message?.csrf_token,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
 export async function loginWithPassword({ username, password }: LoginParams) {
-  const apiBaseUrl = getApiBaseUrl();
-  let response: Response;
+  let payload: any;
 
   try {
-    response = await fetch(`${apiBaseUrl}/api/method/login`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      credentials: 'include',
-      body: new URLSearchParams({
+    payload = await loginWithSessionRequest(
+      new URLSearchParams({
         usr: username,
         pwd: password,
-      }).toString(),
-    });
+      }),
+    );
   } catch {
     if (Platform.OS === 'web') {
       throw new Error(
@@ -60,10 +74,13 @@ export async function loginWithPassword({ username, password }: LoginParams) {
     throw new Error('无法连接后端，请检查服务地址或网络环境。');
   }
 
-  const payload = await response.json().catch(() => ({}));
   const token = extractToken(payload);
+  const csrfToken = extractCsrfToken(payload);
+  if (csrfToken) {
+    saveStoredCsrfToken(csrfToken);
+  }
 
-  if (!response.ok || (!token && payload?.message !== 'Logged In')) {
+  if (!token && payload?.message !== 'Logged In') {
     const message =
       payload?.message ||
       payload?.exc ||
@@ -78,39 +95,15 @@ export async function loginWithPassword({ username, password }: LoginParams) {
 }
 
 export async function getLoggedUser(authToken?: string | null) {
-  const apiBaseUrl = getApiBaseUrl();
-  let response: Response;
-
   try {
-    response = await fetch(`${apiBaseUrl}/api/method/frappe.auth.get_logged_user`, {
-      headers: {
-        Accept: 'application/json',
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      },
-      credentials: 'include',
-    });
+    const message = await getLoggedUserRequest(authToken);
+    return typeof message === 'string' ? message : null;
   } catch {
     return null;
   }
-
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok || typeof payload?.message !== 'string') {
-    return null;
-  }
-
-  return payload.message;
 }
 
 export async function logoutFromSession(authToken?: string | null) {
-  const apiBaseUrl = getApiBaseUrl();
-
-  await fetch(`${apiBaseUrl}/api/method/logout`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    credentials: 'include',
-  }).catch(() => undefined);
+  saveStoredCsrfToken(null);
+  await logoutRequest(authToken);
 }

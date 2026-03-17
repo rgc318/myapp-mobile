@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/lib/config';
+import { callGatewayMethod } from '@/lib/api-client';
 
 export type ProductSearchItem = {
   itemCode: string;
@@ -8,6 +8,8 @@ export type ProductSearchItem = {
   uom: string | null;
   warehouse: string | null;
   imageUrl?: string | null;
+  description?: string | null;
+  nickname?: string | null;
 };
 
 export type SalesOrderItemInput = {
@@ -16,6 +18,63 @@ export type SalesOrderItemInput = {
   price?: number;
   warehouse?: string;
   uom?: string;
+};
+
+export type CustomerSalesContext = {
+  customer: {
+    name: string;
+    displayName: string;
+    customerGroup: string | null;
+    territory: string | null;
+    defaultCurrency: string | null;
+  };
+  defaultContact: {
+    name: string;
+    displayName: string;
+    phone: string | null;
+    email: string | null;
+  } | null;
+  defaultAddress: {
+    name: string;
+    addressTitle: string | null;
+    addressDisplay: string | null;
+    addressLine1: string | null;
+    addressLine2: string | null;
+    city: string | null;
+    county: string | null;
+    state: string | null;
+    country: string | null;
+    pincode: string | null;
+  } | null;
+  recentAddresses: {
+    name: string | null;
+    addressDisplay: string | null;
+  }[];
+  suggestions: {
+    company: string | null;
+    warehouse: string | null;
+  };
+};
+
+export type SalesOrderV2Input = {
+  customer: string;
+  company: string;
+  items: SalesOrderItemInput[];
+  immediate?: boolean;
+  transaction_date?: string;
+  remarks?: string;
+  customer_info?: {
+    contact_person?: string;
+    contact_display_name?: string;
+    contact_phone?: string;
+    contact_email?: string;
+  };
+  shipping_info?: {
+    receiver_name?: string;
+    receiver_phone?: string;
+    shipping_address_name?: string;
+    shipping_address_text?: string;
+  };
 };
 
 
@@ -36,15 +95,6 @@ export type SalesPaymentInput = {
   reference_date?: string;
 };
 
-type GatewayResponse<T> = {
-  message?: {
-    ok?: boolean;
-    data?: T;
-    message?: string;
-  };
-  exc?: string;
-};
-
 function randomRequestId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -63,24 +113,7 @@ function toOptionalNumber(value: unknown) {
 }
 
 async function postGateway<T>(method: string, payload: Record<string, unknown>) {
-  const response = await fetch(`${getApiBaseUrl()}/api/method/${method}`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  });
-
-  const body: GatewayResponse<T> = await response.json().catch(() => ({}));
-
-  if (!response.ok || body?.message?.ok === false) {
-    const message = body?.message?.message || body?.exc || '请求失败，请稍后重试。';
-    throw new Error(String(message));
-  }
-
-  return body?.message?.data as T;
+  return callGatewayMethod<T>(method, payload);
 }
 
 export async function searchProducts(
@@ -91,11 +124,14 @@ export async function searchProducts(
     limit?: number;
   },
 ) {
-  const data = await postGateway<any>('myapp.api.gateway.search_product', {
+  const data = await postGateway<any>('myapp.api.gateway.search_product_v2', {
     search_key: query,
     warehouse: options?.warehouse,
     company: options?.company,
     limit: options?.limit ?? 20,
+    search_fields: ['item_code', 'item_name', 'barcode', 'nickname'],
+    sort_by: 'relevance',
+    sort_order: 'asc',
   });
 
   const rows = Array.isArray(data?.items)
@@ -127,6 +163,8 @@ export async function searchProducts(
             : typeof row.item_image === 'string'
               ? row.item_image
               : null,
+      description: typeof row.description === 'string' ? row.description : null,
+      nickname: typeof row.nickname === 'string' ? row.nickname : null,
     }))
     .filter((row: ProductSearchItem) => row.itemCode);
 }
@@ -148,6 +186,94 @@ export async function createSalesOrder(payload: {
     remarks: payload.remarks,
     request_id: randomRequestId('mobile-sales-order'),
   });
+}
+
+export async function createSalesOrderV2(payload: SalesOrderV2Input) {
+  return postGateway<any>('myapp.api.gateway.create_order_v2', {
+    customer: payload.customer,
+    company: payload.company,
+    items: payload.items,
+    immediate: payload.immediate ?? false,
+    transaction_date: payload.transaction_date,
+    remarks: payload.remarks,
+    customer_info: payload.customer_info,
+    shipping_info: payload.shipping_info,
+    request_id: randomRequestId('mobile-sales-order-v2'),
+  });
+}
+
+function mapCustomerSalesContext(data: Record<string, any>): CustomerSalesContext {
+  const customer = data?.customer ?? {};
+  const defaultContact = data?.default_contact;
+  const defaultAddress = data?.default_address;
+  const recentAddresses = Array.isArray(data?.recent_addresses) ? data.recent_addresses : [];
+  const suggestions = data?.suggestions ?? {};
+
+  return {
+    customer: {
+      name: String(customer.name ?? ''),
+      displayName: String(customer.display_name ?? customer.name ?? ''),
+      customerGroup: typeof customer.customer_group === 'string' ? customer.customer_group : null,
+      territory: typeof customer.territory === 'string' ? customer.territory : null,
+      defaultCurrency:
+        typeof customer.default_currency === 'string' ? customer.default_currency : null,
+    },
+    defaultContact: defaultContact
+      ? {
+          name: String(defaultContact.name ?? ''),
+          displayName: String(
+            defaultContact.display_name ?? defaultContact.full_name ?? defaultContact.name ?? '',
+          ),
+          phone:
+            typeof defaultContact.phone === 'string'
+              ? defaultContact.phone
+              : typeof defaultContact.mobile_no === 'string'
+                ? defaultContact.mobile_no
+                : null,
+          email: typeof defaultContact.email === 'string' ? defaultContact.email : null,
+        }
+      : null,
+    defaultAddress: defaultAddress
+      ? {
+          name: String(defaultAddress.name ?? ''),
+          addressTitle:
+            typeof defaultAddress.address_title === 'string' ? defaultAddress.address_title : null,
+          addressDisplay:
+            typeof defaultAddress.address_display === 'string'
+              ? defaultAddress.address_display
+              : null,
+          addressLine1:
+            typeof defaultAddress.address_line1 === 'string'
+              ? defaultAddress.address_line1
+              : null,
+          addressLine2:
+            typeof defaultAddress.address_line2 === 'string'
+              ? defaultAddress.address_line2
+              : null,
+          city: typeof defaultAddress.city === 'string' ? defaultAddress.city : null,
+          county: typeof defaultAddress.county === 'string' ? defaultAddress.county : null,
+          state: typeof defaultAddress.state === 'string' ? defaultAddress.state : null,
+          country: typeof defaultAddress.country === 'string' ? defaultAddress.country : null,
+          pincode: typeof defaultAddress.pincode === 'string' ? defaultAddress.pincode : null,
+        }
+      : null,
+    recentAddresses: recentAddresses.map((row: Record<string, unknown>) => ({
+      name: typeof row.name === 'string' ? row.name : null,
+      addressDisplay: typeof row.address_display === 'string' ? row.address_display : null,
+    })),
+    suggestions: {
+      company: typeof suggestions.company === 'string' ? suggestions.company : null,
+      warehouse: typeof suggestions.warehouse === 'string' ? suggestions.warehouse : null,
+    },
+  };
+}
+
+export async function getCustomerSalesContext(customer: string) {
+  const data = await postGateway<Record<string, any>>('myapp.api.gateway.get_customer_sales_context', {
+    customer,
+  });
+
+  return mapCustomerSalesContext(data ?? {});
 }
 
 

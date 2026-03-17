@@ -11,6 +11,7 @@ import {
   loadStoredToken,
   loadStoredUsername,
   saveStoredAuthMode,
+  saveStoredCsrfToken,
   saveStoredToken,
   saveStoredUsername,
 } from '@/lib/auth-storage';
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!currentUser) {
           setAuthToken(null);
           saveStoredToken(null);
+          saveStoredCsrfToken(null);
           setAuthMode('session');
           saveStoredAuthMode('session');
           setProfile(null);
@@ -102,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveStoredUsername(null);
     setAuthToken(null);
     saveStoredToken(null);
+    saveStoredCsrfToken(null);
     setAuthMode('session');
     saveStoredAuthMode('session');
   };

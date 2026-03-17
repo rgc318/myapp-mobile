@@ -7,8 +7,10 @@ import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { normalizeText, toOptionalText } from '@/lib/form-utils';
 import {
   addItemToSalesOrderDraft,
   getSalesOrderDraft,
@@ -16,7 +18,8 @@ import {
   updateSalesOrderDraftQty,
   type SalesOrderDraftItem,
 } from '@/lib/sales-order-draft';
-import { searchProducts, type ProductSearchItem } from '@/services/gateway';
+import { useFeedback } from '@/providers/feedback-provider';
+import { createProductAndStock, searchCatalogProducts, type ProductSearchItem } from '@/services/products';
 
 function getProductResultKey(item: ProductSearchItem) {
   return [item.itemCode, item.warehouse ?? '', item.uom ?? ''].join('::');
@@ -131,13 +134,19 @@ export default function ProductSearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ query?: string }>();
   const preferences = getAppPreferences();
+  const { showError, showSuccess } = useFeedback();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ProductSearchItem[]>([]);
   const [message, setMessage] = useState('');
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemQty, setNewItemQty] = useState('0');
+  const [newItemPrice, setNewItemPrice] = useState('');
+  const [newItemDescription, setNewItemDescription] = useState('');
   const mode = params.mode === 'order' ? 'order' : 'lookup';
   const isOrderMode = mode === 'order';
   const [draftItems, setDraftItems] = useState(() => getSalesOrderDraft());
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
@@ -161,7 +170,7 @@ export default function ProductSearchScreen() {
     try {
       setIsLoading(true);
       setQuery(nextQuery);
-      const items = await searchProducts(nextQuery, {
+      const items = await searchCatalogProducts(nextQuery, {
         company: preferences.defaultCompany || undefined,
         warehouse: preferences.defaultWarehouse || undefined,
       });
@@ -173,7 +182,9 @@ export default function ProductSearchScreen() {
       );
     } catch (error) {
       setResults([]);
-      setMessage(error instanceof Error ? error.message : '\u5546\u54c1\u641c\u7d22\u5931\u8d25\u3002');
+      const appError = normalizeAppError(error, '\u5546\u54c1\u641c\u7d22\u5931\u8d25\u3002');
+      setMessage(appError.message);
+      showError(appError.message);
     } finally {
       setIsLoading(false);
     }
@@ -189,6 +200,49 @@ export default function ProductSearchScreen() {
     const nextQty = getDraftItem(item, nextDraft)?.qty ?? 0;
     setDraftItems([...nextDraft]);
     setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u52a0\u5165\u8ba2\u5355\uff0c\u5f53\u524d\u5df2\u9009 ${nextQty} \u4ef6\u3002`);
+    showSuccess(`已将 ${item.itemName || item.itemCode} 加入订单`);
+  };
+
+  const handleCreateProduct = async () => {
+    const itemName = normalizeText(newItemName || query);
+
+    if (!itemName) {
+      const text = '请先输入商品名称。';
+      setMessage(text);
+      showError(text);
+      return;
+    }
+
+    setIsCreatingProduct(true);
+
+    try {
+      const createdItem = await createProductAndStock({
+        itemName,
+        defaultWarehouse: preferences.defaultWarehouse || undefined,
+        openingQty: Number(newItemQty) || 0,
+        standardRate: newItemPrice.trim() ? Number(newItemPrice) || 0 : undefined,
+        description: toOptionalText(newItemDescription),
+      });
+
+      setResults([createdItem]);
+      setMessage(`已创建商品 ${createdItem.itemName || createdItem.itemCode}。`);
+      setNewItemName('');
+      setNewItemQty('0');
+      setNewItemPrice('');
+      setNewItemDescription('');
+
+      if (isOrderMode) {
+        handleAdd(createdItem);
+      } else {
+        showSuccess(`商品 ${createdItem.itemName || createdItem.itemCode} 已创建并入库`);
+      }
+    } catch (error) {
+      const appError = normalizeAppError(error, '新增商品失败，请稍后重试。');
+      setMessage(appError.message);
+      showError(appError.message);
+    } finally {
+      setIsCreatingProduct(false);
+    }
   };
 
 
@@ -308,6 +362,56 @@ export default function ProductSearchScreen() {
             <ThemedText>
               {'\u4f60\u53ef\u4ee5\u66f4\u6362\u5173\u952e\u8bcd\uff0c\u6216\u8005\u5148\u68c0\u67e5\u5546\u54c1\u7f16\u7801\u3001\u6761\u7801\u662f\u5426\u6b63\u786e\u3002'}
             </ThemedText>
+
+            <View style={[styles.quickCreateCard, { backgroundColor: surface, borderColor }]}>
+              <ThemedText type="defaultSemiBold">{'新增商品并入库'}</ThemedText>
+              <ThemedText style={styles.metaText}>
+                {'未找到商品时，可直接创建正式商品并入默认仓库。'}
+              </ThemedText>
+
+              <TextInput
+                onChangeText={setNewItemName}
+                placeholder={'商品名称'}
+                placeholderTextColor="rgba(31,42,55,0.45)"
+                style={[styles.quickCreateInput, { backgroundColor: surfaceMuted, borderColor }]}
+                value={newItemName || query}
+              />
+              <TextInput
+                keyboardType="numeric"
+                onChangeText={setNewItemQty}
+                placeholder={'初始数量，默认 0'}
+                placeholderTextColor="rgba(31,42,55,0.45)"
+                style={[styles.quickCreateInput, { backgroundColor: surfaceMuted, borderColor }]}
+                value={newItemQty}
+              />
+              <TextInput
+                keyboardType="numeric"
+                onChangeText={setNewItemPrice}
+                placeholder={'参考售价，可选'}
+                placeholderTextColor="rgba(31,42,55,0.45)"
+                style={[styles.quickCreateInput, { backgroundColor: surfaceMuted, borderColor }]}
+                value={newItemPrice}
+              />
+              <TextInput
+                onChangeText={setNewItemDescription}
+                placeholder={'商品备注，可选'}
+                placeholderTextColor="rgba(31,42,55,0.45)"
+                style={[styles.quickCreateInput, { backgroundColor: surfaceMuted, borderColor }]}
+                value={newItemDescription}
+              />
+
+              <ThemedText style={styles.metaText}>
+                {'入库仓库：'} {preferences.defaultWarehouse || '未设置，后端将按默认仓库处理'}
+              </ThemedText>
+
+              <Pressable
+                onPress={() => void handleCreateProduct()}
+                style={[styles.searchButton, { backgroundColor: tintColor, opacity: isCreatingProduct ? 0.7 : 1 }]}>
+                <ThemedText style={styles.searchButtonText} type="defaultSemiBold">
+                  {isCreatingProduct ? '创建中...' : '新增并入库'}
+                </ThemedText>
+              </Pressable>
+            </View>
           </View>
         ) : null}
       </View>
@@ -493,5 +597,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
     padding: 16,
+  },
+  quickCreateCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    marginTop: 10,
+    padding: 14,
+  },
+  quickCreateInput: {
+    borderRadius: 14,
+    borderWidth: 1,
+    fontSize: 15,
+    minHeight: 46,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
 });

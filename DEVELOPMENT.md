@@ -67,6 +67,93 @@ Frontend should use the existing gateway APIs instead of calling ERPNext write e
 
 Detailed request and response fields should be checked in the backend API document.
 
+## Frontend Upgrade Summary (2026-03-17)
+
+This round focused on aligning the mobile frontend with the completed sales v2 backend interfaces and reducing repeated request/auth logic.
+
+### Completed
+
+- request/auth infrastructure
+  - added a unified request layer in:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/api-client.ts`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/frappe-http.ts`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/auth-storage.ts`
+  - added shared error and form helpers:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/app-error.ts`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/form-utils.ts`
+  - added global feedback provider:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/providers/feedback-provider.tsx`
+
+- service-layer reorganization
+  - added domain services:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/customers.ts`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/products.ts`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+  - existing auth/user/master-data/gateway modules were adjusted to use the unified request layer where relevant
+
+- sales v2 backend alignment
+  - product search page now uses `search_product_v2`
+  - product search page supports quick create-and-stock from mobile
+  - sales-order page now uses:
+    - `get_customer_sales_context`
+    - `create_order_v2`
+  - sales-order detail page now uses `get_sales_order_detail`
+  - document query page now uses `get_sales_order_status_summary`
+
+- order and document UX updates
+  - customer defaults and recent addresses are now loaded into the sales-order page
+  - current order draft remains shared between the order page and product search page
+  - order list status display now prefers business-facing labels instead of raw technical status text
+  - sales-order detail item image rendering is aligned with the backend aggregated image field
+
+### Not Completed Yet
+
+- sales order update flow is still not fully v2
+  - the sales-order detail page still uses a legacy direct update path for edit/save
+  - backend currently does not yet provide an order update v2 interface
+
+- legacy helper cleanup is not complete
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/master-data.ts`
+    still contains older sales-order and customer-shipping helpers
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/gateway.ts`
+    still keeps legacy order creation helpers for backward compatibility
+
+- product workbench is only first-phase complete
+  - quick product creation is available
+  - full product edit/detail flows are not yet aligned to new backend contracts
+
+- downstream business pages are still pending
+  - delivery
+  - sales invoice
+  - payment
+  - return
+  - purchase flow pages
+
+### Problems Encountered In This Round
+
+- CSRF/session mismatch on web
+  - session login succeeded, but later POST requests could still fail with `CSRFTokenError`
+  - this required adding persistent CSRF handling and desk bootstrap fallback logic
+
+- mixed old/new data paths
+  - some screens had already moved to gateway aggregation, while others were still using raw `frappe.client.*`
+  - this caused inconsistent field availability, especially for status display and sales-order detail rendering
+
+- gateway response shape confusion
+  - `callGatewayMethod()` already unwraps `message.data`
+  - one document-list path accidentally tried to read `data.data`, which made valid list responses look empty
+
+- image rendering regression after detail-page migration
+  - the old page used to backfill item images through separate `Item` reads
+  - after switching to the aggregated order-detail API, image rendering disappeared until the backend contract was updated to return item image fields
+
+### Current Recommended Next Steps
+
+1. add a sales-order update v2 backend interface and migrate the detail-page save flow to it
+2. remove or explicitly mark legacy sales helpers in `master-data.ts` and old gateway wrappers
+3. continue aligning delivery/invoice/payment pages to the sales v2 contract
+4. finish product detail/edit paths on top of the new product service split
+
 ## First Phase Pages
 
 - Login

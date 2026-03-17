@@ -7,7 +7,9 @@ import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
+import { normalizeText, requireText, toOptionalText } from '@/lib/form-utils';
 import {
   getSalesOrderDraft,
   removeSalesOrderDraftItem,
@@ -17,14 +19,13 @@ import {
   type SalesOrderDraftItem,
 } from '@/lib/sales-order-draft';
 import { useAuth } from '@/providers/auth-provider';
-import { createSalesOrder } from '@/services/gateway';
+import { useFeedback } from '@/providers/feedback-provider';
+import { fetchCustomerSalesContext, customerExists, searchCustomers } from '@/services/customers';
 import {
-  checkLinkOptionExists,
-  getCustomerShippingDetails,
   getProductDetail,
-  searchLinkOptions,
   type LinkOption,
 } from '@/services/master-data';
+import { companyExists, searchCompanies, submitSalesOrderV2 } from '@/services/sales';
 
 const MONEY = new Intl.NumberFormat('zh-CN', {
   minimumFractionDigits: 2,
@@ -261,6 +262,7 @@ export default function SalesOrderCreateScreen() {
   const router = useRouter();
   const preferences = getAppPreferences();
   const { profile } = useAuth();
+  const { showError, showSuccess } = useFeedback();
   const isFocused = useIsFocused();
 
   const [customer, setCustomer] = useState('');
@@ -269,6 +271,8 @@ export default function SalesOrderCreateScreen() {
   const [shippingAddress, setShippingAddress] = useState('');
   const [shippingContact, setShippingContact] = useState('');
   const [shippingPhone, setShippingPhone] = useState('');
+  const [recentAddresses, setRecentAddresses] = useState<{ name: string | null; addressDisplay: string | null }[]>([]);
+  const [customerContextNote, setCustomerContextNote] = useState('');
   const [isLoadingShippingInfo, setIsLoadingShippingInfo] = useState(false);
   const [draftItems, setDraftItems] = useState(getSalesOrderDraft());
   const [message, setMessage] = useState('');
@@ -339,12 +343,14 @@ export default function SalesOrderCreateScreen() {
 
 
   useEffect(() => {
-    const trimmedCustomer = customer.trim();
+    const trimmedCustomer = normalizeText(customer);
 
     if (!trimmedCustomer) {
       setShippingAddress('');
       setShippingContact('');
       setShippingPhone('');
+      setRecentAddresses([]);
+      setCustomerContextNote('');
       setIsLoadingShippingInfo(false);
       return;
     }
@@ -352,15 +358,27 @@ export default function SalesOrderCreateScreen() {
     let active = true;
     setIsLoadingShippingInfo(true);
 
-    void getCustomerShippingDetails(trimmedCustomer)
+    void fetchCustomerSalesContext(trimmedCustomer)
       .then((details) => {
         if (!active) {
           return;
         }
 
-        setShippingAddress(details.shippingAddress);
-        setShippingContact(details.contactPerson);
-        setShippingPhone(details.contactPhone);
+        setShippingAddress(
+          details.defaultAddress?.addressDisplay || details.recentAddresses[0]?.addressDisplay || '',
+        );
+        setShippingContact(details.defaultContact?.displayName || '');
+        setShippingPhone(details.defaultContact?.phone || '');
+        setRecentAddresses(details.recentAddresses);
+        setCustomerContextNote(
+          details.defaultContact?.displayName
+            ? `默认联系人：${details.defaultContact.displayName}${details.defaultContact.phone ? ` / ${details.defaultContact.phone}` : ''}`
+            : '已载入客户销售上下文，可按本单需要临时调整收货信息。',
+        );
+
+        if (!normalizeText(company) && details.suggestions.company) {
+          setCompany(details.suggestions.company);
+        }
       })
       .finally(() => {
         if (active) {
@@ -371,7 +389,7 @@ export default function SalesOrderCreateScreen() {
     return () => {
       active = false;
     };
-  }, [customer]);
+  }, [company, customer]);
 
   const clearPendingRemovedItem = () => {
     if (removeUndoTimerRef.current) {
@@ -414,8 +432,8 @@ export default function SalesOrderCreateScreen() {
   const receivableAmount = goodsAmount - discountAmount + freightAmount;
   const paidNowAmount = 0;
 
-  const loadCustomers = (query: string) => searchLinkOptions('Customer', query);
-  const loadCompanies = (query: string) => searchLinkOptions('Company', query);
+  const loadCustomers = (query: string) => searchCustomers(query);
+  const loadCompanies = (query: string) => searchCompanies(query);
 
   const validateLinks = async () => {
     let valid = true;
@@ -423,13 +441,16 @@ export default function SalesOrderCreateScreen() {
     setCustomerError('');
     setCompanyError('');
 
-    if (!customer.trim()) {
-      setCustomerError('请先选择客户。');
+    const customerRequiredError = requireText(customer, '请先选择客户。');
+    const companyRequiredError = requireText(company, '请先选择公司。');
+
+    if (customerRequiredError) {
+      setCustomerError(customerRequiredError);
       valid = false;
     }
 
-    if (!company.trim()) {
-      setCompanyError('请先选择公司。');
+    if (companyRequiredError) {
+      setCompanyError(companyRequiredError);
       valid = false;
     }
 
@@ -443,8 +464,8 @@ export default function SalesOrderCreateScreen() {
     }
 
     const [customerOk, companyOk] = await Promise.all([
-      checkLinkOptionExists('Customer', customer),
-      checkLinkOptionExists('Company', company),
+      customerExists(customer),
+      companyExists(company),
     ]);
 
     if (!customerOk) {
@@ -489,11 +510,20 @@ export default function SalesOrderCreateScreen() {
     setIsSubmitting(true);
 
     try {
-      await createSalesOrder({
+      await submitSalesOrderV2({
         customer,
         company,
         transaction_date: postingDate,
-        remarks: remarks.trim() || undefined,
+        remarks: toOptionalText(remarks),
+        customer_info: {
+          contact_display_name: toOptionalText(shippingContact),
+          contact_phone: toOptionalText(shippingPhone),
+        },
+        shipping_info: {
+          receiver_name: toOptionalText(shippingContact),
+          receiver_phone: toOptionalText(shippingPhone),
+          shipping_address_text: toOptionalText(shippingAddress),
+        },
         items: draftItems.map((item) => ({
           item_code: item.itemCode,
           qty: item.qty,
@@ -504,12 +534,15 @@ export default function SalesOrderCreateScreen() {
       });
 
       syncDraft();
-      setStatusMessage('销售单已创建。', 'success');
+      setStatusMessage('销售单已按 v2 接口创建。', 'success');
+      showSuccess('销售单已创建。');
     } catch (error) {
+      const appError = normalizeAppError(error, '提交失败，请稍后重试。');
       setStatusMessage(
-        error instanceof Error ? error.message : '提交失败，请稍后重试。',
+        appError.message,
         'error',
       );
+      showError(appError.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -786,11 +819,31 @@ export default function SalesOrderCreateScreen() {
                 />
               </View>
 
+              {recentAddresses.length ? (
+                <View style={styles.recentAddressBlock}>
+                  <ThemedText style={styles.shippingFieldLabel} type="defaultSemiBold">
+                    {'最近使用地址'}
+                  </ThemedText>
+                  <View style={styles.recentAddressList}>
+                    {recentAddresses.map((address, index) => (
+                      <Pressable
+                        key={`${address.name ?? 'text'}-${index}`}
+                        onPress={() => setShippingAddress(address.addressDisplay || '')}
+                        style={[styles.recentAddressChip, { backgroundColor: accentSoft, borderColor }]}>
+                        <ThemedText numberOfLines={2} style={styles.recentAddressText}>
+                          {address.addressDisplay || '未命名地址'}
+                        </ThemedText>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
               <View style={[styles.infoNotice, { backgroundColor: surfaceMuted }]}>
                 <ThemedText style={styles.infoNoticeText}>
                   {isLoadingShippingInfo
                     ? '\u6b63\u5728\u8bfb\u53d6\u5ba2\u6237\u9ed8\u8ba4\u6536\u8d27\u4fe1\u606f...'
-                    : '\u6536\u8d27\u4fe1\u606f\u9ed8\u8ba4\u4ece\u5ba2\u6237\u8d44\u6599\u5e26\u51fa\uff0c\u4f60\u53ef\u4ee5\u6309\u672c\u6b21\u8ba2\u5355\u9700\u8981\u4e34\u65f6\u4fee\u6539\uff0c\u4e0d\u4f1a\u56de\u5199\u5ba2\u6237\u6863\u6848\u3002'}
+                    : customerContextNote || '\u6536\u8d27\u4fe1\u606f\u9ed8\u8ba4\u4ece\u5ba2\u6237\u8d44\u6599\u5e26\u51fa\uff0c\u4f60\u53ef\u4ee5\u6309\u672c\u6b21\u8ba2\u5355\u9700\u8981\u4e34\u65f6\u4fee\u6539\uff0c\u4e0d\u4f1a\u56de\u5199\u5ba2\u6237\u6863\u6848\u3002'}
                 </ThemedText>
               </View>
             </View>
@@ -1270,6 +1323,23 @@ const styles = StyleSheet.create({
     minHeight: 92,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  recentAddressBlock: {
+    gap: 8,
+  },
+  recentAddressList: {
+    gap: 8,
+  },
+  recentAddressChip: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  recentAddressText: {
+    color: '#425466',
+    fontSize: 13,
+    lineHeight: 18,
   },
   infoNotice: {
     borderRadius: 14,

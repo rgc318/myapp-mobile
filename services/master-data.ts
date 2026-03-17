@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/lib/config';
+import { callFrappeMethod } from '@/lib/api-client';
 
 export type LinkOption = {
   label: string;
@@ -7,7 +7,6 @@ export type LinkOption = {
 };
 
 export async function searchLinkOptions(doctype: string, query: string, extraFields: string[] = []) {
-  const apiBaseUrl = getApiBaseUrl();
   const trimmedQuery = query.trim();
   const fields = ['name', ...extraFields];
 
@@ -16,26 +15,19 @@ export async function searchLinkOptions(doctype: string, query: string, extraFie
     : [];
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
+    const message = await callFrappeMethod<Record<string, unknown>[]>(
+      'frappe.client.get_list',
+      {
         doctype,
         fields,
         filters,
         limit_page_length: 8,
         order_by: 'modified desc',
-      }),
-    });
+      },
+    );
+    const rows = Array.isArray(message) ? message : [];
 
-    const payload = await response.json().catch(() => ({}));
-    const message = Array.isArray(payload?.message) ? payload.message : [];
-
-    return message
+    return rows
       .map((row: Record<string, unknown>) => {
         const value = typeof row.name === 'string' ? row.name : '';
         if (!value) {
@@ -57,7 +49,6 @@ export async function searchLinkOptions(doctype: string, query: string, extraFie
 }
 
 export async function checkLinkOptionExists(doctype: string, value: string) {
-  const apiBaseUrl = getApiBaseUrl();
   const trimmedValue = value.trim();
 
   if (!trimmedValue) {
@@ -65,22 +56,15 @@ export async function checkLinkOptionExists(doctype: string, value: string) {
   }
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/method/frappe.client.get_value`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
+    const message = await callFrappeMethod<Record<string, unknown>>(
+      'frappe.client.get_value',
+      {
         doctype,
         filters: { name: trimmedValue },
         fieldname: ['name'],
-      }),
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    return response.ok && typeof payload?.message?.name === 'string' && payload.message.name === trimmedValue;
+      },
+    );
+    return typeof message?.name === 'string' && message.name === trimmedValue;
   } catch {
     return false;
   }
@@ -93,18 +77,7 @@ export type CustomerShippingDetails = {
 };
 
 async function postFrappe(method: string, payload: Record<string, unknown>) {
-  const apiBaseUrl = getApiBaseUrl();
-  const response = await fetch(`${apiBaseUrl}/api/method/${method}`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  });
-
-  return response.json().catch(() => ({}));
+  return callFrappeMethod(method, payload);
 }
 
 async function getDocFields(doctype: string, name: string, fields: string[]) {
@@ -321,7 +294,6 @@ export type SalesOrderDetail = SalesOrderListItem & {
 };
 
 export async function listSalesOrders(query: string): Promise<SalesOrderListItem[]> {
-  const apiBaseUrl = getApiBaseUrl();
   const trimmedQuery = query.trim();
 
   const requestBody = (filters: unknown[]) => ({
@@ -334,37 +306,23 @@ export async function listSalesOrders(query: string): Promise<SalesOrderListItem
 
   try {
     const responses = await Promise.all([
-      fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(requestBody(trimmedQuery ? [['name', 'like', `%${trimmedQuery}%`]] : [])),
-      }),
+      callFrappeMethod<Record<string, unknown>[]>(
+        'frappe.client.get_list',
+        requestBody(trimmedQuery ? [['name', 'like', `%${trimmedQuery}%`]] : []),
+      ),
       trimmedQuery
-        ? fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
-            method: 'POST',
-            headers: {
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify(requestBody([['customer', 'like', `%${trimmedQuery}%`]])),
-          })
-        : Promise.resolve(null),
+        ? callFrappeMethod<Record<string, unknown>[]>(
+            'frappe.client.get_list',
+            requestBody([['customer', 'like', `%${trimmedQuery}%`]]),
+          )
+        : Promise.resolve([] as Record<string, unknown>[]),
     ]);
-
-    const payloads = await Promise.all(
-      responses.map((response) => response?.json().catch(() => ({})) ?? Promise.resolve({})),
-    );
 
     const rowMap = new Map<string, SalesOrderListItem>();
 
-    payloads.forEach((payload) => {
-      const rows = Array.isArray(payload?.message) ? payload.message : [];
-      rows.forEach((row: Record<string, unknown>) => {
+    responses.forEach((rows) => {
+      const normalizedRows = Array.isArray(rows) ? rows : [];
+      normalizedRows.forEach((row: Record<string, unknown>) => {
         const name = typeof row.name === 'string' ? row.name : '';
         if (!name) {
           return;
@@ -530,7 +488,6 @@ export type SalesInvoiceListItem = {
 };
 
 export async function listSalesInvoices(query: string): Promise<SalesInvoiceListItem[]> {
-  const apiBaseUrl = getApiBaseUrl();
   const trimmedQuery = query.trim();
 
   const requestBody = (filters: unknown[]) => ({
@@ -543,37 +500,23 @@ export async function listSalesInvoices(query: string): Promise<SalesInvoiceList
 
   try {
     const responses = await Promise.all([
-      fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(requestBody(trimmedQuery ? [['name', 'like', `%${trimmedQuery}%`]] : [])),
-      }),
+      callFrappeMethod<Record<string, unknown>[]>(
+        'frappe.client.get_list',
+        requestBody(trimmedQuery ? [['name', 'like', `%${trimmedQuery}%`]] : []),
+      ),
       trimmedQuery
-        ? fetch(`${apiBaseUrl}/api/method/frappe.client.get_list`, {
-            method: 'POST',
-            headers: {
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify(requestBody([['customer', 'like', `%${trimmedQuery}%`]])),
-          })
-        : Promise.resolve(null),
+        ? callFrappeMethod<Record<string, unknown>[]>(
+            'frappe.client.get_list',
+            requestBody([['customer', 'like', `%${trimmedQuery}%`]]),
+          )
+        : Promise.resolve([] as Record<string, unknown>[]),
     ]);
-
-    const payloads = await Promise.all(
-      responses.map((response) => response?.json().catch(() => ({})) ?? Promise.resolve({})),
-    );
 
     const rowMap = new Map<string, SalesInvoiceListItem>();
 
-    payloads.forEach((payload) => {
-      const rows = Array.isArray(payload?.message) ? payload.message : [];
-      rows.forEach((row: Record<string, unknown>) => {
+    responses.forEach((rows) => {
+      const normalizedRows = Array.isArray(rows) ? rows : [];
+      normalizedRows.forEach((row: Record<string, unknown>) => {
         const name = typeof row.name === 'string' ? row.name : '';
         if (!name) {
           return;
