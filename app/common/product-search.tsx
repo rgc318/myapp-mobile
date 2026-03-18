@@ -132,7 +132,11 @@ function ResultRow({
 
 export default function ProductSearchScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ query?: string }>();
+  const params = useLocalSearchParams<{
+    query?: string;
+    draftScope?: string;
+    returnOrderName?: string;
+  }>();
   const preferences = getAppPreferences();
   const { showError, showSuccess } = useFeedback();
   const [query, setQuery] = useState('');
@@ -144,7 +148,9 @@ export default function ProductSearchScreen() {
   const [newItemDescription, setNewItemDescription] = useState('');
   const mode = params.mode === 'order' ? 'order' : 'lookup';
   const isOrderMode = mode === 'order';
-  const [draftItems, setDraftItems] = useState(() => getSalesOrderDraft());
+  const draftScope = typeof params.draftScope === 'string' ? params.draftScope : undefined;
+  const returnOrderName = typeof params.returnOrderName === 'string' ? params.returnOrderName : '';
+  const [draftItems, setDraftItems] = useState(() => getSalesOrderDraft(draftScope));
   const [isLoading, setIsLoading] = useState(false);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const surface = useThemeColor({}, 'surface');
@@ -191,12 +197,12 @@ export default function ProductSearchScreen() {
   };
 
   const syncDraftState = () => {
-    setDraftItems([...getSalesOrderDraft()]);
+    setDraftItems([...getSalesOrderDraft(draftScope)]);
   };
 
   const handleAdd = (item: ProductSearchItem) => {
-    addItemToSalesOrderDraft(item);
-    const nextDraft = getSalesOrderDraft();
+    addItemToSalesOrderDraft(item, draftScope);
+    const nextDraft = getSalesOrderDraft(draftScope);
     const nextQty = getDraftItem(item, nextDraft)?.qty ?? 0;
     setDraftItems([...nextDraft]);
     setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u52a0\u5165\u8ba2\u5355\uff0c\u5f53\u524d\u5df2\u9009 ${nextQty} \u4ef6\u3002`);
@@ -266,27 +272,27 @@ export default function ProductSearchScreen() {
   };
 
   const handleDecrease = (item: ProductSearchItem) => {
-    const draftItem = getDraftItem(item, getSalesOrderDraft());
+    const draftItem = getDraftItem(item, getSalesOrderDraft(draftScope));
     if (!draftItem) {
       return;
     }
 
     if (draftItem.qty <= 1) {
-      removeSalesOrderDraftItem(draftItem.draftKey);
+      removeSalesOrderDraftItem(draftItem.draftKey, draftScope);
       syncDraftState();
       setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u4ece\u8ba2\u5355\u4e2d\u79fb\u9664\u3002`);
       return;
     }
 
-    updateSalesOrderDraftQty(draftItem.draftKey, draftItem.qty - 1);
-    const nextDraft = getSalesOrderDraft();
+    updateSalesOrderDraftQty(draftItem.draftKey, draftItem.qty - 1, draftScope);
+    const nextDraft = getSalesOrderDraft(draftScope);
     const nextQty = getDraftItem(item, nextDraft)?.qty ?? 0;
     setDraftItems([...nextDraft]);
     setMessage(`\u5df2\u8c03\u6574 ${item.itemName || item.itemCode} \u6570\u91cf\uff0c\u5f53\u524d\u4e3a ${nextQty} \u4ef6\u3002`);
   };
 
   useEffect(() => {
-    setDraftItems(getSalesOrderDraft());
+    setDraftItems(getSalesOrderDraft(draftScope));
     const initialQuery = typeof params.query === 'string' ? params.query.trim() : '';
     if (!initialQuery) {
       return;
@@ -295,7 +301,24 @@ export default function ProductSearchScreen() {
     setQuery(initialQuery);
     void handleSearch(initialQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.query]);
+  }, [draftScope, params.query]);
+
+  const handleReturnToOrder = () => {
+    if (isOrderMode) {
+      router.back();
+      return;
+    }
+
+    if (returnOrderName) {
+      router.push({
+        pathname: '/sales/order/[orderName]',
+        params: { orderName: returnOrderName },
+      });
+      return;
+    }
+
+    router.push('/sales/order/create');
+  };
 
   return (
     <AppShell
@@ -335,7 +358,7 @@ export default function ProductSearchScreen() {
             {message || '\u8f93\u5165\u5173\u952e\u8bcd\u540e\u5373\u53ef\u641c\u7d22\u5546\u54c1\uff0c\u627e\u5230\u540e\u53ef\u76f4\u63a5\u52a0\u51cf\u5546\u54c1\u6570\u91cf\u3002'}
           </ThemedText>
         </View>
-        <Pressable onPress={() => router.push('/sales/order/create')} style={[styles.returnButton, { backgroundColor: tintColor }]}>
+        <Pressable onPress={handleReturnToOrder} style={[styles.returnButton, { backgroundColor: tintColor }]}>
           <ThemedText style={styles.returnButtonText} type="defaultSemiBold">
             {'\u8fd4\u56de\u8ba2\u5355\u9875'}
           </ThemedText>

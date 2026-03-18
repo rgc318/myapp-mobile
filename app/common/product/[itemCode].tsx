@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatDisplayUom } from '@/lib/display-uom';
-import { getProductDetail, updateProductBasicInfo, type ProductDetail } from '@/services/master-data';
+import { fetchProductDetail, saveProductBasicInfo, type ProductDetail } from '@/services/products';
 
 function formatPrice(value: string) {
   return value.trim() ? `\u00A5 ${value}` : '\u2014';
@@ -40,6 +40,7 @@ export default function ProductDetailScreen() {
   const [message, setMessage] = useState('');
   const [draftName, setDraftName] = useState(initialName);
   const [draftDescription, setDraftDescription] = useState('');
+  const [draftNickname, setDraftNickname] = useState('');
 
   const background = useThemeColor({}, 'background');
   const surface = useThemeColor({}, 'surface');
@@ -55,7 +56,7 @@ export default function ProductDetailScreen() {
     let active = true;
     setIsLoading(true);
 
-    void getProductDetail(itemCode)
+    void fetchProductDetail(itemCode)
       .then((nextDetail) => {
         if (!active || !nextDetail) {
           return;
@@ -64,6 +65,7 @@ export default function ProductDetailScreen() {
         setDetail(nextDetail);
         setDraftName(nextDetail.itemName || itemCode);
         setDraftDescription(nextDetail.description || '');
+        setDraftNickname(nextDetail.nickname || '');
       })
       .finally(() => {
         if (active) {
@@ -83,13 +85,18 @@ export default function ProductDetailScreen() {
 
     try {
       setIsSaving(true);
-      const nextDetail = await updateProductBasicInfo({
+      const nextDetail = await saveProductBasicInfo({
         itemCode,
         itemName: draftName,
         description: draftDescription,
+        nickname: draftNickname,
+        imageUrl: detail?.imageUrl || initialImageUrl,
+        standardRate: detail?.price ?? null,
+        warehouse: detail?.warehouse || initialWarehouse,
       });
       if (nextDetail) {
         setDetail(nextDetail);
+        setDraftNickname(nextDetail.nickname || '');
       }
       setMessage('\u5546\u54c1\u57fa\u7840\u4fe1\u606f\u5df2\u66f4\u65b0');
       setIsEditing(false);
@@ -105,6 +112,7 @@ export default function ProductDetailScreen() {
   const displayUom = formatDisplayUom(detail?.stockUom || initialUom);
   const displayGroup = detail?.itemGroup || '\u672a\u5206\u7c7b';
   const displayDescription = detail?.description || draftDescription || '\u6682\u65e0\u5907\u6ce8';
+  const displayNickname = detail?.nickname || draftNickname || '\u6682\u65e0\u6635\u79f0';
   const disabledText = detail?.disabled ? '\u5df2\u7981\u7528' : '\u542f\u7528\u4e2d';
 
   return (
@@ -133,6 +141,7 @@ export default function ProductDetailScreen() {
 
           <View style={styles.heroCopy}>
             <ThemedText style={styles.heroTitle} type="title">{displayName}</ThemedText>
+            <ThemedText style={styles.heroMeta}>{'\u5546\u54c1\u6635\u79f0\uff1a'} {displayNickname}</ThemedText>
             <ThemedText style={styles.heroMeta}>{'\u7f16\u7801 / \u8d27\u53f7\uff1a'} {itemCode || '\u2014'}</ThemedText>
             <ThemedText style={styles.heroMeta}>{'\u5546\u54c1\u7c7b\u522b\uff1a'} {displayGroup}</ThemedText>
             <ThemedText style={styles.heroMeta}>{'\u5355\u4f4d\uff1a'} {displayUom}</ThemedText>
@@ -142,9 +151,9 @@ export default function ProductDetailScreen() {
 
         <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}> 
           <ThemedText style={styles.sectionTitle} type="defaultSemiBold">{'\u4ef7\u683c\u4e0e\u5e93\u5b58'}</ThemedText>
-          <View style={styles.infoRow}><ThemedText>{'\u5f53\u524d\u4ed3\u5e93'}</ThemedText><ThemedText type="defaultSemiBold">{initialWarehouse || '\u672a\u6307\u5b9a\u4ed3\u5e93'}</ThemedText></View>
-          <View style={styles.infoRow}><ThemedText>{'\u5f53\u524d\u5e93\u5b58'}</ThemedText><ThemedText type="defaultSemiBold">{initialStock || '\u2014'}</ThemedText></View>
-          <View style={styles.infoRow}><ThemedText>{'\u53c2\u8003\u4ef7\u683c'}</ThemedText><ThemedText type="defaultSemiBold">{formatPrice(initialPrice)}</ThemedText></View>
+          <View style={styles.infoRow}><ThemedText>{'\u5f53\u524d\u4ed3\u5e93'}</ThemedText><ThemedText type="defaultSemiBold">{detail?.warehouse || initialWarehouse || '\u672a\u6307\u5b9a\u4ed3\u5e93'}</ThemedText></View>
+          <View style={styles.infoRow}><ThemedText>{'\u5f53\u524d\u5e93\u5b58'}</ThemedText><ThemedText type="defaultSemiBold">{detail?.stockQty != null ? String(detail.stockQty) : initialStock || '\u2014'}</ThemedText></View>
+          <View style={styles.infoRow}><ThemedText>{'\u53c2\u8003\u4ef7\u683c'}</ThemedText><ThemedText type="defaultSemiBold">{formatPrice(String(detail?.price ?? initialPrice ?? ''))}</ThemedText></View>
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}> 
@@ -163,6 +172,17 @@ export default function ProductDetailScreen() {
                   placeholderTextColor="#9CA3AF"
                   style={[styles.textInput, { backgroundColor: surfaceMuted, borderColor }]}
                   value={draftName}
+                />
+              </View>
+
+              <View style={styles.fieldBlock}>
+                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">{'\u5546\u54c1\u6635\u79f0'}</ThemedText>
+                <TextInput
+                  onChangeText={setDraftNickname}
+                  placeholder={'\u8f93\u5165\u5546\u54c1\u6635\u79f0'}
+                  placeholderTextColor="#9CA3AF"
+                  style={[styles.textInput, { backgroundColor: surfaceMuted, borderColor }]}
+                  value={draftNickname}
                 />
               </View>
 
@@ -189,6 +209,7 @@ export default function ProductDetailScreen() {
           ) : (
             <View style={styles.formBlock}>
               <View style={styles.infoRow}><ThemedText>{'\u5546\u54c1\u540d\u79f0'}</ThemedText><ThemedText type="defaultSemiBold">{displayName}</ThemedText></View>
+              <View style={styles.infoRow}><ThemedText>{'\u5546\u54c1\u6635\u79f0'}</ThemedText><ThemedText type="defaultSemiBold">{displayNickname}</ThemedText></View>
               <View style={styles.descriptionBlock}>
                 <ThemedText style={styles.fieldLabel} type="defaultSemiBold">{'\u8be6\u7ec6\u63cf\u8ff0'}</ThemedText>
                 <ThemedText style={styles.descriptionText}>{displayDescription}</ThemedText>

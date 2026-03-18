@@ -14,8 +14,9 @@ export type SalesOrderDraftItem = {
 };
 
 const STORAGE_KEY = 'myapp-mobile.sales-order-draft';
+const DEFAULT_SCOPE = 'default';
 
-let memoryDraft: SalesOrderDraftItem[] = [];
+let memoryDraftByScope: Record<string, SalesOrderDraftItem[]> = {};
 
 function buildDraftKey(item: {
   itemCode: string;
@@ -46,38 +47,57 @@ function canUseWebStorage() {
   return Platform.OS === 'web' && typeof window !== 'undefined' && !!window.localStorage;
 }
 
-export function getSalesOrderDraft() {
-  if (memoryDraft.length) {
-    return memoryDraft;
+function getStorageKey(scope: string) {
+  return `${STORAGE_KEY}.${scope || DEFAULT_SCOPE}`;
+}
+
+function getScope(scope?: string) {
+  return scope?.trim() || DEFAULT_SCOPE;
+}
+
+export function getSalesOrderDraft(scope?: string) {
+  const normalizedScope = getScope(scope);
+
+  if (memoryDraftByScope[normalizedScope]?.length) {
+    return memoryDraftByScope[normalizedScope];
   }
 
   if (canUseWebStorage()) {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const raw = window.localStorage.getItem(getStorageKey(normalizedScope));
       if (raw) {
         const parsed = JSON.parse(raw);
-        memoryDraft = Array.isArray(parsed)
+        memoryDraftByScope[normalizedScope] = Array.isArray(parsed)
           ? parsed.map((item) => normalizeDraftItem(item)).filter((item) => item.itemCode)
           : [];
+      } else {
+        memoryDraftByScope[normalizedScope] = [];
       }
     } catch {
-      memoryDraft = [];
+      memoryDraftByScope[normalizedScope] = [];
     }
   }
 
-  return memoryDraft;
+  return memoryDraftByScope[normalizedScope] ?? [];
 }
 
-function persistDraft(nextDraft: SalesOrderDraftItem[]) {
-  memoryDraft = nextDraft;
+function persistDraft(nextDraft: SalesOrderDraftItem[], scope?: string) {
+  const normalizedScope = getScope(scope);
+  memoryDraftByScope[normalizedScope] = nextDraft;
 
   if (canUseWebStorage()) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDraft));
+    window.localStorage.setItem(getStorageKey(normalizedScope), JSON.stringify(nextDraft));
   }
 }
 
-export function addItemToSalesOrderDraft(item: ProductSearchItem) {
-  const current = [...getSalesOrderDraft()];
+export function replaceSalesOrderDraft(items: Partial<SalesOrderDraftItem>[], scope?: string) {
+  const normalizedItems = items.map((item) => normalizeDraftItem(item)).filter((item) => item.itemCode);
+  persistDraft(normalizedItems, scope);
+  return normalizedItems;
+}
+
+export function addItemToSalesOrderDraft(item: ProductSearchItem, scope?: string) {
+  const current = [...getSalesOrderDraft(scope)];
   const draftKey = buildDraftKey({
     itemCode: item.itemCode,
     warehouse: item.warehouse,
@@ -90,7 +110,7 @@ export function addItemToSalesOrderDraft(item: ProductSearchItem) {
     if (!existing.imageUrl && item.imageUrl) {
       existing.imageUrl = item.imageUrl;
     }
-    persistDraft(current);
+    persistDraft(current, scope);
     return current;
   }
 
@@ -104,12 +124,12 @@ export function addItemToSalesOrderDraft(item: ProductSearchItem) {
     uom: item.uom,
     warehouse: item.warehouse,
   });
-  persistDraft(current);
+  persistDraft(current, scope);
   return current;
 }
 
-export function restoreSalesOrderDraftItem(item: SalesOrderDraftItem) {
-  const current = [...getSalesOrderDraft()];
+export function restoreSalesOrderDraftItem(item: SalesOrderDraftItem, scope?: string) {
+  const current = [...getSalesOrderDraft(scope)];
   const normalized = normalizeDraftItem(item);
   const existingIndex = current.findIndex((entry) => entry.draftKey === normalized.draftKey);
 
@@ -119,15 +139,15 @@ export function restoreSalesOrderDraftItem(item: SalesOrderDraftItem) {
     current.push(normalized);
   }
 
-  persistDraft(current);
+  persistDraft(current, scope);
   return current;
 }
 
-export function updateSalesOrderDraftQty(draftKey: string, qty: number) {
-  const current = getSalesOrderDraft()
+export function updateSalesOrderDraftQty(draftKey: string, qty: number, scope?: string) {
+  const current = getSalesOrderDraft(scope)
     .map((item) => (item.draftKey === draftKey ? { ...item, qty } : item))
     .filter((item) => item.qty > 0);
-  persistDraft(current);
+  persistDraft(current, scope);
   return current;
 }
 
@@ -135,8 +155,9 @@ export function updateSalesOrderDraftField(
   draftKey: string,
   field: 'price' | 'warehouse',
   value: number | string | null,
+  scope?: string,
 ) {
-  const current = getSalesOrderDraft().map((item) => {
+  const current = getSalesOrderDraft(scope).map((item) => {
     if (item.draftKey !== draftKey) {
       return item;
     }
@@ -147,16 +168,16 @@ export function updateSalesOrderDraftField(
 
     return { ...item, warehouse: typeof value === 'string' ? value : null };
   });
-  persistDraft(current);
+  persistDraft(current, scope);
   return current;
 }
 
-export function removeSalesOrderDraftItem(draftKey: string) {
-  const current = getSalesOrderDraft().filter((item) => item.draftKey !== draftKey);
-  persistDraft(current);
+export function removeSalesOrderDraftItem(draftKey: string, scope?: string) {
+  const current = getSalesOrderDraft(scope).filter((item) => item.draftKey !== draftKey);
+  persistDraft(current, scope);
   return current;
 }
 
-export function clearSalesOrderDraft() {
-  persistDraft([]);
+export function clearSalesOrderDraft(scope?: string) {
+  persistDraft([], scope);
 }

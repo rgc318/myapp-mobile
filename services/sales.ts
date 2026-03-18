@@ -30,12 +30,19 @@ export type SalesOrderDetailV2 = {
   grandTotal: number | null;
   status: string;
   docstatus: number;
+  documentStatus: string;
+  fulfillmentStatus: string;
+  paymentStatus: string;
+  completionStatus: string;
   deliveryDate: string;
   remarks: string;
   contactPerson: string;
   contactDisplay: string;
+  contactPhone: string;
   addressDisplay: string;
   customerAddress: string;
+  paidAmount: number | null;
+  outstandingAmount: number | null;
   items: {
     itemCode: string;
     itemName: string;
@@ -62,6 +69,41 @@ export type SalesOrderSummaryItem = {
   completionStatus: string;
   modified: string;
 };
+
+export type UpdateSalesOrderPayload = {
+  orderName: string;
+  deliveryDate?: string;
+  remarks?: string;
+  contactPerson?: string;
+  contactDisplay?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  shippingAddressName?: string;
+  shippingAddressText?: string;
+};
+
+export type UpdateSalesOrderItemsPayload = {
+  orderName: string;
+  items: {
+    itemCode: string;
+    qty: number;
+    price?: number | null;
+    warehouse?: string;
+    uom?: string;
+  }[];
+};
+
+export async function cancelSalesOrderV2(orderName: string) {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.cancel_order_v2', {
+    order_name: orderName,
+  });
+
+  if (data?.detail && typeof data.detail === 'object') {
+    return getSalesOrderDetailV2(String(data.detail.order_name ?? orderName));
+  }
+
+  return getSalesOrderDetailV2(orderName);
+}
 
 export function searchCompanies(query: string) {
   return searchLinkOptions('Company', query);
@@ -115,16 +157,23 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
           : null,
     status,
     docstatus: data.document_status === 'submitted' ? 1 : 0,
+    documentStatus: String(data.document_status ?? ''),
+    fulfillmentStatus: String(fulfillment.status ?? ''),
+    paymentStatus: String(payment.status ?? ''),
+    completionStatus: String(data.completion?.status ?? ''),
     deliveryDate: String(meta.delivery_date ?? ''),
     remarks: String(meta.remarks ?? ''),
     contactPerson: String(shipping.contact_person ?? customer.contact_person ?? ''),
     contactDisplay: String(
       shipping.contact_display ?? customer.contact_display_name ?? '',
     ),
+    contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
     addressDisplay: String(
       shipping.shipping_address_text ?? customer.shipping_address_text ?? '',
     ),
     customerAddress: String(shipping.shipping_address_name ?? customer.shipping_address_name ?? ''),
+    paidAmount: toOptionalNumber(data.amounts?.paid_amount),
+    outstandingAmount: toOptionalNumber(data.amounts?.outstanding_amount),
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),
@@ -142,6 +191,52 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
       uom: String(item.uom ?? ''),
       imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
     })),
+  };
+}
+
+export async function updateSalesOrderV2(
+  payload: UpdateSalesOrderPayload,
+): Promise<SalesOrderDetailV2 | null> {
+  await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.update_order_v2', {
+    order_name: payload.orderName,
+    delivery_date: payload.deliveryDate,
+    remarks: payload.remarks,
+    customer_info: {
+      contact_person: payload.contactPerson,
+      contact_display_name: payload.contactDisplay,
+      contact_phone: payload.contactPhone,
+      contact_email: payload.contactEmail,
+    },
+    shipping_info: {
+      shipping_address_name: payload.shippingAddressName,
+      shipping_address_text: payload.shippingAddressText,
+      receiver_name: payload.contactDisplay,
+      receiver_phone: payload.contactPhone,
+    },
+  });
+
+  return getSalesOrderDetailV2(payload.orderName);
+}
+
+export async function updateSalesOrderItemsV2(payload: UpdateSalesOrderItemsPayload) {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.update_order_items_v2', {
+    order_name: payload.orderName,
+    items: payload.items.map((item) => ({
+      item_code: item.itemCode,
+      qty: item.qty,
+      price: item.price,
+      warehouse: item.warehouse,
+      uom: item.uom,
+    })),
+  });
+
+  const nextOrderName = String(data?.order ?? payload.orderName);
+  const detail = await getSalesOrderDetailV2(nextOrderName);
+
+  return {
+    orderName: nextOrderName,
+    sourceOrderName: typeof data?.source_order === 'string' ? data.source_order : payload.orderName,
+    detail,
   };
 }
 

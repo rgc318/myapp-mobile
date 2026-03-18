@@ -174,6 +174,90 @@ This round focused on aligning the mobile frontend with the completed sales v2 b
 3. continue aligning delivery/invoice/payment pages to the sales v2 contract
 4. finish product detail/edit paths on top of the new product service split
 
+## Frontend Alignment Summary (2026-03-18)
+
+This round completed the main frontend migration for product detail and sales-order detail editing on top of the new backend v2 interfaces.
+
+### Completed
+
+- product detail page now uses product v2 interfaces
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+  - reads:
+    - `get_product_detail_v2`
+  - writes:
+    - `update_product_v2`
+  - formal product nickname is now treated as first-class data instead of only relying on description fallback
+
+- sales-order detail page now uses the v2 edit/cancel flow
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+  - saves order header through:
+    - `update_order_v2`
+  - saves item changes through:
+    - `update_order_items_v2`
+  - cancels order through:
+    - `cancel_order_v2`
+  - page structure was rebuilt around:
+    - order overview
+    - delivery/contact snapshot
+    - item list
+    - settlement
+    - order remark
+
+- product selection in order-detail edit mode now follows the same mental model as create-order
+  - product search is no longer rendered inline inside the order detail page
+  - order detail now jumps to the dedicated product search page:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+  - this keeps create-order and edit-order on the same interaction pattern
+
+- scoped draft support was added for order-item editing
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/sales-order-draft.ts`
+  - draft storage now supports an optional scope key
+  - create-order continues to use the default scope
+  - order-detail edit uses a dedicated scope such as:
+    - `order-edit:<orderName>`
+  - this prevents order-detail edits from polluting the create-order draft
+
+- mobile default backend URL was updated for the standalone LAN proxy path
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/config.ts`
+  - current mobile default:
+    - `http://192.168.31.63:18081`
+  - web default remains:
+    - `http://localhost:8080`
+
+### Important Interaction Detail
+
+When order-detail edit mode opens the dedicated product-search page, returning from search must use browser/navigation back behavior instead of pushing a fresh order-detail route.
+
+Reason:
+
+- order-detail uses focus-based scoped-draft synchronization
+- if product-search returns with `router.push(...)`, a new detail page instance is created
+- the original editing page does not regain focus in the expected way
+- item additions then appear to be "not synced back"
+
+Current rule:
+
+- order-mode product search returns with:
+  - `router.back()`
+
+This detail is important and should be preserved if order-product search flow is refactored again later.
+
+### Current Known Boundaries
+
+- order-detail item editing is now aligned to the dedicated product-search workflow, but the create-order page and order-detail page still do not share a fully extracted common item-editor component
+- legacy helpers still exist in some older modules even though core detail flows are now on v2
+- delivery / invoice / payment pages still need similar contract cleanup later
+
+### Recommended Next Steps After This Round
+
+1. extract a shared sales-item editor component for create-order and order-detail
+2. continue removing old direct `frappe.client.*` usage from legacy service modules
+3. align downstream sales pages such as delivery and invoice to the same v2 pattern
+
 ## Local Android Build Notes
 
 If the team wants to produce a local Android development APK instead of using Expo Go:
@@ -283,6 +367,208 @@ systemProp.org.gradle.internal.http.socketTimeout=120000
 
 - in mixed Windows + WSL environments, `127.0.0.1` may or may not be correct
 - if Gradle still cannot connect, verify whether the proxy process is actually reachable from WSL
+
+### Expo start modes and what they actually mean
+
+The mobile team should clearly distinguish the following modes:
+
+1. Expo Go mode
+   - generic Expo client
+   - useful for quick preview
+   - not the same as an installed development build
+
+2. development build mode
+   - a project-specific development client installed on the phone
+   - opening the app does not mean a standalone release build is ready
+   - it still needs to connect to the Metro development server
+
+3. local APK / release-style packaging
+   - generated from Gradle
+   - intended to become closer to a standalone installable package
+
+### `expo start` command expectations
+
+- `npm run start` currently maps to `expo start`
+- in this project, `npm run start` and `npx expo start` are equivalent in purpose
+- if the CLI says:
+  - `Using development build`
+  - then the installed mobile app is acting as a development client and still expects a Metro connection
+
+### LAN vs localhost vs tunnel
+
+- `Web is waiting on http://localhost:8081`
+  - this is for the browser on the current machine
+  - it does not mean the phone should use `localhost`
+
+- development build connection strings may include a LAN address such as:
+  - `http://192.168.x.x:8081`
+  - this is the address the phone tries to reach for the Metro server
+
+- if the current machine can open `http://localhost:8081` but cannot open `http://192.168.x.x:8081`
+  - the issue is not business code
+  - the issue is likely WSL / Windows firewall / LAN exposure / network binding
+
+- when LAN is unreliable, `expo start --tunnel` is the preferred fallback
+  - tunnel is especially useful in WSL, firewall-restricted, or mixed proxy environments
+
+### Recommended startup sequence for phone debugging
+
+If using development build:
+
+1. start Metro
+   - `npm run start`
+   - or `npx expo start --tunnel` when LAN does not work
+2. keep the terminal running
+3. open the installed development build app on the phone
+4. connect it to the Metro project from the QR code / generated development URL
+
+Important:
+
+- getting the frontend bundle to open does not automatically mean backend requests will work
+- after the app loads, backend API access still depends on the configured API base URL
+- the mobile app must not use `http://localhost:8080` as the backend address on a real phone
+- for real-device backend testing, the backend target must be reachable from the phone
+
+### ERPNext localhost site limitation in local mobile debugging
+
+Current local ERPNext setup uses a site named `localhost`.
+
+Important implication:
+
+- the built-in Frappe/ERPNext frontend nginx routes requests by `Host` / site header
+- this means:
+  - `Host: localhost` returns the actual ERPNext site
+  - `Host: 127.0.0.1` may return `404`
+  - `Host: 192.168.x.x` may also return `404`
+- therefore, simply exposing `:8080` to LAN is not enough for phone access
+- even when the port is reachable, ERPNext may still reject the request because the request host is no longer `localhost`
+
+This is a site-routing behavior, not only a frontend business-code issue.
+
+### Standalone nginx bridge for mobile/LAN access
+
+To avoid changing the existing ERPNext Docker/frontend setup, a separate nginx container can be used as a bridge.
+
+Current standalone proxy files:
+
+- nginx config:
+  - `/home/rgc318/python-project/frappe_docker/dev/nginx/mobile-proxy.conf`
+- static probe page:
+  - `/home/rgc318/python-project/frappe_docker/dev/nginx/probe.html`
+
+Current standalone proxy responsibilities:
+
+1. expose a simple probe page at `/probe`
+   - used to separate pure network issues from ERPNext/site-routing issues
+2. proxy `/` to local ERPNext `8080`
+3. force the upstream request host to `localhost`
+   - so ERPNext still resolves the request to the existing `localhost` site
+
+Current standalone nginx container launch pattern:
+
+```bash
+docker run -d \
+  --name myapp-mobile-nginx-proxy \
+  --add-host=host.docker.internal:host-gateway \
+  -p 18080:80 \
+  -v /home/rgc318/python-project/frappe_docker/dev/nginx/mobile-proxy.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /home/rgc318/python-project/frappe_docker/dev/nginx/probe.html:/usr/share/nginx/html/probe.html:ro \
+  nginx:stable-alpine
+```
+
+Meaning of the ports:
+
+- `18080`
+  - standalone nginx on the current machine
+  - works as the local bridge to ERPNext
+
+### Why `18080` alone was still not enough on this machine
+
+Observed behavior on the current environment:
+
+- WSL could reach `http://192.168.31.63:18080/probe` when bypassing proxy
+- Windows could reach `http://localhost:18080/probe`
+- Windows could not directly reach `http://192.168.31.63:18080/probe`
+
+This means:
+
+- standalone nginx was working
+- ERPNext host rewriting was working
+- but the Windows/LAN access path to `18080` was still not open enough for other devices
+
+### Windows portproxy bridge for LAN devices
+
+On the current machine, the final workable solution was to keep the standalone nginx on `18080` and add a Windows-side TCP bridge for LAN devices:
+
+```powershell
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=18081 connectaddress=127.0.0.1 connectport=18080
+netsh advfirewall firewall add rule name="myapp-mobile-proxy-18081" dir=in action=allow protocol=TCP localport=18081
+```
+
+Resulting access chain:
+
+1. phone / other LAN device
+   - `http://192.168.31.63:18081`
+2. Windows `portproxy`
+   - forwards to `127.0.0.1:18080`
+3. standalone nginx
+   - rewrites upstream `Host` to `localhost`
+4. ERPNext local frontend
+   - forwards to the existing `localhost` site
+
+In this environment:
+
+- `18080`
+  - local standalone nginx bridge
+- `18081`
+  - LAN-facing Windows bridge
+
+### Recommended verification sequence for this setup
+
+1. verify standalone nginx itself
+   - `http://localhost:18080/probe`
+2. verify LAN exposure
+   - `http://192.168.31.63:18081/probe`
+3. verify ERPNext through the bridge
+   - `http://192.168.31.63:18081`
+4. configure the mobile app base URL to:
+   - `http://192.168.31.63:18081`
+
+### Proxy-related testing caution
+
+The current shell environment uses local HTTP/HTTPS proxy variables.
+
+This caused false negatives during local testing:
+
+- direct `curl http://192.168.31.63:18080/...` could fail because the request was sent to the local proxy instead of the LAN address
+
+For local verification in WSL, prefer:
+
+```bash
+curl --noproxy '*' http://192.168.31.63:18080/probe
+```
+
+or:
+
+```bash
+env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY curl http://192.168.31.63:18080/probe
+```
+
+### Does the mobile app need to be rebuilt after switching to the LAN bridge?
+
+Usually no.
+
+Reason:
+
+- this change affects the runtime backend entry URL
+- it does not change the mobile binary itself
+- if the app settings page or runtime configuration can change API base URL, the installed app can simply switch to:
+  - `http://192.168.31.63:18081`
+
+Rebuild is only necessary when:
+
+- the backend base URL is hardcoded into a non-editable release build
+- native Android/iOS capabilities or packaging config changed
 
 ### Common packaging failures already seen in this project
 
