@@ -285,11 +285,13 @@ export async function listSalesOrderSummaries(query: string): Promise<SalesOrder
   });
 
   if (!trimmedQuery) {
-    return normalized;
+    return normalized.filter((item) => item.status !== 'cancelled');
   }
 
   const keyword = trimmedQuery.toLowerCase();
-  return normalized.filter((item) =>
-    [item.name, item.customer, item.company].some((value) => value.toLowerCase().includes(keyword)),
+  return normalized.filter(
+    (item) =>
+      item.status !== 'cancelled' &&
+      [item.name, item.customer, item.company].some((value) => value.toLowerCase().includes(keyword)),
   );
 }

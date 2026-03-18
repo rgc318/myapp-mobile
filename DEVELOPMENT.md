@@ -252,6 +252,41 @@ This detail is important and should be preserved if order-product search flow is
 - legacy helpers still exist in some older modules even though core detail flows are now on v2
 - delivery / invoice / payment pages still need similar contract cleanup later
 
+### Order-Detail Follow-up Notes
+
+Additional follow-up work after the first v2 alignment focused on making the order-detail product-edit experience safer and easier to understand.
+
+- amendment flow messaging
+  - when submitted-order item changes trigger `update_order_items_v2`, the backend may cancel the original order and create a replacement order
+  - the frontend should not present this as "save turned the order into a cancelled order"
+  - current behavior:
+    - the detail page now shows a clearer amendment message when a new order is generated
+  - the document query list also hides cancelled sales orders from the normal default flow so voided historical documents do not mix with active working orders
+
+- contact editing fix
+  - custom receiver names must not be written into ERPNext `contact_person` link fields unless they actually refer to a real Contact record
+  - order-detail save flow now only sends display name / phone / address snapshot for ad-hoc receiver edits
+  - this avoids validation errors such as:
+    - `找不到联系人: 张三213`
+
+- item editor interaction cleanup
+  - the quick action inside order-detail now clearly points users to the dedicated product-search page instead of rendering inline search results
+  - quantity editing now uses a `- / input / +` stepper pattern
+  - browsing mode and editing mode are intentionally different:
+    - browsing mode:
+      - light dividers between items inside one section card
+    - editing mode:
+      - each item is visually grouped as its own card
+  - this reduces the chance that users confuse one product's quantity/price/unit with the next product
+
+- current unit editing status
+  - backend already provides `uom` and `all_uoms` in product search/detail responses
+  - order create/update requests also accept `uom`
+  - frontend order-detail editor now supports simple unit switching for items with multiple available units
+  - however, full unit + pricing linkage is still not a complete business model yet
+  - open question for later:
+    - whether unit changes should also auto-recalculate price and quantity using conversion factors
+
 ### Recommended Next Steps After This Round
 
 1. extract a shared sales-item editor component for create-order and order-detail

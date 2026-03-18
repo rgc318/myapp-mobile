@@ -14,6 +14,7 @@ import {
   getSalesOrderDraft,
   replaceSalesOrderDraft,
 } from '@/lib/sales-order-draft';
+import { fetchProductDetail } from '@/services/products';
 import {
   cancelSalesOrderV2,
   getSalesOrderDetailV2,
@@ -36,24 +37,35 @@ type EditableOrderItem = {
 function EditableSalesItemRow({
   item,
   currency,
+  surface,
   surfaceMuted,
   tintColor,
   onChangePrice,
   onChangeQty,
+  onDecreaseQty,
+  onIncreaseQty,
+  onCycleUom,
+  availableUoms,
   onRemove,
 }: {
   item: EditableOrderItem;
   currency: string;
+  surface: string;
   surfaceMuted: string;
   tintColor: string;
   onChangePrice: (value: string) => void;
   onChangeQty: (value: string) => void;
+  onDecreaseQty: () => void;
+  onIncreaseQty: () => void;
+  onCycleUom: () => void;
+  availableUoms: string[];
   onRemove: () => void;
 }) {
   const lineAmount = (item.rate ?? 0) * item.qty;
 
   return (
-    <View style={styles.editItemRow}>
+    <View style={[styles.editItemCard, { backgroundColor: surface, borderColor: 'rgba(148,163,184,0.18)' }]}>
+      <View style={styles.editItemRow}>
       {item.imageUrl ? (
         <Image source={{ uri: item.imageUrl }} style={styles.goodsImage} />
       ) : (
@@ -85,31 +97,60 @@ function EditableSalesItemRow({
         </View>
 
         <View style={styles.editItemControls}>
-          <View style={[styles.inlineField, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.inlineFieldLabel}>数量</ThemedText>
-            <TextInput
-              keyboardType="number-pad"
-              onChangeText={onChangeQty}
-              style={styles.inlineFieldInput}
-              value={String(item.qty)}
-            />
-          </View>
-          <View style={[styles.inlineField, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.inlineFieldLabel}>单价</ThemedText>
-            <TextInput
-              keyboardType="decimal-pad"
-              onChangeText={onChangePrice}
-              style={styles.inlineFieldInput}
-              value={item.rate == null ? '' : String(item.rate)}
-            />
-          </View>
-          <View style={[styles.inlineField, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.inlineFieldLabel}>单位</ThemedText>
-            <ThemedText style={styles.inlineStaticValue} type="defaultSemiBold">
-              {formatDisplayUom(item.uom)}
-            </ThemedText>
+          <View style={styles.editItemControlRow}>
+            <View style={[styles.inlineField, styles.qtyField, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.inlineFieldLabel}>数量</ThemedText>
+              <View style={styles.qtyStepper}>
+                <Pressable onPress={onDecreaseQty} style={styles.qtyStepperButton}>
+                  <ThemedText style={[styles.qtyStepperButtonText, { color: tintColor }]} type="defaultSemiBold">
+                    -
+                  </ThemedText>
+                </Pressable>
+                <TextInput
+                  keyboardType="number-pad"
+                  onChangeText={onChangeQty}
+                  style={styles.qtyStepperInput}
+                  value={String(item.qty)}
+                />
+                <Pressable onPress={onIncreaseQty} style={styles.qtyStepperButton}>
+                  <ThemedText style={[styles.qtyStepperButtonText, { color: tintColor }]} type="defaultSemiBold">
+                    +
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+            <View style={[styles.inlineField, styles.uomField, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.inlineFieldLabel}>单位</ThemedText>
+              <Pressable
+                disabled={availableUoms.length <= 1}
+                onPress={onCycleUom}
+                style={[styles.uomSwitcher, availableUoms.length <= 1 && styles.uomSwitcherDisabled]}
+              >
+                <ThemedText style={styles.inlineStaticValue} type="defaultSemiBold">
+                  {formatDisplayUom(item.uom)}
+                </ThemedText>
+                {availableUoms.length > 1 ? (
+                  <ThemedText style={[styles.uomHint, { color: tintColor }]}>切换</ThemedText>
+                ) : null}
+              </Pressable>
+            </View>
+            <View style={[styles.priceChipField, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.inlineFieldLabel}>单价</ThemedText>
+              <View style={styles.priceChipContent}>
+                <ThemedText style={styles.pricePrefix} type="defaultSemiBold">
+                  {currency === 'CNY' ? '¥' : currency}
+                </ThemedText>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={onChangePrice}
+                  style={styles.priceChipInput}
+                  value={item.rate == null ? '' : String(item.rate)}
+                />
+              </View>
+            </View>
           </View>
         </View>
+      </View>
       </View>
     </View>
   );
@@ -186,6 +227,7 @@ export default function SalesOrderDetailScreen() {
   const [addressInput, setAddressInput] = useState('');
   const [remarksInput, setRemarksInput] = useState('');
   const [editableItems, setEditableItems] = useState<EditableOrderItem[]>([]);
+  const [itemUomOptions, setItemUomOptions] = useState<Record<string, string[]>>({});
 
   const background = useThemeColor({}, 'background');
   const surface = useThemeColor({}, 'surface');
@@ -263,6 +305,65 @@ export default function SalesOrderDetailScreen() {
     );
   }, [isEditing, isFocused, orderDraftScope]);
 
+  useEffect(() => {
+    if (!isEditing || !editableItems.length) {
+      return;
+    }
+
+    const pendingItemCodes = Array.from(
+      new Set(
+        editableItems
+          .map((item) => item.itemCode)
+          .filter((itemCode) => itemCode && !(itemCode in itemUomOptions)),
+      ),
+    );
+
+    if (!pendingItemCodes.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void Promise.all(
+      pendingItemCodes.map(async (itemCode) => {
+        try {
+          const productDetail = await fetchProductDetail(itemCode, {
+            company: detail?.company || undefined,
+          });
+          const fallbackUoms = editableItems
+            .filter((item) => item.itemCode === itemCode)
+            .map((item) => item.uom)
+            .filter(Boolean);
+          const allUoms = productDetail?.allUoms?.length
+            ? productDetail.allUoms
+            : productDetail?.stockUom
+              ? [productDetail.stockUom]
+              : fallbackUoms;
+
+          return [itemCode, Array.from(new Set(allUoms.filter(Boolean)))] as const;
+        } catch {
+          return [itemCode, []] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) {
+        return;
+      }
+
+      setItemUomOptions((current) => {
+        const next = { ...current };
+        for (const [itemCode, allUoms] of entries) {
+          next[itemCode] = allUoms;
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.company, editableItems, isEditing, itemUomOptions]);
+
   const statusTone = getStatusTone(detail);
   const businessStatus = getBusinessStatusLabel(detail);
   const totalQuantity = useMemo(
@@ -287,7 +388,6 @@ export default function SalesOrderDetailScreen() {
         orderName,
         deliveryDate: deliveryDateInput,
         remarks: remarksInput,
-        contactPerson: contactDisplayInput,
         contactDisplay: contactDisplayInput,
         contactPhone: contactPhoneInput,
         shippingAddressText: addressInput,
@@ -295,6 +395,7 @@ export default function SalesOrderDetailScreen() {
 
       let finalDetail = nextDetail;
       let nextOrderName = orderName;
+      let amendmentSourceOrderName: string | null = null;
       if (isEditing) {
         const itemsChanged =
           JSON.stringify(
@@ -329,6 +430,7 @@ export default function SalesOrderDetailScreen() {
           });
           finalDetail = itemUpdateResult.detail;
           nextOrderName = itemUpdateResult.orderName;
+          amendmentSourceOrderName = itemUpdateResult.sourceOrderName;
         }
       }
 
@@ -336,14 +438,15 @@ export default function SalesOrderDetailScreen() {
       setIsEditing(false);
       if (nextOrderName !== orderName) {
         clearSalesOrderDraft(orderDraftScope);
+        setMessage(`商品修改已生效，系统已生成新订单 ${nextOrderName}，原订单 ${amendmentSourceOrderName || orderName} 已作废。`);
         router.replace({
           pathname: '/sales/order/[orderName]',
           params: { orderName: nextOrderName },
         });
       } else {
         clearSalesOrderDraft(orderDraftScope);
+        setMessage('订单信息已更新。');
       }
-      setMessage('订单信息已更新。');
     } catch (error) {
       const appError = normalizeAppError(error, '订单保存失败。');
       setMessage(appError.message);
@@ -465,6 +568,43 @@ export default function SalesOrderDetailScreen() {
         returnOrderName: orderName,
       },
     });
+  }
+
+  function stepEditableItemQty(index: number, delta: number) {
+    setEditableItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              qty: Math.max(1, item.qty + delta),
+              amount: (item.rate ?? 0) * Math.max(1, item.qty + delta),
+            }
+          : item,
+      ),
+    );
+  }
+
+  function cycleEditableItemUom(index: number) {
+    setEditableItems((current) =>
+      current.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+
+        const availableUoms = itemUomOptions[item.itemCode] ?? [];
+        if (availableUoms.length <= 1) {
+          return item;
+        }
+
+        const currentIndex = Math.max(availableUoms.indexOf(item.uom), 0);
+        const nextUom = availableUoms[(currentIndex + 1) % availableUoms.length] ?? item.uom;
+
+        return {
+          ...item,
+          uom: nextUom,
+        };
+      }),
+    );
   }
 
   return (
@@ -601,16 +741,20 @@ export default function SalesOrderDetailScreen() {
         <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
           {isEditing ? (
             <View style={styles.quickActionsCard}>
-              <Pressable onPress={openProductSearch} style={styles.quickActionButton}>
+              <Pressable
+                onPress={openProductSearch}
+                style={[styles.quickActionButton, { backgroundColor: surfaceMuted, borderColor }]}
+              >
                 <View style={[styles.quickActionIcon, { backgroundColor: surfaceMuted }]}>
                   <IconSymbol color={tintColor} name="cart.fill.badge.plus" size={18} />
                 </View>
-                <View>
+                <View style={styles.quickActionCopy}>
                   <ThemedText style={styles.quickActionLabel} type="defaultSemiBold">
-                    前往商品搜索页
+                    添加或替换商品
                   </ThemedText>
                   <ThemedText style={styles.quickActionHint}>和创建订单一样，从专门搜索页选择商品</ThemedText>
                 </View>
+                <IconSymbol color={tintColor} name="chevron.right" size={18} />
               </Pressable>
             </View>
           ) : null}
@@ -626,6 +770,7 @@ export default function SalesOrderDetailScreen() {
                     currency={detail?.currency || 'CNY'}
                     item={item as EditableOrderItem}
                     key={`${item.itemCode}-${index}`}
+                    surface={surface}
                     onChangePrice={(value) =>
                       updateEditableItem(index, {
                         rate: value.trim() ? Number(value) || 0 : null,
@@ -636,40 +781,49 @@ export default function SalesOrderDetailScreen() {
                         qty: Math.max(1, Number(value.replace(/[^0-9]/g, '')) || 1),
                       })
                     }
+                    onDecreaseQty={() => stepEditableItemQty(index, -1)}
+                    onIncreaseQty={() => stepEditableItemQty(index, 1)}
+                    onCycleUom={() => cycleEditableItemUom(index)}
+                    availableUoms={itemUomOptions[(item as EditableOrderItem).itemCode] ?? []}
                     onRemove={() => removeEditableItem(index)}
                     surfaceMuted={surfaceMuted}
                     tintColor={tintColor}
                   />
                 ) : (
-                  <View key={`${item.itemCode}-${index}`} style={styles.goodsRow}>
-                    {item.imageUrl ? (
-                      <Image source={{ uri: item.imageUrl }} style={styles.goodsImage} />
-                    ) : (
-                      <View style={[styles.goodsImage, styles.imageFallback, { backgroundColor: surfaceMuted }]}>
-                        <IconSymbol color="#94A3B8" name="photo" size={20} />
+                  <View key={`${item.itemCode}-${index}`} style={styles.goodsListItem}>
+                    <View style={styles.goodsRow}>
+                      {item.imageUrl ? (
+                        <Image source={{ uri: item.imageUrl }} style={styles.goodsImage} />
+                      ) : (
+                        <View style={[styles.goodsImage, styles.imageFallback, { backgroundColor: surfaceMuted }]}>
+                          <IconSymbol color="#94A3B8" name="photo" size={20} />
+                        </View>
+                      )}
+                      <View style={styles.goodsBody}>
+                        <ThemedText style={styles.goodsName} type="defaultSemiBold">
+                          {item.itemName || item.itemCode}
+                        </ThemedText>
+                        <ThemedText style={styles.goodsSubMeta}>{item.warehouse || '未指定仓库'}</ThemedText>
+                        <View style={styles.goodsMetricsRow}>
+                          <ThemedText style={styles.goodsPriceValue} type="defaultSemiBold">
+                            {formatCurrencyValue(item.rate, detail?.currency || 'CNY')}
+                          </ThemedText>
+                          <ThemedText style={styles.metricMultiply}>x</ThemedText>
+                          <ThemedText style={styles.goodsQtyValue} type="defaultSemiBold">
+                            {item.qty ?? '—'}
+                          </ThemedText>
+                          <ThemedText style={styles.goodsUomValue} type="defaultSemiBold">
+                            {formatDisplayUom(item.uom)}
+                          </ThemedText>
+                        </View>
                       </View>
-                    )}
-                    <View style={styles.goodsBody}>
-                      <ThemedText style={styles.goodsName} type="defaultSemiBold">
-                        {item.itemName || item.itemCode}
+                      <ThemedText style={styles.goodsAmount} type="defaultSemiBold">
+                        {formatCurrencyValue(item.amount, detail?.currency || 'CNY')}
                       </ThemedText>
-                      <ThemedText style={styles.goodsSubMeta}>{item.warehouse || '未指定仓库'}</ThemedText>
-                      <View style={styles.goodsMetricsRow}>
-                        <ThemedText style={styles.goodsPriceValue} type="defaultSemiBold">
-                          {formatCurrencyValue(item.rate, detail?.currency || 'CNY')}
-                        </ThemedText>
-                        <ThemedText style={styles.metricMultiply}>x</ThemedText>
-                        <ThemedText style={styles.goodsQtyValue} type="defaultSemiBold">
-                          {item.qty ?? '—'}
-                        </ThemedText>
-                        <ThemedText style={styles.goodsUomValue} type="defaultSemiBold">
-                          {formatDisplayUom(item.uom)}
-                        </ThemedText>
-                      </View>
                     </View>
-                    <ThemedText style={styles.goodsAmount} type="defaultSemiBold">
-                      {formatCurrencyValue(item.amount, detail?.currency || 'CNY')}
-                    </ThemedText>
+                    {index < detail.items.length - 1 ? (
+                      <View style={[styles.goodsDivider, { backgroundColor: borderColor }]} />
+                    ) : null}
                   </View>
                 ),
               )
@@ -887,11 +1041,25 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   goodsList: {
-    gap: 18,
+    gap: 12,
+  },
+  goodsListItem: {
+    gap: 12,
   },
   goodsRow: {
     flexDirection: 'row',
     gap: 14,
+  },
+  goodsDivider: {
+    height: 1,
+    marginLeft: 74,
+    opacity: 0.8,
+  },
+  editItemCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   editItemRow: {
     flexDirection: 'row',
@@ -931,6 +1099,10 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
   },
   editItemControls: {
+    gap: 8,
+  },
+  editItemControlRow: {
+    alignItems: 'stretch',
     flexDirection: 'row',
     gap: 8,
   },
@@ -973,24 +1145,88 @@ const styles = StyleSheet.create({
   },
   inlineField: {
     borderRadius: 12,
-    flex: 1,
     gap: 4,
-    minHeight: 54,
+    minHeight: 50,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 7,
+  },
+  qtyField: {
+    flex: 1.05,
+  },
+  uomField: {
+    flex: 0.62,
   },
   inlineFieldLabel: {
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 12,
   },
   inlineFieldInput: {
     color: '#0F172A',
     fontSize: 14,
     padding: 0,
   },
+  qtyStepper: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  qtyStepperButton: {
+    alignItems: 'center',
+    borderRadius: 10,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  qtyStepperButtonText: {
+    fontSize: 20,
+    lineHeight: 20,
+  },
+  qtyStepperInput: {
+    color: '#0F172A',
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    minWidth: 28,
+    padding: 0,
+    textAlign: 'center',
+  },
+  priceChipField: {
+    borderRadius: 14,
+    flex: 0.82,
+    gap: 4,
+    minHeight: 50,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  priceChipContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  pricePrefix: {
+    color: '#A86518',
+    fontSize: 16,
+  },
+  priceChipInput: {
+    color: '#0F172A',
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    padding: 0,
+  },
   inlineStaticValue: {
     color: '#0F172A',
-    fontSize: 14,
+    fontSize: 16,
+  },
+  uomSwitcher: {
+    alignItems: 'flex-start',
+    gap: 2,
+  },
+  uomSwitcherDisabled: {
+    opacity: 0.8,
+  },
+  uomHint: {
+    fontSize: 11,
   },
   removeInlineButton: {
     paddingHorizontal: 4,
@@ -1008,12 +1244,16 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   quickActionsCard: {
-    marginBottom: 4,
+    marginBottom: 10,
   },
   quickActionButton: {
     alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   quickActionIcon: {
     alignItems: 'center',
@@ -1022,8 +1262,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 42,
   },
+  quickActionCopy: {
+    flex: 1,
+  },
   quickActionLabel: {
-    fontSize: 14,
+    color: '#0F172A',
+    fontSize: 15,
   },
   quickActionHint: {
     color: '#64748B',
