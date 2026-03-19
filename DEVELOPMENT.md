@@ -357,6 +357,62 @@ This rule should be preserved unless the whole order-detail IA is redesigned aga
 2. continue removing old direct `frappe.client.*` usage from legacy service modules
 3. align downstream sales pages such as delivery and invoice to the same v2 pattern
 
+## Business Document Flow Update (2026-03-19)
+
+This round further aligned the order-detail page with the actual ERP-style downstream document flow.
+
+### Backend-aligned order-detail behavior
+
+- sales-order detail now consumes downstream document references from the backend
+  - `references.delivery_notes`
+  - `references.sales_invoices`
+- frontend detail mapping now exposes:
+  - `deliveryStatus`
+  - `deliveryNotes`
+  - `salesInvoices`
+  - `latestDeliveryNote`
+  - `latestSalesInvoice`
+
+### Workflow rule in the order-detail page
+
+- after shipping succeeds
+  - the page should no longer continue showing `出货`
+  - it should instead surface the generated delivery note and move the next primary action forward
+- after invoicing succeeds
+  - the page should no longer continue showing `开票`
+  - it should instead surface the generated sales invoice
+  - the next primary action should become `收款`
+
+### Current mobile implementation
+
+- top-right action now follows the real workflow priority:
+  - `出货`
+  - `开票`
+  - `收款`
+  - `查看发票`
+  - `查看发货单`
+- order-detail now includes a dedicated `业务单据` section
+  - latest delivery note is shown there
+  - latest sales invoice is shown there
+- after successful shipping from order-detail
+  - mobile navigates to:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+  - the generated delivery note number is passed as navigation context
+- after successful invoicing from order-detail
+  - mobile navigates to:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+  - the generated sales invoice number and source order are passed as navigation context
+- when payment is the next step
+  - mobile jumps to:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/payment/create.tsx`
+  - the current sales invoice number is prefilled
+
+### Current limitation
+
+- there is still no full delivery-note detail page yet
+- `/sales/delivery/create` is currently used as a lightweight post-shipping landing page and confirmation surface
+- a dedicated delivery-note detail/read page should still be added later if the team wants full document browsing, printing, and audit flow on mobile
+
 ## Local Android Build Notes
 
 If the team wants to produce a local Android development APK instead of using Expo Go:

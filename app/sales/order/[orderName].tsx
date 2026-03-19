@@ -172,6 +172,9 @@ function getBusinessStatusLabel(detail: SalesOrderDetailV2 | null) {
   if (detail.paymentStatus === 'paid') {
     return '已结清';
   }
+  if (detail.latestSalesInvoice) {
+    return '已开票';
+  }
   if (detail.fulfillmentStatus === 'shipped') {
     return '已出货';
   }
@@ -449,6 +452,15 @@ export default function SalesOrderDetailScreen() {
         setDetail(result.detail);
       }
       setMessage(result.deliveryNote ? `发货成功，已创建发货单 ${result.deliveryNote}。` : '发货成功。');
+      if (result.deliveryNote) {
+        router.push({
+          pathname: '/sales/delivery/create',
+          params: {
+            orderName,
+            deliveryNote: result.deliveryNote,
+          },
+        });
+      }
     } catch (error) {
       const appError = normalizeAppError(error, '发货失败。');
       setMessage(appError.message);
@@ -470,6 +482,15 @@ export default function SalesOrderDetailScreen() {
         setDetail(result.detail);
       }
       setMessage(result.salesInvoice ? `开票成功，已创建销售发票 ${result.salesInvoice}。` : '开票成功。');
+      if (result.salesInvoice) {
+        router.push({
+          pathname: '/sales/invoice/create',
+          params: {
+            sourceName: orderName,
+            salesInvoice: result.salesInvoice,
+          },
+        });
+      }
     } catch (error) {
       const appError = normalizeAppError(error, '开票失败。');
       setMessage(appError.message);
@@ -681,6 +702,47 @@ export default function SalesOrderDetailScreen() {
     });
   }
 
+  function openLatestDeliveryNote() {
+    if (!detail?.latestDeliveryNote) {
+      return;
+    }
+
+    router.push({
+      pathname: '/sales/delivery/create',
+      params: {
+        orderName: detail.name,
+        deliveryNote: detail.latestDeliveryNote,
+      },
+    });
+  }
+
+  function openLatestSalesInvoice() {
+    if (!detail?.latestSalesInvoice) {
+      return;
+    }
+
+    router.push({
+      pathname: '/sales/invoice/create',
+      params: {
+        sourceName: detail.name,
+        salesInvoice: detail.latestSalesInvoice,
+      },
+    });
+  }
+
+  function openPaymentEntry() {
+    if (!detail?.latestSalesInvoice) {
+      return;
+    }
+
+    router.push({
+      pathname: '/sales/payment/create',
+      params: {
+        referenceName: detail.latestSalesInvoice,
+      },
+    });
+  }
+
   function resetAllForms() {
     resetContactForm();
     resetItemsForm();
@@ -707,6 +769,27 @@ export default function SalesOrderDetailScreen() {
           onPress: handleCreateInvoice,
           disabled: isCreatingInvoice || isSubmittingDelivery || isCancelling,
           tone: 'primary' as const,
+        }
+      : detail?.canRecordPayment && detail?.latestSalesInvoice
+      ? {
+          label: '收款',
+          onPress: openPaymentEntry,
+          disabled: isCancelling,
+          tone: 'primary' as const,
+        }
+      : detail?.latestSalesInvoice
+      ? {
+          label: '查看发票',
+          onPress: openLatestSalesInvoice,
+          disabled: false,
+          tone: 'ghost' as const,
+        }
+      : detail?.latestDeliveryNote
+      ? {
+          label: '查看发货单',
+          onPress: openLatestDeliveryNote,
+          disabled: false,
+          tone: 'ghost' as const,
         }
       : {
           label: '操作',
@@ -927,9 +1010,50 @@ export default function SalesOrderDetailScreen() {
           <InfoRow label="公司" value={detail?.company || '—'} />
           <InfoRow label="单据状态" value={detail?.documentStatus || '—'} />
           <InfoRow label="履约状态" value={detail?.fulfillmentStatus || '—'} />
+          <InfoRow label="发货状态" value={detail?.deliveryStatus || '—'} />
           <InfoRow label="收款状态" value={detail?.paymentStatus || '—'} />
           <InfoRow label="交货日期" value={detail?.deliveryDate || '未设置'} />
         </View>
+
+        {detail?.latestDeliveryNote || detail?.latestSalesInvoice ? (
+          <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+              业务单据
+            </ThemedText>
+
+            {detail.latestDeliveryNote ? (
+              <View style={styles.referenceRow}>
+                <View style={styles.referenceCopy}>
+                  <ThemedText style={styles.referenceLabel}>发货单</ThemedText>
+                  <ThemedText style={styles.referenceValue} type="defaultSemiBold">
+                    {detail.latestDeliveryNote}
+                  </ThemedText>
+                </View>
+                <Pressable onPress={openLatestDeliveryNote} style={styles.linkButton}>
+                  <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                    查看
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {detail.latestSalesInvoice ? (
+              <View style={styles.referenceRow}>
+                <View style={styles.referenceCopy}>
+                  <ThemedText style={styles.referenceLabel}>销售发票</ThemedText>
+                  <ThemedText style={styles.referenceValue} type="defaultSemiBold">
+                    {detail.latestSalesInvoice}
+                  </ThemedText>
+                </View>
+                <Pressable onPress={openLatestSalesInvoice} style={styles.linkButton}>
+                  <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                    查看
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
           <View style={styles.sectionHeader}>
@@ -1347,6 +1471,24 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     textAlign: 'right',
+  },
+  referenceRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  referenceCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  referenceLabel: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  referenceValue: {
+    color: '#0F172A',
+    fontSize: 15,
   },
   goodsList: {
     gap: 12,

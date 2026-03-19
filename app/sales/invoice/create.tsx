@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
@@ -10,12 +10,22 @@ import { getAppPreferences } from '@/lib/app-preferences';
 
 export default function SalesInvoiceCreateScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ sourceName?: string; salesInvoice?: string }>();
   const preferences = getAppPreferences();
   const [sourceName, setSourceName] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [remarks, setRemarks] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (typeof params.sourceName === 'string' && params.sourceName.trim()) {
+      setSourceName(params.sourceName.trim());
+    }
+    if (typeof params.salesInvoice === 'string' && params.salesInvoice.trim()) {
+      setMessage(`已生成销售发票：${params.salesInvoice.trim()}`);
+    }
+  }, [params.salesInvoice, params.sourceName]);
 
   async function handleSubmit() {
     const trimmedSource = sourceName.trim();

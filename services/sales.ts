@@ -32,6 +32,7 @@ export type SalesOrderDetailV2 = {
   docstatus: number;
   documentStatus: string;
   fulfillmentStatus: string;
+  deliveryStatus: string;
   paymentStatus: string;
   completionStatus: string;
   deliveryDate: string;
@@ -46,6 +47,10 @@ export type SalesOrderDetailV2 = {
   canSubmitDelivery: boolean;
   canCreateSalesInvoice: boolean;
   canRecordPayment: boolean;
+  deliveryNotes: string[];
+  salesInvoices: string[];
+  latestDeliveryNote: string;
+  latestSalesInvoice: string;
   items: {
     itemCode: string;
     itemName: string;
@@ -135,7 +140,15 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
   const meta = data.meta ?? {};
   const items = Array.isArray(data.items) ? data.items : [];
   const fulfillment = data.fulfillment ?? {};
+  const delivery = data.delivery ?? {};
   const payment = data.payment ?? {};
+  const references = data.references ?? {};
+  const deliveryNotes = Array.isArray(references.delivery_notes)
+    ? references.delivery_notes.map((value: unknown) => String(value ?? '')).filter(Boolean)
+    : [];
+  const salesInvoices = Array.isArray(references.sales_invoices)
+    ? references.sales_invoices.map((value: unknown) => String(value ?? '')).filter(Boolean)
+    : [];
 
   const status =
     typeof fulfillment.status === 'string'
@@ -162,6 +175,7 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
     docstatus: data.document_status === 'submitted' ? 1 : 0,
     documentStatus: String(data.document_status ?? ''),
     fulfillmentStatus: String(fulfillment.status ?? ''),
+    deliveryStatus: String(delivery.status ?? ''),
     paymentStatus: String(payment.status ?? ''),
     completionStatus: String(data.completion?.status ?? ''),
     deliveryDate: String(meta.delivery_date ?? ''),
@@ -180,6 +194,10 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
     canSubmitDelivery: Boolean(data.actions?.can_submit_delivery),
     canCreateSalesInvoice: Boolean(data.actions?.can_create_sales_invoice),
     canRecordPayment: Boolean(data.actions?.can_record_payment),
+    deliveryNotes,
+    salesInvoices,
+    latestDeliveryNote: deliveryNotes[0] ?? '',
+    latestSalesInvoice: salesInvoices[0] ?? '',
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),

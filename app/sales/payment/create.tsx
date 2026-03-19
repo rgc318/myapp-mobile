@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
@@ -6,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { recordSalesPayment } from '@/services/gateway';
 
 export default function SalesPaymentCreateScreen() {
+  const params = useLocalSearchParams<{ referenceName?: string }>();
   const [referenceName, setReferenceName] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
   const [modeOfPayment, setModeOfPayment] = useState('现金');
@@ -13,6 +15,12 @@ export default function SalesPaymentCreateScreen() {
   const [referenceDate, setReferenceDate] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (typeof params.referenceName === 'string' && params.referenceName.trim()) {
+      setReferenceName(params.referenceName.trim());
+    }
+  }, [params.referenceName]);
 
   async function handleSubmit() {
     const trimmedReference = referenceName.trim();
