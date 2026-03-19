@@ -1,6 +1,6 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
@@ -33,6 +33,7 @@ function formatStatusLabel(status: string) {
 }
 
 export default function SalesDeliveryCreateScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ orderName?: string; deliveryNote?: string; notice?: string }>();
   const { showSuccess, showError } = useFeedback();
   const [detail, setDetail] = useState<DeliveryNoteDetailV2 | null>(null);
@@ -177,6 +178,61 @@ export default function SalesDeliveryCreateScreen() {
 
           <View style={styles.sectionCard}>
             <ThemedText style={styles.sectionTitle} type="subtitle">
+              后续操作
+            </ThemedText>
+            <View style={styles.actionRow}>
+              {detail.salesOrders[0] ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/order/[orderName]',
+                      params: { orderName: detail.salesOrders[0] },
+                    })
+                  }
+                  style={[styles.actionButton, styles.secondaryActionButton]}>
+                  <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                    返回订单
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {detail.salesInvoices[0] ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/invoice/create',
+                      params: { salesInvoice: detail.salesInvoices[0] },
+                    })
+                  }
+                  style={styles.actionButton}>
+                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                    查看发票
+                  </ThemedText>
+                </Pressable>
+              ) : detail.salesOrders[0] ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/invoice/create',
+                      params: { sourceName: detail.salesOrders[0] },
+                    })
+                  }
+                  style={styles.actionButton}>
+                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                    前往开票
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+            {!detail.salesInvoices.length && detail.salesOrders[0] ? (
+              <ThemedText style={styles.actionHint}>
+                当前移动端仍以销售订单作为开票来源，这里会带你回到订单链路继续开票。
+              </ThemedText>
+            ) : null}
+          </View>
+
+          <View style={styles.sectionCard}>
+            <ThemedText style={styles.sectionTitle} type="subtitle">
               收货与联系人
             </ThemedText>
             <View style={styles.row}>
@@ -316,6 +372,37 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#0F172A',
     fontSize: 16,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  actionButton: {
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    borderRadius: 16,
+    minWidth: 132,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  secondaryActionButton: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+  },
+  secondaryActionText: {
+    color: '#1D4ED8',
+    fontSize: 15,
+  },
+  actionHint: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 20,
   },
   row: {
     alignItems: 'center',

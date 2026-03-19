@@ -305,6 +305,62 @@ export default function SalesInvoiceCreateScreen() {
 
           <View style={styles.sectionCard}>
             <ThemedText style={styles.sectionTitle} type="subtitle">
+              后续操作
+            </ThemedText>
+            <View style={styles.actionRow}>
+              {detail.salesOrders[0] ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/order/[orderName]',
+                      params: { orderName: detail.salesOrders[0] },
+                    })
+                  }
+                  style={[styles.actionButton, styles.secondaryActionButton]}>
+                  <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                    返回订单
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {detail.deliveryNotes[0] ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/delivery/create',
+                      params: { deliveryNote: detail.deliveryNotes[0] },
+                    })
+                  }
+                  style={[styles.actionButton, styles.secondaryActionButton]}>
+                  <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                    查看发货单
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {(detail.outstandingAmount ?? 0) > 0 ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/payment/create',
+                      params: {
+                        salesInvoice: detail.name,
+                        amount: String(detail.outstandingAmount ?? ''),
+                        currency: detail.currency,
+                      },
+                    })
+                  }
+                  style={styles.actionButton}>
+                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                    前往收款
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <ThemedText style={styles.sectionTitle} type="subtitle">
               收货与联系人
             </ThemedText>
             <View style={styles.row}>
@@ -503,6 +559,32 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#0F172A',
     fontSize: 16,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  actionButton: {
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    borderRadius: 16,
+    minWidth: 132,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  secondaryActionButton: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+  },
+  secondaryActionText: {
+    color: '#1D4ED8',
+    fontSize: 15,
   },
   row: {
     alignItems: 'center',

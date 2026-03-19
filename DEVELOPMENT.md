@@ -243,6 +243,12 @@ Current rule:
 
 - order-mode product search returns with:
   - `router.back()`
+- order-detail still refreshes backend detail on focus
+- but if item-edit mode is active and scoped draft already exists
+  - the page now prefers draft items over the freshly fetched server list
+- this prevents:
+  - added products disappearing after returning from product search
+  - quantity changes being silently reset by the follow-up detail request
 
 This detail is important and should be preserved if order-product search flow is refactored again later.
 
@@ -418,6 +424,10 @@ This round further aligned the order-detail page with the actual ERP-style downs
 - both pages now read backend aggregate APIs instead of acting as pure placeholders:
   - `get_delivery_note_detail_v2`
   - `get_sales_invoice_detail_v2`
+- current backend compatibility note:
+  - if invoice creation still happens from `Sales Order` instead of directly from `Delivery Note`
+  - document detail pages now rely on backend fallback references by source order
+  - this keeps `查看发票` on the delivery-note page and `查看发货单` on the invoice page usable even without direct `dn_detail` linkage
 
 ### Current limitation
 

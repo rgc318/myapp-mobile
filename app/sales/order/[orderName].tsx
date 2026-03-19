@@ -407,13 +407,8 @@ export default function SalesOrderDetailScreen() {
           return;
         }
 
-        setDetail(nextDetail);
-        setDeliveryDateInput(nextDetail?.deliveryDate ?? '');
-        setContactDisplayInput(nextDetail?.contactDisplay ?? nextDetail?.contactPerson ?? '');
-        setContactPhoneInput(nextDetail?.contactPhone ?? '');
-        setAddressInput(nextDetail?.addressDisplay ?? '');
-        setRemarksInput(nextDetail?.remarks ?? '');
-        setEditableItems(
+        const scopedDraft = isEditingItems ? getSalesOrderDraft(orderDraftScope) : [];
+        const detailItems =
           nextDetail?.items.map((item) => ({
             itemCode: item.itemCode,
             itemName: item.itemName,
@@ -423,8 +418,27 @@ export default function SalesOrderDetailScreen() {
             warehouse: item.warehouse,
             uom: item.uom,
             imageUrl: item.imageUrl,
-          })) ?? [],
-        );
+          })) ?? [];
+        const nextEditableItems = scopedDraft.length
+          ? scopedDraft.map((item) => ({
+              itemCode: item.itemCode,
+              itemName: item.itemName,
+              qty: item.qty,
+              rate: item.price,
+              amount: (item.price ?? 0) * item.qty,
+              warehouse: item.warehouse ?? '',
+              uom: item.uom ?? '',
+              imageUrl: item.imageUrl ?? '',
+            }))
+          : detailItems;
+
+        setDetail(nextDetail);
+        setDeliveryDateInput(nextDetail?.deliveryDate ?? '');
+        setContactDisplayInput(nextDetail?.contactDisplay ?? nextDetail?.contactPerson ?? '');
+        setContactPhoneInput(nextDetail?.contactPhone ?? '');
+        setAddressInput(nextDetail?.addressDisplay ?? '');
+        setRemarksInput(nextDetail?.remarks ?? '');
+        setEditableItems(nextEditableItems);
         if (nextDetail?.latestSalesInvoice) {
           const paymentNotice = getPaymentResultHandoff(nextDetail.latestSalesInvoice);
           setRecentPaymentNotice((previous) => paymentNotice ?? previous);
@@ -444,7 +458,7 @@ export default function SalesOrderDetailScreen() {
     return () => {
       active = false;
     };
-  }, [isFocused, orderName]);
+  }, [isFocused, isEditingItems, orderDraftScope, orderName]);
 
   useEffect(() => {
     if (!isFocused || !isEditingItems) {
