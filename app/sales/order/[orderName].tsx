@@ -233,6 +233,22 @@ function getBusinessStatusLabel(detail: SalesOrderDetailV2 | null) {
   return '草稿';
 }
 
+function buildDeliveryErrorMessage(message: string) {
+  if (!message.trim()) {
+    return '当前订单出货失败，请稍后重试。';
+  }
+
+  if (message.includes('可用库存不足')) {
+    return `${message} 请先补录库存、释放其他订单预留，或改用其他可发货仓库后再重试。若现场必须先发货，建议后续补一个高权限“强制出货”流程，而不是直接放开默认出货。`;
+  }
+
+  if (message.includes('没有可发货的商品明细')) {
+    return '当前订单已经没有可继续发货的商品明细。请先刷新订单状态；如果系统已经生成发货单，请直接查看发货单，不要重复点击出货。';
+  }
+
+  return message;
+}
+
 function getStatusTone(detail: SalesOrderDetailV2 | null) {
   if (!detail) {
     return { backgroundColor: '#E2E8F0', color: '#475569' };
@@ -602,18 +618,24 @@ export default function SalesOrderDetailScreen() {
     });
   }
 
-  async function handleSubmitDelivery() {
+  async function handleSubmitDelivery(forceDelivery = false) {
     if (!orderName || !detail?.canSubmitDelivery) {
       return;
     }
 
     try {
       setIsSubmittingDelivery(true);
-      const result = await submitSalesOrderDeliveryV2(orderName);
+      const result = await submitSalesOrderDeliveryV2(orderName, { forceDelivery });
       if (result.detail) {
         setDetail(result.detail);
       }
-      showSuccess(result.deliveryNote ? `发货成功，已创建发货单 ${result.deliveryNote}。` : '发货成功。');
+      showSuccess(
+        result.deliveryNote
+          ? `${result.forceDelivery ? '已强制出货' : '发货成功'}，已创建发货单 ${result.deliveryNote}。`
+          : result.forceDelivery
+            ? '已强制出货。'
+            : '发货成功。',
+      );
       if (result.deliveryNote) {
         router.push({
           pathname: '/sales/delivery/create',
@@ -626,18 +648,57 @@ export default function SalesOrderDetailScreen() {
       }
     } catch (error) {
       const appError = normalizeAppError(error, '发货失败。');
+      let refreshedDetail: SalesOrderDetailV2 | null = null;
       try {
-        const refreshedDetail = await getSalesOrderDetailV2(orderName);
+        refreshedDetail = await getSalesOrderDetailV2(orderName);
         if (refreshedDetail) {
           setDetail(refreshedDetail);
         }
       } catch {}
+
+      if (refreshedDetail?.latestDeliveryNote) {
+        setCenterDialog({
+          title: '订单状态已更新',
+          message: `系统检测到当前订单已经生成发货单 ${refreshedDetail.latestDeliveryNote}。请直接查看发货单确认结果，不要重复点击出货。`,
+          tone: 'info',
+          confirmLabel: '查看发货单',
+          confirmTone: 'primary',
+          onConfirm: () => {
+            router.push({
+              pathname: '/sales/delivery/create',
+              params: {
+                orderName,
+                deliveryNote: refreshedDetail.latestDeliveryNote,
+              },
+            });
+          },
+        });
+        showInfo(`订单已存在发货单 ${refreshedDetail.latestDeliveryNote}。`);
+        return;
+      }
+
+      const deliveryMessage = buildDeliveryErrorMessage(appError.message);
+      if (!forceDelivery && appError.message.includes('可用库存不足')) {
+        setCenterDialog({
+          title: '库存不足，是否强制出货？',
+          message: `${deliveryMessage} 强制出货会临时放开当前商品的负库存许可，并立即记录实际出库。这属于高风险操作，建议仅在仓库实物已确认出货、只是系统库存尚未补录时使用。`,
+          tone: 'danger',
+          confirmLabel: '强制出货',
+          confirmTone: 'danger',
+          onConfirm: () => {
+            void handleSubmitDelivery(true);
+          },
+        });
+        showInfo('当前库存不足，如实物已出货可选择强制出货。');
+        return;
+      }
+
       setCenterDialog({
-        title: '出货失败',
-        message: appError.message,
-        tone: 'warning',
+        title: forceDelivery ? '强制出货失败' : '出货失败',
+        message: deliveryMessage,
+        tone: forceDelivery ? 'danger' : 'warning',
       });
-      showError(appError.message);
+      showError(deliveryMessage);
     } finally {
       setIsSubmittingDelivery(false);
     }

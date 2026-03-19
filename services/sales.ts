@@ -85,6 +85,68 @@ export type SalesOrderSummaryItem = {
   modified: string;
 };
 
+export type DeliveryNoteDetailV2 = {
+  name: string;
+  customer: string;
+  company: string;
+  currency: string;
+  postingDate: string;
+  postingTime: string;
+  remarks: string;
+  documentStatus: string;
+  totalQty: number | null;
+  grandTotal: number | null;
+  salesOrders: string[];
+  salesInvoices: string[];
+  contactDisplay: string;
+  contactPhone: string;
+  addressDisplay: string;
+  items: {
+    itemCode: string;
+    itemName: string;
+    qty: number | null;
+    rate: number | null;
+    amount: number | null;
+    warehouse: string;
+    uom: string;
+    imageUrl: string;
+  }[];
+};
+
+export type SalesInvoiceDetailV2 = {
+  name: string;
+  customer: string;
+  company: string;
+  currency: string;
+  postingDate: string;
+  dueDate: string;
+  remarks: string;
+  documentStatus: string;
+  grandTotal: number | null;
+  receivableAmount: number | null;
+  paidAmount: number | null;
+  actualPaidAmount: number | null;
+  outstandingAmount: number | null;
+  totalWriteoffAmount: number | null;
+  latestUnallocatedAmount: number | null;
+  latestPaymentEntry: string;
+  salesOrders: string[];
+  deliveryNotes: string[];
+  contactDisplay: string;
+  contactPhone: string;
+  addressDisplay: string;
+  items: {
+    itemCode: string;
+    itemName: string;
+    qty: number | null;
+    rate: number | null;
+    amount: number | null;
+    warehouse: string;
+    uom: string;
+    imageUrl: string;
+  }[];
+};
+
 export type UpdateSalesOrderPayload = {
   orderName: string;
   deliveryDate?: string;
@@ -291,14 +353,20 @@ export async function updateSalesOrderItemsV2(payload: UpdateSalesOrderItemsPayl
   };
 }
 
-export async function submitSalesOrderDeliveryV2(orderName: string) {
+export async function submitSalesOrderDeliveryV2(
+  orderName: string,
+  options?: { forceDelivery?: boolean },
+) {
   const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.submit_delivery', {
     order_name: orderName,
-    kwargs: {},
+    kwargs: {
+      force_delivery: options?.forceDelivery ? 1 : 0,
+    },
   });
 
   return {
     deliveryNote: typeof data?.delivery_note === 'string' ? data.delivery_note : '',
+    forceDelivery: Boolean(data?.force_delivery),
     detail: await getSalesOrderDetailV2(orderName),
   };
 }
@@ -312,6 +380,119 @@ export async function createSalesInvoiceForOrderV2(orderName: string) {
   return {
     salesInvoice: typeof data?.sales_invoice === 'string' ? data.sales_invoice : '',
     detail: await getSalesOrderDetailV2(orderName),
+  };
+}
+
+export async function getDeliveryNoteDetailV2(
+  deliveryNoteName: string,
+): Promise<DeliveryNoteDetailV2 | null> {
+  const data = await callGatewayMethod<Record<string, any>>(
+    'myapp.api.gateway.get_delivery_note_detail_v2',
+    { delivery_note_name: deliveryNoteName },
+  );
+
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const customer = data.customer ?? {};
+  const shipping = data.shipping ?? {};
+  const meta = data.meta ?? {};
+  const items = Array.isArray(data.items) ? data.items : [];
+  const references = data.references ?? {};
+
+  return {
+    name: String(data.delivery_note_name ?? deliveryNoteName),
+    customer: String(customer.display_name ?? customer.name ?? ''),
+    company: String(meta.company ?? ''),
+    currency: String(meta.currency ?? 'CNY'),
+    postingDate: String(meta.posting_date ?? ''),
+    postingTime: String(meta.posting_time ?? ''),
+    remarks: String(meta.remarks ?? ''),
+    documentStatus: String(data.document_status ?? ''),
+    totalQty: toOptionalNumber(data.fulfillment?.total_qty),
+    grandTotal: toOptionalNumber(data.amounts?.delivery_amount_estimate),
+    salesOrders: Array.isArray(references.sales_orders)
+      ? references.sales_orders.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+    salesInvoices: Array.isArray(references.sales_invoices)
+      ? references.sales_invoices.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+    contactDisplay: String(shipping.contact_display ?? customer.contact_display_name ?? ''),
+    contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
+    addressDisplay: String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
+    items: items.map((item: Record<string, unknown>) => ({
+      itemCode: String(item.item_code ?? ''),
+      itemName: String(item.item_name ?? item.item_code ?? ''),
+      qty: toOptionalNumber(item.qty),
+      rate: toOptionalNumber(item.rate),
+      amount: toOptionalNumber(item.amount),
+      warehouse: String(item.warehouse ?? ''),
+      uom: String(item.uom ?? ''),
+      imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
+    })),
+  };
+}
+
+export async function getSalesInvoiceDetailV2(
+  salesInvoiceName: string,
+): Promise<SalesInvoiceDetailV2 | null> {
+  const data = await callGatewayMethod<Record<string, any>>(
+    'myapp.api.gateway.get_sales_invoice_detail_v2',
+    { sales_invoice_name: salesInvoiceName },
+  );
+
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const customer = data.customer ?? {};
+  const shipping = data.shipping ?? {};
+  const meta = data.meta ?? {};
+  const payment = data.payment ?? {};
+  const references = data.references ?? {};
+  const items = Array.isArray(data.items) ? data.items : [];
+  const totalWriteoffAmount = toOptionalNumber(payment.total_writeoff_amount);
+  const paidAmount = toOptionalNumber(payment.paid_amount);
+
+  return {
+    name: String(data.sales_invoice_name ?? salesInvoiceName),
+    customer: String(customer.display_name ?? customer.name ?? ''),
+    company: String(meta.company ?? ''),
+    currency: String(meta.currency ?? 'CNY'),
+    postingDate: String(meta.posting_date ?? ''),
+    dueDate: String(meta.due_date ?? ''),
+    remarks: String(meta.remarks ?? ''),
+    documentStatus: String(data.document_status ?? ''),
+    grandTotal: toOptionalNumber(data.amounts?.invoice_amount_estimate),
+    receivableAmount: toOptionalNumber(data.amounts?.receivable_amount),
+    paidAmount,
+    actualPaidAmount:
+      toOptionalNumber(payment.actual_paid_amount) ??
+      (paidAmount !== null ? Math.max(paidAmount - (totalWriteoffAmount ?? 0), 0) : null),
+    outstandingAmount: toOptionalNumber(data.amounts?.outstanding_amount),
+    totalWriteoffAmount,
+    latestUnallocatedAmount: toOptionalNumber(payment.latest_unallocated_amount),
+    latestPaymentEntry: String(payment.latest_payment_entry ?? references.latest_payment_entry ?? ''),
+    salesOrders: Array.isArray(references.sales_orders)
+      ? references.sales_orders.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+    deliveryNotes: Array.isArray(references.delivery_notes)
+      ? references.delivery_notes.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+    contactDisplay: String(shipping.contact_display ?? customer.contact_display_name ?? ''),
+    contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
+    addressDisplay: String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
+    items: items.map((item: Record<string, unknown>) => ({
+      itemCode: String(item.item_code ?? ''),
+      itemName: String(item.item_name ?? item.item_code ?? ''),
+      qty: toOptionalNumber(item.qty),
+      rate: toOptionalNumber(item.rate),
+      amount: toOptionalNumber(item.amount),
+      warehouse: String(item.warehouse ?? ''),
+      uom: String(item.uom ?? ''),
+      imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
+    })),
   };
 }
 

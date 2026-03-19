@@ -407,11 +407,26 @@ This round further aligned the order-detail page with the actual ERP-style downs
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/payment/create.tsx`
   - the current sales invoice number is prefilled
 
+### Current implementation
+
+- `/sales/delivery/create` now serves dual purpose:
+  - create-success landing surface after shipping
+  - delivery-note detail page when `deliveryNote` is present in route params
+- `/sales/invoice/create` now serves dual purpose:
+  - create-success landing surface after invoicing
+  - sales-invoice detail page when `salesInvoice` is present in route params
+- both pages now read backend aggregate APIs instead of acting as pure placeholders:
+  - `get_delivery_note_detail_v2`
+  - `get_sales_invoice_detail_v2`
+
 ### Current limitation
 
-- there is still no full delivery-note detail page yet
-- `/sales/delivery/create` is currently used as a lightweight post-shipping landing page and confirmation surface
-- a dedicated delivery-note detail/read page should still be added later if the team wants full document browsing, printing, and audit flow on mobile
+- mobile still does not have a dedicated document list or print action for delivery notes and sales invoices
+- current design prioritizes:
+  - document content viewing
+  - returning to the source order flow
+  - continuing payment flow
+- later iterations can still split these dual-purpose routes into separate detail/read pages if printing and audit browsing become first-class requirements
 
 ## Create-Order Handoff Update (2026-03-19)
 
@@ -502,6 +517,26 @@ The sales payment page was refined to reduce mis-entry risk and make the result 
 
 - adding new payment modes is still handled as ERPNext master data management
 - the payment page should only select existing payment modes, not create them on the fly
+
+## Forced Delivery Notes (2026-03-20)
+
+The order-detail page now treats stock-shortage failures as a business decision point instead of a dead-end generic error.
+
+### Current rule
+
+- normal `出货` still follows strict stock validation
+- when shipping fails because of available-stock shortage
+  - the page shows a centered warning dialog instead of only a top toast
+  - the dialog explains this is a high-risk action
+  - the user can choose `强制出货`
+- forced delivery is not exposed as a default top-level button
+  - it only appears after a stock-shortage failure path
+
+### Why this matters
+
+- normal users should not casually bypass stock discipline
+- some real-world warehouse scenarios still require urgent shipment before stock bookkeeping catches up
+- the current interaction keeps the safe path as default while still letting privileged users proceed when necessary
 
 ## Customer Context Notes (2026-03-20)
 
