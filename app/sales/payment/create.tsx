@@ -1,38 +1,162 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
+import { useFeedback } from '@/providers/feedback-provider';
+import { formatCurrencyValue } from '@/lib/display-currency';
 import { recordSalesPayment } from '@/services/gateway';
+import { checkLinkOptionExists, searchLinkOptions, type LinkOption } from '@/services/master-data';
+
+const MODE_OF_PAYMENT_LABELS: Record<string, string> = {
+  Cash: '现金',
+  'Bank Draft': '银行汇票',
+  'Wire Transfer': '银行转账',
+  'Credit Card': '信用卡',
+  Cheque: '支票',
+  'WeChat Pay': '微信支付',
+  Alipay: '支付宝',
+  微信支付: '微信支付',
+  支付宝支付: '支付宝支付',
+};
+
+const FEATURED_MODE_KEYS = ['微信支付', 'WeChat Pay', 'Cash', '现金', '支付宝支付', 'Alipay'] as const;
+
+function getModeOfPaymentLabel(value: string) {
+  return MODE_OF_PAYMENT_LABELS[value] ?? value;
+}
+
+function isFeaturedMode(value: string) {
+  return FEATURED_MODE_KEYS.includes(value as (typeof FEATURED_MODE_KEYS)[number]);
+}
+
+type ResultDialogState = {
+  tone: 'success' | 'error';
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+} | null;
 
 export default function SalesPaymentCreateScreen() {
-  const params = useLocalSearchParams<{ referenceName?: string }>();
+  const router = useRouter();
+  const params = useLocalSearchParams<{ referenceName?: string; defaultPaidAmount?: string; currency?: string }>();
+  const { showError } = useFeedback();
   const [referenceName, setReferenceName] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
-  const [modeOfPayment, setModeOfPayment] = useState('现金');
+  const [modeOfPayment, setModeOfPayment] = useState('');
   const [referenceNo, setReferenceNo] = useState('');
   const [referenceDate, setReferenceDate] = useState('');
-  const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [suggestedAmount, setSuggestedAmount] = useState<number | null>(null);
+  const [confirmMismatchOpen, setConfirmMismatchOpen] = useState(false);
+  const [modePickerOpen, setModePickerOpen] = useState(false);
+  const [modeQuery, setModeQuery] = useState('');
+  const [modeOptions, setModeOptions] = useState<LinkOption[]>([]);
+  const [amountAutoCorrectHint, setAmountAutoCorrectHint] = useState('');
+  const [resultDialog, setResultDialog] = useState<ResultDialogState>(null);
+  const currency = typeof params.currency === 'string' && params.currency.trim() ? params.currency.trim() : 'CNY';
+  const featuredModeOptions = modeOptions.filter((option, index, array) => {
+    if (!isFeaturedMode(option.value)) {
+      return false;
+    }
+
+    return array.findIndex((candidate) => getModeOfPaymentLabel(candidate.value) === getModeOfPaymentLabel(option.value)) === index;
+  });
+  const extraModeOptions = modeOptions.filter((option) => !isFeaturedMode(option.value));
+  const currentPaidAmount = Number(paidAmount);
+  const isAmountDifferent =
+    suggestedAmount !== null &&
+    Number.isFinite(currentPaidAmount) &&
+    currentPaidAmount > 0 &&
+    Math.abs(currentPaidAmount - suggestedAmount) > 0.0001;
 
   useEffect(() => {
     if (typeof params.referenceName === 'string' && params.referenceName.trim()) {
       setReferenceName(params.referenceName.trim());
     }
-  }, [params.referenceName]);
+    if (typeof params.defaultPaidAmount === 'string' && params.defaultPaidAmount.trim()) {
+      const amount = Number(params.defaultPaidAmount);
+      if (Number.isFinite(amount) && amount > 0) {
+        setSuggestedAmount(amount);
+        setPaidAmount(String(amount));
+      }
+    }
+  }, [params.defaultPaidAmount, params.referenceName]);
 
-  async function handleSubmit() {
+  useEffect(() => {
+    let cancelled = false;
+
+    void searchLinkOptions('Mode of Payment', '').then((options) => {
+      if (cancelled) {
+        return;
+      }
+
+      setModeOptions(options);
+
+      if (!modeOfPayment && options.length) {
+        const preferred =
+          options.find((option) => option.value === '微信支付') ??
+          options.find((option) => option.value === 'WeChat Pay') ??
+          options.find((option) => option.value === 'Cash') ??
+          options.find((option) => option.value === '现金') ??
+          options[0];
+        setModeOfPayment(preferred?.value ?? '');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modeOfPayment]);
+
+  useEffect(() => {
+    if (!modePickerOpen) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void searchLinkOptions('Mode of Payment', modeQuery).then((options) => {
+      if (!cancelled) {
+        setModeOptions(options);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modePickerOpen, modeQuery]);
+
+  async function submitPayment() {
     const trimmedReference = referenceName.trim();
     const amount = Number(paidAmount);
+    const trimmedModeOfPayment = modeOfPayment.trim();
 
     if (!trimmedReference) {
-      setMessage('请输入销售发票号。');
+      showError('请输入销售发票号。');
       return;
     }
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      setMessage('请输入有效的实收金额。');
+      showError('请输入有效的实收金额。');
+      return;
+    }
+
+    if (suggestedAmount !== null && amount > suggestedAmount) {
+      showError(`本次实收金额不能大于应收金额 ${formatCurrencyValue(suggestedAmount, currency)}。`);
+      return;
+    }
+
+    if (!trimmedModeOfPayment) {
+      showError('请选择付款方式。');
+      return;
+    }
+
+    const modeExists = await checkLinkOptionExists('Mode of Payment', trimmedModeOfPayment);
+    if (!modeExists) {
+      showError(`找不到付款方式：${trimmedModeOfPayment}`);
       return;
     }
 
@@ -42,17 +166,50 @@ export default function SalesPaymentCreateScreen() {
         reference_doctype: 'Sales Invoice',
         reference_name: trimmedReference,
         paid_amount: amount,
-        mode_of_payment: modeOfPayment.trim() || undefined,
+        mode_of_payment: trimmedModeOfPayment,
         reference_no: referenceNo.trim() || undefined,
         reference_date: referenceDate.trim() || undefined,
       });
       const paymentName = String(result?.payment_entry || result?.name || '');
-      setMessage(paymentName ? `收款已登记：${paymentName}` : '收款已登记。');
+      setResultDialog({
+        tone: 'success',
+        title: '收款登记成功',
+        message: paymentName ? `本次收款已登记成功，收款单号为 ${paymentName}。` : '本次收款已登记成功。',
+        confirmLabel: '返回来源页',
+        onConfirm: () => {
+          setResultDialog(null);
+          router.back();
+        },
+      });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '销售收款登记失败。');
+      setResultDialog({
+        tone: 'error',
+        title: '收款登记失败',
+        message: error instanceof Error ? error.message : '销售收款登记失败。',
+        confirmLabel: '继续处理',
+        onConfirm: () => {
+          setResultDialog(null);
+        },
+      });
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handleSubmit() {
+    const amount = Number(paidAmount);
+
+    if (
+      suggestedAmount !== null &&
+      Number.isFinite(amount) &&
+      amount > 0 &&
+      Math.abs(amount - suggestedAmount) > 0.0001
+    ) {
+      setConfirmMismatchOpen(true);
+      return;
+    }
+
+    void submitPayment();
   }
 
   return (
@@ -69,27 +226,115 @@ export default function SalesPaymentCreateScreen() {
           />
         </View>
 
+        {suggestedAmount !== null ? (
+          <View style={styles.helperCard}>
+            <ThemedText style={styles.helperTitle} type="defaultSemiBold">
+              应收金额
+            </ThemedText>
+            <ThemedText style={styles.helperAmount} type="defaultSemiBold">
+              {formatCurrencyValue(suggestedAmount, currency)}
+            </ThemedText>
+            <ThemedText style={styles.helperText}>
+              大部分情况下实收金额和订单未收金额一致，系统已带入当前未收金额；如果实际到账不一致，再手动修改下面的实收金额。
+            </ThemedText>
+          </View>
+        ) : null}
+
         <View style={styles.fieldBlock}>
           <ThemedText style={styles.label} type="defaultSemiBold">本次实收金额</ThemedText>
           <TextInput
             keyboardType="decimal-pad"
-            onChangeText={setPaidAmount}
-            placeholder="输入金额"
+            onChangeText={(value) => {
+              const sanitized = value.replace(/[^0-9.]/g, '');
+              setAmountAutoCorrectHint('');
+              if (!sanitized) {
+                setPaidAmount('');
+                return;
+              }
+
+              const amount = Number(sanitized);
+              if (!Number.isFinite(amount)) {
+                setPaidAmount(sanitized);
+                return;
+              }
+
+              if (suggestedAmount !== null && amount > suggestedAmount) {
+                setPaidAmount(String(suggestedAmount));
+                setAmountAutoCorrectHint(`实收金额不能大于应收金额，系统已自动修正为 ${formatCurrencyValue(suggestedAmount, currency)}。`);
+                return;
+              }
+
+              setPaidAmount(sanitized);
+            }}
+            placeholder={suggestedAmount !== null ? '已带入当前未收金额' : '输入金额'}
             placeholderTextColor="#9CA3AF"
             style={styles.input}
             value={paidAmount}
           />
+          {amountAutoCorrectHint ? (
+            <View style={styles.autoCorrectHintCard}>
+              <ThemedText style={styles.autoCorrectHintTitle} type="defaultSemiBold">
+                已自动修正金额
+              </ThemedText>
+              <ThemedText style={styles.autoCorrectHintText}>
+                {amountAutoCorrectHint}
+              </ThemedText>
+            </View>
+          ) : null}
+          {isAmountDifferent ? (
+            <View style={styles.warningCard}>
+              <ThemedText style={styles.warningTitle} type="defaultSemiBold">
+                修改实收金额会影响结算结果
+              </ThemedText>
+              <ThemedText style={styles.warningText}>
+                当前应收金额为 {formatCurrencyValue(suggestedAmount, currency)}，你当前填写的是 {formatCurrencyValue(currentPaidAmount, currency)}。实收金额可以少于应收金额，但不能大于应收金额；如果这不是部分收款、折让或其他特殊情况，建议恢复为默认金额。
+              </ThemedText>
+            </View>
+          ) : suggestedAmount !== null ? (
+            <View style={styles.ruleHintCard}>
+              <ThemedText style={styles.ruleHintTitle} type="defaultSemiBold">
+                金额填写规则
+              </ThemedText>
+              <ThemedText style={styles.ruleHintText}>
+                本次实收金额可以少于应收金额，但不能大于应收金额 {formatCurrencyValue(suggestedAmount, currency)}。
+              </ThemedText>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.fieldBlock}>
           <ThemedText style={styles.label} type="defaultSemiBold">付款方式</ThemedText>
-          <TextInput
-            onChangeText={setModeOfPayment}
-            placeholder="例如 现金 / 转账 / 微信"
-            placeholderTextColor="#9CA3AF"
-            style={styles.input}
-            value={modeOfPayment}
-          />
+          <View style={styles.featuredModeGrid}>
+            {featuredModeOptions.map((option) => {
+              const selected = modeOfPayment === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setModeOfPayment(option.value)}
+                  style={[styles.featuredModeChip, selected ? styles.featuredModeChipActive : null]}>
+                  <ThemedText
+                    style={selected ? styles.featuredModeChipTextActive : styles.featuredModeChipText}
+                    type="defaultSemiBold">
+                    {getModeOfPaymentLabel(option.value)}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+          <ThemedText style={styles.extraModeLabel} type="defaultSemiBold">
+            额外支付方式
+          </ThemedText>
+          <Pressable onPress={() => setModePickerOpen(true)} style={styles.selectorInput}>
+            <ThemedText style={modeOfPayment ? styles.selectorValue : styles.selectorPlaceholder} type={modeOfPayment ? 'defaultSemiBold' : 'default'}>
+              {modeOfPayment ? getModeOfPaymentLabel(modeOfPayment) : '选择付款方式'}
+            </ThemedText>
+            <ThemedText style={styles.selectorAction} type="defaultSemiBold">
+              选择
+            </ThemedText>
+          </Pressable>
+          <ThemedText style={styles.selectorHelper}>
+            常用方式可直接点选；如需其他方式，请从额外支付方式中选择 ERPNext 已配置项。
+          </ThemedText>
         </View>
 
         <View style={styles.fieldBlock}>
@@ -114,14 +359,140 @@ export default function SalesPaymentCreateScreen() {
           />
         </View>
 
-        <Pressable onPress={() => void handleSubmit()} style={styles.primaryButton}>
+        <Pressable onPress={handleSubmit} style={styles.primaryButton}>
           <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
             {isSubmitting ? '登记中...' : '登记收款'}
           </ThemedText>
         </Pressable>
 
-        {message ? <ThemedText style={styles.messageText}>{message}</ThemedText> : null}
       </View>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setConfirmMismatchOpen(false)}
+        transparent
+        visible={confirmMismatchOpen}>
+        <View style={styles.dialogBackdrop}>
+          <View style={styles.dialogCard}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              确认本次实收金额？
+            </ThemedText>
+            <ThemedText style={styles.dialogMessage}>
+              当前默认应收金额为{' '}
+              <ThemedText style={styles.dialogEmphasis} type="defaultSemiBold">
+                {formatCurrencyValue(suggestedAmount, currency)}
+              </ThemedText>
+              ，你填写的本次实收金额为{' '}
+              <ThemedText style={styles.dialogEmphasis} type="defaultSemiBold">
+                {formatCurrencyValue(Number(paidAmount) || 0, currency)}
+              </ThemedText>
+              。如果这是部分收款、折让或其他特殊情况，请确认后继续。
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable onPress={() => setConfirmMismatchOpen(false)} style={styles.dialogGhostButton}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  返回修改
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setConfirmMismatchOpen(false);
+                  void submitPayment();
+                }}
+                style={styles.dialogPrimaryButton}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  确认收款
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setResultDialog(null)}
+        transparent
+        visible={!!resultDialog}>
+        <View style={styles.dialogBackdrop}>
+          <View style={styles.dialogCard}>
+            <ThemedText
+              style={[
+                styles.dialogTitle,
+                resultDialog?.tone === 'success' ? styles.resultSuccessTitle : styles.resultErrorTitle,
+              ]}
+              type="defaultSemiBold">
+              {resultDialog?.title}
+            </ThemedText>
+            <ThemedText style={styles.dialogMessage}>
+              {resultDialog?.message}
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => resultDialog?.onConfirm()}
+                style={[
+                  styles.dialogPrimaryButton,
+                  resultDialog?.tone === 'success' ? styles.resultSuccessButton : styles.resultErrorButton,
+                ]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  {resultDialog?.confirmLabel}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setModePickerOpen(false)}
+        transparent
+        visible={modePickerOpen}>
+        <View style={styles.dialogBackdrop}>
+          <View style={styles.pickerCard}>
+            <ThemedText style={styles.pickerTitle} type="defaultSemiBold">
+              选择付款方式
+            </ThemedText>
+            <TextInput
+              onChangeText={setModeQuery}
+              placeholder="搜索付款方式"
+              placeholderTextColor="#9CA3AF"
+              style={styles.input}
+              value={modeQuery}
+            />
+            <ScrollView contentContainerStyle={styles.pickerList} style={styles.pickerScroll}>
+              {(extraModeOptions.length ? extraModeOptions : modeOptions).map((option) => (
+                <Pressable
+                  key={option.value}
+                  onPress={() => {
+                    setModeOfPayment(option.value);
+                    setModePickerOpen(false);
+                    setModeQuery('');
+                  }}
+                  style={[
+                    styles.pickerOption,
+                    modeOfPayment === option.value ? styles.pickerOptionActive : null,
+                  ]}>
+                  <ThemedText style={styles.pickerOptionText} type="defaultSemiBold">
+                    {getModeOfPaymentLabel(option.label)}
+                  </ThemedText>
+                  <ThemedText style={styles.pickerOptionAction} type="defaultSemiBold">
+                    {modeOfPayment === option.value ? '已选' : '选择'}
+                  </ThemedText>
+                </Pressable>
+              ))}
+              {!modeOptions.length ? (
+                <ThemedText style={styles.emptyPickerText}>未找到可用付款方式</ThemedText>
+              ) : null}
+            </ScrollView>
+            <Pressable onPress={() => setModePickerOpen(false)} style={styles.dialogGhostButton}>
+              <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                关闭
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </AppShell>
   );
 }
@@ -135,6 +506,82 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
+  },
+  helperCard: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  helperTitle: {
+    color: '#1D4ED8',
+    fontSize: 14,
+  },
+  helperAmount: {
+    color: '#0F172A',
+    fontSize: 20,
+  },
+  helperText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  autoCorrectHintCard: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FCD34D',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  autoCorrectHintTitle: {
+    color: '#B45309',
+    fontSize: 14,
+  },
+  autoCorrectHintText: {
+    color: '#78350F',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  warningCard: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  warningTitle: {
+    color: '#C2410C',
+    fontSize: 14,
+  },
+  warningText: {
+    color: '#7C2D12',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  ruleHintCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  ruleHintTitle: {
+    color: '#334155',
+    fontSize: 14,
+  },
+  ruleHintText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
   },
   input: {
     borderColor: '#D7DEE7',
@@ -155,8 +602,180 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#FFFFFF',
   },
-  messageText: {
-    color: '#475569',
+  selectorInput: {
+    alignItems: 'center',
+    borderColor: '#D7DEE7',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 46,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  featuredModeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  featuredModeChip: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 92,
+    paddingHorizontal: 14,
+  },
+  featuredModeChipActive: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#2563EB',
+  },
+  featuredModeChipText: {
+    color: '#334155',
+    fontSize: 14,
+  },
+  featuredModeChipTextActive: {
+    color: '#1D4ED8',
+    fontSize: 14,
+  },
+  extraModeLabel: {
+    color: '#334155',
     fontSize: 13,
+    marginTop: 4,
+  },
+  selectorValue: {
+    color: '#0F172A',
+  },
+  selectorPlaceholder: {
+    color: '#9CA3AF',
+  },
+  selectorAction: {
+    color: '#2563EB',
+    fontSize: 13,
+  },
+  selectorHelper: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
+    paddingLeft: 4,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.36)',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  dialogCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    gap: 14,
+    maxWidth: 420,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    width: '100%',
+  },
+  dialogTitle: {
+    color: '#B45309',
+    fontSize: 18,
+    lineHeight: 24,
+  },
+  resultSuccessTitle: {
+    color: '#15803D',
+  },
+  resultErrorTitle: {
+    color: '#DC2626',
+  },
+  dialogMessage: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  dialogEmphasis: {
+    color: '#C2410C',
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  dialogGhostButton: {
+    alignItems: 'center',
+    borderColor: '#D7DEE7',
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  dialogPrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    borderRadius: 16,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  resultSuccessButton: {
+    backgroundColor: '#16A34A',
+  },
+  resultErrorButton: {
+    backgroundColor: '#DC2626',
+  },
+  dialogGhostText: {
+    color: '#0F172A',
+  },
+  dialogPrimaryText: {
+    color: '#FFFFFF',
+  },
+  pickerCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    gap: 14,
+    maxHeight: '70%',
+    maxWidth: 420,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    width: '100%',
+  },
+  pickerTitle: {
+    color: '#0F172A',
+    fontSize: 18,
+  },
+  pickerScroll: {
+    maxHeight: 280,
+  },
+  pickerList: {
+    gap: 8,
+  },
+  pickerOption: {
+    alignItems: 'center',
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: 14,
+  },
+  pickerOptionActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#93C5FD',
+  },
+  pickerOptionText: {
+    color: '#0F172A',
+  },
+  pickerOptionAction: {
+    color: '#2563EB',
+    fontSize: 13,
+  },
+  emptyPickerText: {
+    color: '#64748B',
+    fontSize: 13,
+    paddingVertical: 8,
+    textAlign: 'center',
   },
 });

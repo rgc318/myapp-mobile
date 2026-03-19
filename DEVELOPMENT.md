@@ -413,6 +413,79 @@ This round further aligned the order-detail page with the actual ERP-style downs
 - `/sales/delivery/create` is currently used as a lightweight post-shipping landing page and confirmation surface
 - a dedicated delivery-note detail/read page should still be added later if the team wants full document browsing, printing, and audit flow on mobile
 
+## Create-Order Handoff Update (2026-03-19)
+
+The create-order page should not remain the main working surface after a sales order is successfully created.
+
+### Current rule
+
+- after `create_order_v2` succeeds
+  - mobile now reads the returned order number
+  - clears the local create-order draft
+  - immediately navigates to the created order detail page
+- this keeps the user on the real downstream workflow path:
+  - review order detail
+  - ship
+  - invoice
+  - collect payment
+
+### Why this matters
+
+- keeping the user on `/sales/order/create` after success looks like the order is still only a draft form
+- downstream workflow actions belong to the order detail page, not the create form
+- clearing the draft avoids stale goods remaining in local state when the user returns later
+
+## Payment Page UX Update (2026-03-19)
+
+The sales payment page was refined to reduce mis-entry risk and make the result of payment submission much more explicit.
+
+### Amount input behavior
+
+- the page now shows `应收金额` as a business label, not an implementation-oriented "default amount"
+- the real outstanding amount is prefilled into `本次实收金额`
+- users may enter a smaller amount for partial collection
+- users may not submit an amount greater than the receivable amount
+- if the user types an amount greater than receivable
+  - the value is automatically corrected back to the receivable amount
+  - a visible helper card explains:
+    - the collected amount cannot exceed receivable
+    - the page has auto-corrected the number
+- when the amount differs from receivable but is still valid
+  - the page keeps a persistent warning card explaining that this changes settlement behavior
+- when the user submits a mismatched-but-valid amount
+  - a centered confirmation dialog is shown before final submission
+
+### Submission result behavior
+
+- payment submission no longer relies only on top toast feedback
+- success now shows a centered success dialog
+  - after confirmation, the page returns to the source screen
+- failure now shows a centered error dialog
+  - the user stays on the payment page and can keep editing
+
+### Payment mode behavior
+
+- payment modes are still backed by ERPNext `Mode of Payment`
+- the page now uses a two-level interaction:
+  - featured payment modes as quick buttons
+    - currently favors:
+      - `微信支付`
+      - `现金`
+      - `支付宝`
+  - `额外支付方式` as the fallback selector
+- default selection now prefers `微信支付`
+- display labels are localized in mobile UI while preserving ERPNext raw values for submission
+  - examples:
+    - `Cash -> 现金`
+    - `Wire Transfer -> 银行转账`
+    - `WeChat Pay -> 微信支付`
+    - `Alipay -> 支付宝`
+
+### Current operational assumption
+
+- adding new payment modes is still handled as ERPNext master data management
+- the payment page should only select existing payment modes, not create them on the fly
+
 ## Local Android Build Notes
 
 If the team wants to produce a local Android development APK instead of using Expo Go:
@@ -1503,3 +1576,28 @@ Recommended next steps from the current state:
 3. Continue sales return implementation using existing gateway contract
 4. Extend invoice query into invoice detail / continue-payment flow
 5. Expand the same query/detail principles into purchase-side document pages
+
+Notification and safety decisions added in this round:
+
+- global action feedback on sales pages should prefer `useFeedback()` toast instead of subtle inline text
+- success cases that must show a visible toast:
+  - create sales order
+  - save order edits
+  - save contact / item / remarks sections
+  - submit delivery
+  - create sales invoice
+  - record payment
+- failure cases on the same pages should also use the same feedback toast, so users do not miss validation or API errors
+- inline `message` text on detail pages should now be reserved mainly for passive load-state / missing-data hints, not for high-signal action outcomes
+- dangerous operations must require explicit confirmation:
+  - `作废订单` now requires a destructive confirmation dialog before the request is sent
+- order-detail page should block edit / cancel earlier in UI when downstream business documents already exist:
+  - delivered orders must first roll back the delivery note
+  - invoiced orders must first roll back the sales invoice
+  - paid/settled orders must first handle payment rollback before any order rollback
+- order-amendment style saves should use stronger informational messaging:
+  - when editing items or the full order generates a replacement order, show a prominent info toast explaining that a new order was created and the old order was voided
+- document view pages must distinguish between:
+  - just viewing an existing delivery note / invoice
+  - landing on the page immediately after creating one
+  only the creation path should show the `已生成...` success toast

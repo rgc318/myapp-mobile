@@ -5,32 +5,33 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { AppShell } from '@/components/app-shell';
 import { PreferenceSummary } from '@/components/preference-summary';
 import { ThemedText } from '@/components/themed-text';
+import { useFeedback } from '@/providers/feedback-provider';
 import { createSalesInvoice } from '@/services/gateway';
 import { getAppPreferences } from '@/lib/app-preferences';
 
 export default function SalesInvoiceCreateScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ sourceName?: string; salesInvoice?: string }>();
+  const params = useLocalSearchParams<{ sourceName?: string; salesInvoice?: string; notice?: string }>();
   const preferences = getAppPreferences();
+  const { showError, showSuccess } = useFeedback();
   const [sourceName, setSourceName] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (typeof params.sourceName === 'string' && params.sourceName.trim()) {
       setSourceName(params.sourceName.trim());
     }
-    if (typeof params.salesInvoice === 'string' && params.salesInvoice.trim()) {
-      setMessage(`已生成销售发票：${params.salesInvoice.trim()}`);
+    if (params.notice === 'created' && typeof params.salesInvoice === 'string' && params.salesInvoice.trim()) {
+      showSuccess(`已生成销售发票：${params.salesInvoice.trim()}`);
     }
-  }, [params.salesInvoice, params.sourceName]);
+  }, [params.notice, params.salesInvoice, params.sourceName, showSuccess]);
 
   async function handleSubmit() {
     const trimmedSource = sourceName.trim();
     if (!trimmedSource) {
-      setMessage('请输入销售订单号。');
+      showError('请输入销售订单号。');
       return;
     }
 
@@ -42,12 +43,12 @@ export default function SalesInvoiceCreateScreen() {
         remarks: remarks.trim() || undefined,
       });
       const invoiceName = String(result?.sales_invoice || result?.name || '');
-      setMessage(invoiceName ? `销售发票已创建：${invoiceName}` : '销售发票已创建。');
+      showSuccess(invoiceName ? `销售发票已创建：${invoiceName}` : '销售发票已创建。');
       if (invoiceName) {
         router.replace('/(tabs)/docs');
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '销售发票创建失败。');
+      showError(error instanceof Error ? error.message : '销售发票创建失败。');
     } finally {
       setIsSubmitting(false);
     }
@@ -102,7 +103,6 @@ export default function SalesInvoiceCreateScreen() {
           </ThemedText>
         </Pressable>
 
-        {message ? <ThemedText style={styles.messageText}>{message}</ThemedText> : null}
       </View>
     </AppShell>
   );
@@ -145,9 +145,5 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#FFFFFF',
-  },
-  messageText: {
-    color: '#475569',
-    fontSize: 13,
   },
 });

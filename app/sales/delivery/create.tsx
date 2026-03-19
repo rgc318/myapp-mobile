@@ -1,11 +1,20 @@
 import { useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { StyleSheet, View } from 'react-native';
+import { useFeedback } from '@/providers/feedback-provider';
 
 export default function SalesDeliveryCreateScreen() {
-  const params = useLocalSearchParams<{ orderName?: string; deliveryNote?: string }>();
+  const params = useLocalSearchParams<{ orderName?: string; deliveryNote?: string; notice?: string }>();
+  const { showSuccess } = useFeedback();
+
+  useEffect(() => {
+    if (params.notice === 'created' && typeof params.deliveryNote === 'string' && params.deliveryNote.trim()) {
+      showSuccess(`已生成发货单：${params.deliveryNote.trim()}`);
+    }
+  }, [params.deliveryNote, params.notice, showSuccess]);
 
   return (
     <AppShell title="销售发货" description="当前已支持从订单页直接发货，发货成功后会带着生成的发货单号跳转到这里。">

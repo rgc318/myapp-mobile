@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
-import { Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -24,6 +24,7 @@ import {
   updateSalesOrderV2,
   type SalesOrderDetailV2,
 } from '@/services/sales';
+import { useFeedback } from '@/providers/feedback-provider';
 
 type EditableOrderItem = {
   itemCode: string;
@@ -35,6 +36,50 @@ type EditableOrderItem = {
   uom: string;
   imageUrl: string;
 };
+
+type CenterDialogState = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  confirmTone?: 'danger' | 'primary';
+  tone?: 'danger' | 'warning' | 'info';
+  onConfirm?: (() => void) | null;
+} | null;
+
+function HighlightedDialogMessage({
+  message,
+  tone,
+}: {
+  message: string;
+  tone: 'danger' | 'warning' | 'info';
+}) {
+  const emphasisColor =
+    tone === 'danger' ? '#DC2626' : tone === 'warning' ? '#D97706' : '#2563EB';
+  const parts = message.split(
+    /(已开票|已出货|已作废|不可编辑|不可直接作废|不能直接修改|不能直接作废|高风险操作|收款回退|销售发票|发货单|库存会自动回退|确认作废|作废订单|结算阶段|收款或结算阶段|已生成新订单|已作废。|[A-Z]{2,}(?:-[A-Z]+)?-\d{4}-\d{5})/g,
+  );
+
+  return (
+    <ThemedText style={styles.dialogMessage}>
+      {parts.filter(Boolean).map((part, index) => {
+        const isEmphasis =
+          /(已开票|已出货|已作废|不可编辑|不可直接作废|不能直接修改|不能直接作废|高风险操作|收款回退|销售发票|发货单|库存会自动回退|确认作废|作废订单|结算阶段|收款或结算阶段|已生成新订单|[A-Z]{2,}(?:-[A-Z]+)?-\d{4}-\d{5})/.test(
+            part,
+          );
+
+        return (
+          <ThemedText
+            key={`${part}-${index}`}
+            style={isEmphasis ? [styles.dialogMessageEmphasis, { color: emphasisColor }] : undefined}
+            type={isEmphasis ? 'defaultSemiBold' : 'default'}
+          >
+            {part}
+          </ThemedText>
+        );
+      })}
+    </ThemedText>
+  );
+}
 
 function EditableSalesItemRow({
   item,
@@ -239,12 +284,14 @@ export default function SalesOrderDetailScreen() {
   const [remarksInput, setRemarksInput] = useState('');
   const [editableItems, setEditableItems] = useState<EditableOrderItem[]>([]);
   const [itemUomOptions, setItemUomOptions] = useState<Record<string, string[]>>({});
+  const [centerDialog, setCenterDialog] = useState<CenterDialogState>(null);
 
   const background = useThemeColor({}, 'background');
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const tintColor = useThemeColor({}, 'tint');
+  const { showError, showInfo, showSuccess } = useFeedback();
 
   useEffect(() => {
     if (!orderName) {
@@ -396,7 +443,6 @@ export default function SalesOrderDetailScreen() {
 
     try {
       setIsSavingContact(true);
-      setMessage('');
       const nextDetail = await updateSalesOrderV2({
         orderName,
         deliveryDate: deliveryDateInput,
@@ -408,10 +454,10 @@ export default function SalesOrderDetailScreen() {
 
       setDetail(nextDetail);
       setIsEditingContact(false);
-      setMessage('收货与联系人已更新。');
+      showSuccess('收货与联系人已更新。');
     } catch (error) {
       const appError = normalizeAppError(error, '订单保存失败。');
-      setMessage(appError.message);
+      showError(appError.message);
     } finally {
       setIsSavingContact(false);
     }
@@ -424,19 +470,45 @@ export default function SalesOrderDetailScreen() {
 
     try {
       setIsCancelling(true);
-      setMessage('');
       const nextDetail = await cancelSalesOrderV2(orderName);
       setDetail(nextDetail);
       setIsEditingContact(false);
       setIsEditingItems(false);
       setIsEditingRemarks(false);
-      setMessage('订单已作废。');
+      showSuccess('订单已作废。');
     } catch (error) {
       const appError = normalizeAppError(error, '订单作废失败。');
-      setMessage(appError.message);
+      showError(appError.message);
     } finally {
       setIsCancelling(false);
     }
+  }
+
+  function confirmCancelOrder() {
+    if (!orderName || !detail || detail.documentStatus === 'cancelled' || isCancelling) {
+      return;
+    }
+
+    const cancelRestriction = getCancelRestrictionMessage();
+    if (cancelRestriction) {
+      setCenterDialog({
+        title: '当前订单不可直接作废',
+        message: cancelRestriction,
+        tone: 'danger',
+      });
+      return;
+    }
+
+    setCenterDialog({
+      title: '确认作废订单？',
+      message: '作废订单属于高风险操作。作废后订单将不能继续正常流转；如果已经存在关联业务单据，系统也可能阻止作废。',
+      confirmLabel: '确认作废',
+      confirmTone: 'danger',
+      tone: 'danger',
+      onConfirm: () => {
+        void handleCancelOrder();
+      },
+    });
   }
 
   async function handleSubmitDelivery() {
@@ -446,24 +518,24 @@ export default function SalesOrderDetailScreen() {
 
     try {
       setIsSubmittingDelivery(true);
-      setMessage('');
       const result = await submitSalesOrderDeliveryV2(orderName);
       if (result.detail) {
         setDetail(result.detail);
       }
-      setMessage(result.deliveryNote ? `发货成功，已创建发货单 ${result.deliveryNote}。` : '发货成功。');
+      showSuccess(result.deliveryNote ? `发货成功，已创建发货单 ${result.deliveryNote}。` : '发货成功。');
       if (result.deliveryNote) {
         router.push({
           pathname: '/sales/delivery/create',
           params: {
             orderName,
             deliveryNote: result.deliveryNote,
+            notice: 'created',
           },
         });
       }
     } catch (error) {
       const appError = normalizeAppError(error, '发货失败。');
-      setMessage(appError.message);
+      showError(appError.message);
     } finally {
       setIsSubmittingDelivery(false);
     }
@@ -476,24 +548,24 @@ export default function SalesOrderDetailScreen() {
 
     try {
       setIsCreatingInvoice(true);
-      setMessage('');
       const result = await createSalesInvoiceForOrderV2(orderName);
       if (result.detail) {
         setDetail(result.detail);
       }
-      setMessage(result.salesInvoice ? `开票成功，已创建销售发票 ${result.salesInvoice}。` : '开票成功。');
+      showSuccess(result.salesInvoice ? `开票成功，已创建销售发票 ${result.salesInvoice}。` : '开票成功。');
       if (result.salesInvoice) {
         router.push({
           pathname: '/sales/invoice/create',
           params: {
             sourceName: orderName,
             salesInvoice: result.salesInvoice,
+            notice: 'created',
           },
         });
       }
     } catch (error) {
       const appError = normalizeAppError(error, '开票失败。');
-      setMessage(appError.message);
+      showError(appError.message);
     } finally {
       setIsCreatingInvoice(false);
     }
@@ -564,6 +636,9 @@ export default function SalesOrderDetailScreen() {
   }
 
   function startEditingContact() {
+    if (!ensureOrderEditable()) {
+      return;
+    }
     setIsEditingItems(false);
     setIsEditingRemarks(false);
     setDeliveryDateInput(detail?.deliveryDate ?? '');
@@ -574,6 +649,9 @@ export default function SalesOrderDetailScreen() {
   }
 
   function startEditingItems() {
+    if (!ensureOrderEditable()) {
+      return;
+    }
     setIsEditingContact(false);
     setIsEditingRemarks(false);
     const nextItems =
@@ -616,7 +694,6 @@ export default function SalesOrderDetailScreen() {
 
     try {
       setIsSavingItems(true);
-      setMessage('');
       const itemUpdateResult = await updateSalesOrderItemsV2({
         orderName,
         items: editableItems.map((item) => ({
@@ -635,23 +712,28 @@ export default function SalesOrderDetailScreen() {
       clearSalesOrderDraft(orderDraftScope);
 
       if (itemUpdateResult.orderName !== orderName) {
-        setMessage(`商品修改已生效，系统已生成新订单 ${itemUpdateResult.orderName}，原订单 ${itemUpdateResult.sourceOrderName || orderName} 已作废。`);
+        showInfo(
+          `商品修改已生效，系统已生成新订单 ${itemUpdateResult.orderName}，原订单 ${itemUpdateResult.sourceOrderName || orderName} 已作废。`,
+        );
         router.replace({
           pathname: '/sales/order/[orderName]',
           params: { orderName: itemUpdateResult.orderName },
         });
       } else {
-        setMessage('商品明细已更新。');
+        showSuccess('商品明细已更新。');
       }
     } catch (error) {
       const appError = normalizeAppError(error, '商品保存失败。');
-      setMessage(appError.message);
+      showError(appError.message);
     } finally {
       setIsSavingItems(false);
     }
   }
 
   function startEditingRemarks() {
+    if (!ensureOrderEditable()) {
+      return;
+    }
     setIsEditingContact(false);
     setIsEditingItems(false);
     setRemarksInput(detail?.remarks ?? '');
@@ -670,17 +752,16 @@ export default function SalesOrderDetailScreen() {
 
     try {
       setIsSavingRemarks(true);
-      setMessage('');
       const nextDetail = await updateSalesOrderV2({
         orderName,
         remarks: remarksInput,
       });
       setDetail(nextDetail);
       setIsEditingRemarks(false);
-      setMessage('订单备注已更新。');
+      showSuccess('订单备注已更新。');
     } catch (error) {
       const appError = normalizeAppError(error, '备注保存失败。');
-      setMessage(appError.message);
+      showError(appError.message);
     } finally {
       setIsSavingRemarks(false);
     }
@@ -739,6 +820,13 @@ export default function SalesOrderDetailScreen() {
       pathname: '/sales/payment/create',
       params: {
         referenceName: detail.latestSalesInvoice,
+        defaultPaidAmount:
+          detail.outstandingAmount != null
+            ? String(detail.outstandingAmount)
+            : detail.grandTotal != null
+              ? String(detail.grandTotal)
+              : '',
+        currency: detail.currency || 'CNY',
       },
     });
   }
@@ -749,7 +837,72 @@ export default function SalesOrderDetailScreen() {
     resetRemarksForm();
   }
 
+  function getEditRestrictionMessage() {
+    if (!detail) {
+      return '';
+    }
+
+    if (detail.documentStatus === 'cancelled') {
+      return '当前订单已作废，不能继续修改。';
+    }
+
+    if (detail.paymentStatus === 'paid' || (detail.paidAmount ?? 0) > 0) {
+      return '当前订单已经进入收款或结算阶段，不能直接修改。若需调整，请先处理收款回退，再按业务单据链回退销售发票和发货单。';
+    }
+
+    if (detail.latestSalesInvoice) {
+      return `当前订单已开票，不能直接修改。若需调整，请先作废销售发票 ${detail.latestSalesInvoice}，如有需要再继续回退发货单。`;
+    }
+
+    if (detail.latestDeliveryNote) {
+      return `当前订单已出货，不能直接修改。若需调整，请先作废发货单 ${detail.latestDeliveryNote}。作废后库存会自动回退，再返回订单修改。`;
+    }
+
+    return '';
+  }
+
+  function getCancelRestrictionMessage() {
+    if (!detail) {
+      return '';
+    }
+
+    if (detail.documentStatus === 'cancelled') {
+      return '当前订单已作废，无需重复处理。';
+    }
+
+    if (detail.paymentStatus === 'paid' || (detail.paidAmount ?? 0) > 0) {
+      return '当前订单已经进入收款或结算阶段，不能直接作废。请先处理收款回退，再按顺序回退销售发票和发货单。';
+    }
+
+    if (detail.latestSalesInvoice) {
+      return `当前订单已开票，不能直接作废。请先作废销售发票 ${detail.latestSalesInvoice}，再根据需要处理发货单与订单。`;
+    }
+
+    if (detail.latestDeliveryNote) {
+      return `当前订单已出货，不能直接作废。请先作废发货单 ${detail.latestDeliveryNote}，库存回退后再处理订单。`;
+    }
+
+    return '';
+  }
+
+  function ensureOrderEditable() {
+    const editRestriction = getEditRestrictionMessage();
+    if (!editRestriction) {
+      return true;
+    }
+
+    setCenterDialog({
+      title: '当前订单不可编辑',
+      message: editRestriction,
+      tone: 'warning',
+    });
+    return false;
+  }
+
   function startEditingAll() {
+    if (!ensureOrderEditable()) {
+      return;
+    }
     prepareAllEditingInputs();
     setIsEditingContact(true);
     setIsEditingItems(true);
@@ -807,7 +960,6 @@ export default function SalesOrderDetailScreen() {
       setIsSavingContact(true);
       setIsSavingItems(true);
       setIsSavingRemarks(true);
-      setMessage('');
 
       const nextDetail = await updateSalesOrderV2({
         orderName,
@@ -841,17 +993,19 @@ export default function SalesOrderDetailScreen() {
       clearSalesOrderDraft(orderDraftScope);
 
       if (itemUpdateResult.orderName !== orderName) {
-        setMessage(`订单修改已生效，系统已生成新订单 ${itemUpdateResult.orderName}，原订单 ${itemUpdateResult.sourceOrderName || orderName} 已作废。`);
+        showInfo(
+          `订单修改已生效，系统已生成新订单 ${itemUpdateResult.orderName}，原订单 ${itemUpdateResult.sourceOrderName || orderName} 已作废。`,
+        );
         router.replace({
           pathname: '/sales/order/[orderName]',
           params: { orderName: itemUpdateResult.orderName },
         });
       } else {
-        setMessage('订单修改已保存。');
+        showSuccess('订单修改已保存。');
       }
     } catch (error) {
       const appError = normalizeAppError(error, '订单保存失败。');
-      setMessage(appError.message);
+      showError(appError.message);
     } finally {
       setIsSavingContact(false);
       setIsSavingItems(false);
@@ -1302,8 +1456,8 @@ export default function SalesOrderDetailScreen() {
           <>
             <Pressable
               accessibilityRole="button"
-              disabled={isCancelling || isSubmittingDelivery || isCreatingInvoice || detail?.documentStatus === 'cancelled'}
-              onPress={handleCancelOrder}
+              disabled={isCancelling || isSubmittingDelivery || isCreatingInvoice}
+              onPress={confirmCancelOrder}
               style={[styles.bottomButton, styles.bottomDangerButton]}
             >
               <ThemedText style={styles.bottomDangerText}>
@@ -1312,7 +1466,7 @@ export default function SalesOrderDetailScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              disabled={detail?.documentStatus === 'cancelled'}
+              disabled={isCancelling || isSubmittingDelivery || isCreatingInvoice}
               onPress={startEditingAll}
               style={[styles.bottomButton, styles.bottomPrimaryButton]}
             >
@@ -1321,6 +1475,56 @@ export default function SalesOrderDetailScreen() {
           </>
         )}
       </View>
+
+      <Modal animationType="fade" onRequestClose={() => setCenterDialog(null)} transparent visible={Boolean(centerDialog)}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText
+              style={[
+                styles.dialogTitle,
+                centerDialog?.tone === 'danger'
+                  ? styles.dialogTitleDanger
+                  : centerDialog?.tone === 'warning'
+                    ? styles.dialogTitleWarning
+                    : styles.dialogTitleInfo,
+              ]}
+              type="defaultSemiBold"
+            >
+              {centerDialog?.title}
+            </ThemedText>
+            <HighlightedDialogMessage message={centerDialog?.message || ''} tone={centerDialog?.tone || 'info'} />
+
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setCenterDialog(null)}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}
+              >
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  {centerDialog?.onConfirm ? '取消' : '知道了'}
+                </ThemedText>
+              </Pressable>
+
+              {centerDialog?.onConfirm ? (
+                <Pressable
+                  onPress={() => {
+                    const onConfirm = centerDialog.onConfirm;
+                    setCenterDialog(null);
+                    onConfirm?.();
+                  }}
+                  style={[
+                    styles.dialogButton,
+                    centerDialog.confirmTone === 'danger' ? styles.dialogDangerButton : styles.dialogPrimaryButton,
+                  ]}
+                >
+                  <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                    {centerDialog.confirmLabel || '确认'}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1809,6 +2013,71 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontSize: 13,
     paddingHorizontal: 4,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.36)',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  dialogCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    maxWidth: 420,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    width: '100%',
+  },
+  dialogTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+  },
+  dialogTitleDanger: {
+    color: '#B91C1C',
+  },
+  dialogTitleWarning: {
+    color: '#B45309',
+  },
+  dialogTitleInfo: {
+    color: '#1D4ED8',
+  },
+  dialogMessage: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  dialogMessageEmphasis: {
+    lineHeight: 22,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  dialogButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingHorizontal: 12,
+  },
+  dialogGhostButton: {
+    borderWidth: 1,
+  },
+  dialogPrimaryButton: {
+    backgroundColor: '#2563EB',
+  },
+  dialogDangerButton: {
+    backgroundColor: '#DC2626',
+  },
+  dialogGhostText: {
+    color: '#0F172A',
+  },
+  dialogPrimaryText: {
+    color: '#FFFFFF',
   },
   bottomBar: {
     borderTopWidth: 1,

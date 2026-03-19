@@ -11,6 +11,7 @@ import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { normalizeText, requireText, toOptionalText } from '@/lib/form-utils';
 import {
+  clearSalesOrderDraft,
   getSalesOrderDraft,
   removeSalesOrderDraftItem,
   restoreSalesOrderDraftItem,
@@ -510,7 +511,7 @@ export default function SalesOrderCreateScreen() {
     setIsSubmitting(true);
 
     try {
-      await submitSalesOrderV2({
+      const result = await submitSalesOrderV2({
         customer,
         company,
         transaction_date: postingDate,
@@ -533,9 +534,24 @@ export default function SalesOrderCreateScreen() {
         })),
       });
 
+      const orderName =
+        typeof result?.order === 'string' && result.order.trim()
+          ? result.order.trim()
+          : typeof result?.order_name === 'string' && result.order_name.trim()
+            ? result.order_name.trim()
+            : '';
+
+      clearSalesOrderDraft();
       syncDraft();
-      setStatusMessage('销售单已按 v2 接口创建。', 'success');
-      showSuccess('销售单已创建。');
+      setStatusMessage(orderName ? `销售单 ${orderName} 已创建。` : '销售单已按 v2 接口创建。', 'success');
+      showSuccess(orderName ? `销售单 ${orderName} 已创建。` : '销售单已创建。');
+
+      if (orderName) {
+        router.replace({
+          pathname: '/sales/order/[orderName]',
+          params: { orderName },
+        });
+      }
     } catch (error) {
       const appError = normalizeAppError(error, '提交失败，请稍后重试。');
       setStatusMessage(
