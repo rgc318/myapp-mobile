@@ -258,6 +258,70 @@ Additional follow-up work after the first v2 alignment focused on making the ord
 
 - amendment flow messaging
   - when submitted-order item changes trigger `update_order_items_v2`, the backend may cancel the original order and create a replacement order
+
+## Order-Detail Interaction Update (2026-03-19)
+
+This round continued refining the mobile sales-order detail page interaction model.
+
+### Main Interaction Decisions
+
+- keep workflow actions away from the bottom primary action area
+  - delivery / invoicing actions now live in the top-right action slot
+  - this avoids the common mobile misunderstanding where the largest bottom button is assumed to mean "save"
+
+- restore a bottom-level order-edit entry
+  - non-edit mode bottom actions are now:
+    - `作废订单`
+    - `编辑订单`
+  - this keeps the page aligned with common mobile habits where the main bottom-right button is the main edit entry
+
+- keep section-level edit affordances
+  - each editable block still keeps its own local `修改` entry:
+    - delivery/contact snapshot
+    - sales items
+    - order remark
+  - these entries allow focused partial edits without forcing the whole page into edit mode
+
+- support full-order edit from the bottom button
+  - `编辑订单` now enters a true all-section edit state
+  - it enables:
+    - contact / address / delivery-date editing
+    - item editing
+    - remark editing
+  - the bottom bar then switches to:
+    - `取消修改`
+    - `保存修改`
+
+- bottom save now represents the active edit context correctly
+  - if the user entered edit through one local module, bottom save only saves that module
+  - if the user entered edit through `编辑订单`, bottom save performs a full-order save:
+    - `update_order_v2`
+    - then `update_order_items_v2`
+  - amendment replacement behavior is preserved when item updates require a new order revision
+
+### Why This Was Chosen
+
+- fully section-only editing made the page feel fragmented and removed the expected main edit entrance
+- fully global editing made it too easy to confuse edit/save actions with workflow actions such as delivery
+- the adopted hybrid model matches the current backend split better:
+  - order-header updates
+  - order-item updates
+  - workflow actions
+
+### Current Order-Detail UX Rule
+
+- top-right:
+  - workflow action such as `出货` / `开票`
+- section header:
+  - local `修改`
+- bottom in browse mode:
+  - `作废订单`
+  - `编辑订单`
+- bottom in edit mode:
+  - `取消修改`
+  - `保存修改`
+
+This rule should be preserved unless the whole order-detail IA is redesigned again.
   - the frontend should not present this as "save turned the order into a cancelled order"
   - current behavior:
     - the detail page now shows a clearer amendment message when a new order is generated

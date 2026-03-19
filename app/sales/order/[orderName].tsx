@@ -17,7 +17,9 @@ import {
 import { fetchProductDetail } from '@/services/products';
 import {
   cancelSalesOrderV2,
+  createSalesInvoiceForOrderV2,
   getSalesOrderDetailV2,
+  submitSalesOrderDeliveryV2,
   updateSalesOrderItemsV2,
   updateSalesOrderV2,
   type SalesOrderDetailV2,
@@ -218,9 +220,15 @@ export default function SalesOrderDetailScreen() {
 
   const [detail, setDetail] = useState<SalesOrderDetailV2 | null>(null);
   const [message, setMessage] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [isEditingItems, setIsEditingItems] = useState(false);
+  const [isEditingRemarks, setIsEditingRemarks] = useState(false);
+  const [isSavingContact, setIsSavingContact] = useState(false);
+  const [isSavingItems, setIsSavingItems] = useState(false);
+  const [isSavingRemarks, setIsSavingRemarks] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isSubmittingDelivery, setIsSubmittingDelivery] = useState(false);
+  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [deliveryDateInput, setDeliveryDateInput] = useState('');
   const [contactDisplayInput, setContactDisplayInput] = useState('');
   const [contactPhoneInput, setContactPhoneInput] = useState('');
@@ -282,7 +290,7 @@ export default function SalesOrderDetailScreen() {
   }, [orderName]);
 
   useEffect(() => {
-    if (!isFocused || !isEditing) {
+    if (!isFocused || !isEditingItems) {
       return;
     }
 
@@ -303,10 +311,10 @@ export default function SalesOrderDetailScreen() {
         imageUrl: item.imageUrl ?? '',
       })),
     );
-  }, [isEditing, isFocused, orderDraftScope]);
+  }, [isEditingItems, isFocused, orderDraftScope]);
 
   useEffect(() => {
-    if (!isEditing || !editableItems.length) {
+    if (!isEditingItems || !editableItems.length) {
       return;
     }
 
@@ -362,27 +370,29 @@ export default function SalesOrderDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [detail?.company, editableItems, isEditing, itemUomOptions]);
+  }, [detail?.company, editableItems, isEditingItems, itemUomOptions]);
 
   const statusTone = getStatusTone(detail);
   const businessStatus = getBusinessStatusLabel(detail);
+  const isEditingAnySection = isEditingContact || isEditingItems || isEditingRemarks;
+  const isEditingAllSections = isEditingContact && isEditingItems && isEditingRemarks;
   const totalQuantity = useMemo(
     () =>
-      (isEditing ? editableItems : detail?.items ?? []).reduce((count, item) => count + (item.qty ?? 0), 0),
-    [detail, editableItems, isEditing],
+      (isEditingItems ? editableItems : detail?.items ?? []).reduce((count, item) => count + (item.qty ?? 0), 0),
+    [detail, editableItems, isEditingItems],
   );
   const editingGrandTotal = useMemo(
     () => editableItems.reduce((sum, item) => sum + (item.rate ?? 0) * item.qty, 0),
     [editableItems],
   );
 
-  async function handleSave() {
+  async function handleSaveContact() {
     if (!orderName) {
       return;
     }
 
     try {
-      setIsSaving(true);
+      setIsSavingContact(true);
       setMessage('');
       const nextDetail = await updateSalesOrderV2({
         orderName,
@@ -393,65 +403,14 @@ export default function SalesOrderDetailScreen() {
         shippingAddressText: addressInput,
       });
 
-      let finalDetail = nextDetail;
-      let nextOrderName = orderName;
-      let amendmentSourceOrderName: string | null = null;
-      if (isEditing) {
-        const itemsChanged =
-          JSON.stringify(
-            editableItems.map((item) => ({
-              itemCode: item.itemCode,
-              qty: item.qty,
-              rate: item.rate,
-              warehouse: item.warehouse,
-              uom: item.uom,
-            })),
-          ) !==
-          JSON.stringify(
-            (detail?.items ?? []).map((item) => ({
-              itemCode: item.itemCode,
-              qty: item.qty ?? 0,
-              rate: item.rate,
-              warehouse: item.warehouse,
-              uom: item.uom,
-            })),
-          );
-
-        if (itemsChanged) {
-          const itemUpdateResult = await updateSalesOrderItemsV2({
-            orderName,
-            items: editableItems.map((item) => ({
-              itemCode: item.itemCode,
-              qty: item.qty,
-              price: item.rate,
-              warehouse: item.warehouse,
-              uom: item.uom,
-            })),
-          });
-          finalDetail = itemUpdateResult.detail;
-          nextOrderName = itemUpdateResult.orderName;
-          amendmentSourceOrderName = itemUpdateResult.sourceOrderName;
-        }
-      }
-
-      setDetail(finalDetail);
-      setIsEditing(false);
-      if (nextOrderName !== orderName) {
-        clearSalesOrderDraft(orderDraftScope);
-        setMessage(`商品修改已生效，系统已生成新订单 ${nextOrderName}，原订单 ${amendmentSourceOrderName || orderName} 已作废。`);
-        router.replace({
-          pathname: '/sales/order/[orderName]',
-          params: { orderName: nextOrderName },
-        });
-      } else {
-        clearSalesOrderDraft(orderDraftScope);
-        setMessage('订单信息已更新。');
-      }
+      setDetail(nextDetail);
+      setIsEditingContact(false);
+      setMessage('收货与联系人已更新。');
     } catch (error) {
       const appError = normalizeAppError(error, '订单保存失败。');
       setMessage(appError.message);
     } finally {
-      setIsSaving(false);
+      setIsSavingContact(false);
     }
   }
 
@@ -465,7 +424,9 @@ export default function SalesOrderDetailScreen() {
       setMessage('');
       const nextDetail = await cancelSalesOrderV2(orderName);
       setDetail(nextDetail);
-      setIsEditing(false);
+      setIsEditingContact(false);
+      setIsEditingItems(false);
+      setIsEditingRemarks(false);
       setMessage('订单已作废。');
     } catch (error) {
       const appError = normalizeAppError(error, '订单作废失败。');
@@ -475,13 +436,58 @@ export default function SalesOrderDetailScreen() {
     }
   }
 
-  function resetForm() {
+  async function handleSubmitDelivery() {
+    if (!orderName || !detail?.canSubmitDelivery) {
+      return;
+    }
+
+    try {
+      setIsSubmittingDelivery(true);
+      setMessage('');
+      const result = await submitSalesOrderDeliveryV2(orderName);
+      if (result.detail) {
+        setDetail(result.detail);
+      }
+      setMessage(result.deliveryNote ? `发货成功，已创建发货单 ${result.deliveryNote}。` : '发货成功。');
+    } catch (error) {
+      const appError = normalizeAppError(error, '发货失败。');
+      setMessage(appError.message);
+    } finally {
+      setIsSubmittingDelivery(false);
+    }
+  }
+
+  async function handleCreateInvoice() {
+    if (!orderName || !detail?.canCreateSalesInvoice) {
+      return;
+    }
+
+    try {
+      setIsCreatingInvoice(true);
+      setMessage('');
+      const result = await createSalesInvoiceForOrderV2(orderName);
+      if (result.detail) {
+        setDetail(result.detail);
+      }
+      setMessage(result.salesInvoice ? `开票成功，已创建销售发票 ${result.salesInvoice}。` : '开票成功。');
+    } catch (error) {
+      const appError = normalizeAppError(error, '开票失败。');
+      setMessage(appError.message);
+    } finally {
+      setIsCreatingInvoice(false);
+    }
+  }
+
+  function resetContactForm() {
     setDeliveryDateInput(detail?.deliveryDate ?? '');
     setContactDisplayInput(detail?.contactDisplay ?? detail?.contactPerson ?? '');
     setContactPhoneInput(detail?.contactPhone ?? '');
     setAddressInput(detail?.addressDisplay ?? '');
-    setRemarksInput(detail?.remarks ?? '');
-    setEditableItems(
+    setIsEditingContact(false);
+  }
+
+  function prepareAllEditingInputs() {
+    const nextItems =
       detail?.items.map((item) => ({
         itemCode: item.itemCode,
         itemName: item.itemName,
@@ -491,10 +497,15 @@ export default function SalesOrderDetailScreen() {
         warehouse: item.warehouse,
         uom: item.uom,
         imageUrl: item.imageUrl,
-      })) ?? [],
-    );
-    clearSalesOrderDraft(orderDraftScope);
-    setIsEditing(false);
+      })) ?? [];
+
+    setDeliveryDateInput(detail?.deliveryDate ?? '');
+    setContactDisplayInput(detail?.contactDisplay ?? detail?.contactPerson ?? '');
+    setContactPhoneInput(detail?.contactPhone ?? '');
+    setAddressInput(detail?.addressDisplay ?? '');
+    setRemarksInput(detail?.remarks ?? '');
+    setEditableItems(nextItems);
+    syncScopedDraft(nextItems);
   }
 
   function updateEditableItem(index: number, patch: Partial<EditableOrderItem>) {
@@ -531,7 +542,19 @@ export default function SalesOrderDetailScreen() {
     );
   }
 
-  function startEditing() {
+  function startEditingContact() {
+    setIsEditingItems(false);
+    setIsEditingRemarks(false);
+    setDeliveryDateInput(detail?.deliveryDate ?? '');
+    setContactDisplayInput(detail?.contactDisplay ?? detail?.contactPerson ?? '');
+    setContactPhoneInput(detail?.contactPhone ?? '');
+    setAddressInput(detail?.addressDisplay ?? '');
+    setIsEditingContact(true);
+  }
+
+  function startEditingItems() {
+    setIsEditingContact(false);
+    setIsEditingRemarks(false);
     const nextItems =
       detail?.items.map((item) => ({
         itemCode: item.itemCode,
@@ -543,15 +566,103 @@ export default function SalesOrderDetailScreen() {
         uom: item.uom,
         imageUrl: item.imageUrl,
       })) ?? [];
-
-    setDeliveryDateInput(detail?.deliveryDate ?? '');
-    setContactDisplayInput(detail?.contactDisplay ?? detail?.contactPerson ?? '');
-    setContactPhoneInput(detail?.contactPhone ?? '');
-    setAddressInput(detail?.addressDisplay ?? '');
-    setRemarksInput(detail?.remarks ?? '');
     setEditableItems(nextItems);
     syncScopedDraft(nextItems);
-    setIsEditing(true);
+    setIsEditingItems(true);
+  }
+
+  function resetItemsForm() {
+    setEditableItems(
+      detail?.items.map((item) => ({
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        qty: item.qty ?? 1,
+        rate: item.rate,
+        amount: item.amount,
+        warehouse: item.warehouse,
+        uom: item.uom,
+        imageUrl: item.imageUrl,
+      })) ?? [],
+    );
+    clearSalesOrderDraft(orderDraftScope);
+    setIsEditingItems(false);
+  }
+
+  async function handleSaveItems() {
+    if (!orderName) {
+      return;
+    }
+
+    try {
+      setIsSavingItems(true);
+      setMessage('');
+      const itemUpdateResult = await updateSalesOrderItemsV2({
+        orderName,
+        items: editableItems.map((item) => ({
+          itemCode: item.itemCode,
+          qty: item.qty,
+          price: item.rate,
+          warehouse: item.warehouse,
+          uom: item.uom,
+        })),
+      });
+
+      if (itemUpdateResult.detail) {
+        setDetail(itemUpdateResult.detail);
+      }
+      setIsEditingItems(false);
+      clearSalesOrderDraft(orderDraftScope);
+
+      if (itemUpdateResult.orderName !== orderName) {
+        setMessage(`商品修改已生效，系统已生成新订单 ${itemUpdateResult.orderName}，原订单 ${itemUpdateResult.sourceOrderName || orderName} 已作废。`);
+        router.replace({
+          pathname: '/sales/order/[orderName]',
+          params: { orderName: itemUpdateResult.orderName },
+        });
+      } else {
+        setMessage('商品明细已更新。');
+      }
+    } catch (error) {
+      const appError = normalizeAppError(error, '商品保存失败。');
+      setMessage(appError.message);
+    } finally {
+      setIsSavingItems(false);
+    }
+  }
+
+  function startEditingRemarks() {
+    setIsEditingContact(false);
+    setIsEditingItems(false);
+    setRemarksInput(detail?.remarks ?? '');
+    setIsEditingRemarks(true);
+  }
+
+  function resetRemarksForm() {
+    setRemarksInput(detail?.remarks ?? '');
+    setIsEditingRemarks(false);
+  }
+
+  async function handleSaveRemarks() {
+    if (!orderName) {
+      return;
+    }
+
+    try {
+      setIsSavingRemarks(true);
+      setMessage('');
+      const nextDetail = await updateSalesOrderV2({
+        orderName,
+        remarks: remarksInput,
+      });
+      setDetail(nextDetail);
+      setIsEditingRemarks(false);
+      setMessage('订单备注已更新。');
+    } catch (error) {
+      const appError = normalizeAppError(error, '备注保存失败。');
+      setMessage(appError.message);
+    } finally {
+      setIsSavingRemarks(false);
+    }
   }
 
   function openProductSearch() {
@@ -569,6 +680,138 @@ export default function SalesOrderDetailScreen() {
       },
     });
   }
+
+  function resetAllForms() {
+    resetContactForm();
+    resetItemsForm();
+    resetRemarksForm();
+  }
+
+  function startEditingAll() {
+    prepareAllEditingInputs();
+    setIsEditingContact(true);
+    setIsEditingItems(true);
+    setIsEditingRemarks(true);
+  }
+
+  const workflowAction = detail?.canSubmitDelivery
+    ? {
+        label: isSubmittingDelivery ? '出货中...' : '出货',
+        onPress: handleSubmitDelivery,
+        disabled: isSubmittingDelivery || isCreatingInvoice || isCancelling,
+        tone: 'primary' as const,
+      }
+      : detail?.canCreateSalesInvoice
+      ? {
+          label: isCreatingInvoice ? '开票中...' : '开票',
+          onPress: handleCreateInvoice,
+          disabled: isCreatingInvoice || isSubmittingDelivery || isCancelling,
+          tone: 'primary' as const,
+        }
+      : {
+          label: '操作',
+          onPress: startEditingContact,
+          disabled: detail?.documentStatus === 'cancelled',
+          tone: 'ghost' as const,
+        };
+
+  async function handleSaveAll() {
+    if (!orderName) {
+      return;
+    }
+
+    try {
+      setIsSavingContact(true);
+      setIsSavingItems(true);
+      setIsSavingRemarks(true);
+      setMessage('');
+
+      const nextDetail = await updateSalesOrderV2({
+        orderName,
+        deliveryDate: deliveryDateInput,
+        remarks: remarksInput,
+        contactDisplay: contactDisplayInput,
+        contactPhone: contactPhoneInput,
+        shippingAddressText: addressInput,
+      });
+
+      let finalDetail = nextDetail;
+      const itemUpdateResult = await updateSalesOrderItemsV2({
+        orderName,
+        items: editableItems.map((item) => ({
+          itemCode: item.itemCode,
+          qty: item.qty,
+          price: item.rate,
+          warehouse: item.warehouse,
+          uom: item.uom,
+        })),
+      });
+
+      if (itemUpdateResult.detail) {
+        finalDetail = itemUpdateResult.detail;
+      }
+
+      setDetail(finalDetail);
+      setIsEditingContact(false);
+      setIsEditingItems(false);
+      setIsEditingRemarks(false);
+      clearSalesOrderDraft(orderDraftScope);
+
+      if (itemUpdateResult.orderName !== orderName) {
+        setMessage(`订单修改已生效，系统已生成新订单 ${itemUpdateResult.orderName}，原订单 ${itemUpdateResult.sourceOrderName || orderName} 已作废。`);
+        router.replace({
+          pathname: '/sales/order/[orderName]',
+          params: { orderName: itemUpdateResult.orderName },
+        });
+      } else {
+        setMessage('订单修改已保存。');
+      }
+    } catch (error) {
+      const appError = normalizeAppError(error, '订单保存失败。');
+      setMessage(appError.message);
+    } finally {
+      setIsSavingContact(false);
+      setIsSavingItems(false);
+      setIsSavingRemarks(false);
+    }
+  }
+
+  const currentSaveHandler = isEditingAllSections
+    ? handleSaveAll
+    : isEditingItems
+      ? handleSaveItems
+      : isEditingRemarks
+        ? handleSaveRemarks
+        : handleSaveContact;
+  const currentCancelHandler = isEditingAllSections
+    ? resetAllForms
+    : isEditingItems
+      ? resetItemsForm
+      : isEditingRemarks
+        ? resetRemarksForm
+        : resetContactForm;
+  const isSavingCurrentSection = isEditingAllSections
+    ? isSavingContact || isSavingItems || isSavingRemarks
+    : isEditingItems
+      ? isSavingItems
+      : isEditingRemarks
+        ? isSavingRemarks
+        : isSavingContact;
+  const currentSaveLabel = isEditingAllSections
+    ? isSavingCurrentSection
+      ? '保存订单中...'
+      : '保存修改'
+    : isEditingItems
+      ? isSavingItems
+        ? '保存商品中...'
+        : '保存修改'
+      : isEditingRemarks
+        ? isSavingRemarks
+          ? '保存备注中...'
+          : '保存修改'
+        : isSavingContact
+          ? '保存信息中...'
+          : '保存修改';
 
   function stepEditableItemQty(index: number, delta: number) {
     setEditableItems((current) =>
@@ -617,7 +860,27 @@ export default function SalesOrderDetailScreen() {
           <ThemedText style={styles.pageTitle} type="title">
             销售单详情
           </ThemedText>
-          <View style={styles.topIconButton} />
+          {isEditingAnySection ? (
+            <View style={styles.topActionPlaceholder} />
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              disabled={workflowAction.disabled}
+              onPress={workflowAction.onPress}
+              style={[
+                styles.topActionButton,
+                workflowAction.tone === 'primary' ? styles.topActionPrimaryButton : styles.topActionGhostButton,
+                workflowAction.tone === 'ghost' ? { borderColor } : null,
+              ]}
+            >
+              <ThemedText
+                style={workflowAction.tone === 'primary' ? styles.topActionPrimaryText : styles.topActionGhostText}
+                type="defaultSemiBold"
+              >
+                {workflowAction.label}
+              </ThemedText>
+            </Pressable>
+          )}
         </View>
 
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
@@ -673,14 +936,14 @@ export default function SalesOrderDetailScreen() {
             <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
               收货与联系人
             </ThemedText>
-            <Pressable onPress={isEditing ? resetForm : startEditing} style={styles.linkButton}>
+            <Pressable onPress={isEditingContact ? resetContactForm : startEditingContact} style={styles.linkButton}>
               <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
-                {isEditing ? '收起' : '修改'}
+                {isEditingContact ? '取消' : '修改'}
               </ThemedText>
             </Pressable>
           </View>
 
-          {isEditing ? (
+          {isEditingContact ? (
             <View style={styles.formBlock}>
               <View style={[styles.editField, { backgroundColor: surfaceMuted }]}>
                 <ThemedText style={styles.editFieldLabel}>收货人 / 联系展示名</ThemedText>
@@ -728,6 +991,7 @@ export default function SalesOrderDetailScreen() {
                   value={addressInput}
                 />
               </View>
+
             </View>
           ) : (
             <View style={styles.infoStack}>
@@ -739,7 +1003,18 @@ export default function SalesOrderDetailScreen() {
         </View>
 
         <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
-          {isEditing ? (
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+              销售商品
+            </ThemedText>
+            <Pressable onPress={isEditingItems ? resetItemsForm : startEditingItems} style={styles.linkButton}>
+              <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                {isEditingItems ? '取消' : '修改商品'}
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          {isEditingItems ? (
             <View style={styles.quickActionsCard}>
               <Pressable
                 onPress={openProductSearch}
@@ -758,14 +1033,10 @@ export default function SalesOrderDetailScreen() {
               </Pressable>
             </View>
           ) : null}
-
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            销售商品
-          </ThemedText>
           <View style={styles.goodsList}>
             {detail?.items?.length ? (
-              (isEditing ? editableItems : detail.items).map((item, index) =>
-                isEditing ? (
+              (isEditingItems ? editableItems : detail.items).map((item, index) =>
+                isEditingItems ? (
                   <EditableSalesItemRow
                     currency={detail?.currency || 'CNY'}
                     item={item as EditableOrderItem}
@@ -843,28 +1114,37 @@ export default function SalesOrderDetailScreen() {
           <InfoRow label="订单金额" value={formatCurrencyValue(detail?.grandTotal ?? null, detail?.currency || 'CNY')} />
           <InfoRow label="已收金额" value={formatCurrencyValue(detail?.paidAmount ?? null, detail?.currency || 'CNY')} />
           <InfoRow label="未收金额" value={formatCurrencyValue(detail?.outstandingAmount ?? null, detail?.currency || 'CNY')} />
-          {isEditing ? (
-            <InfoRow label="编辑后金额" value={formatCurrencyValue(editingGrandTotal, detail?.currency || 'CNY')} />
+          {isEditingItems ? (
+            <InfoRow label="商品编辑后金额" value={formatCurrencyValue(editingGrandTotal, detail?.currency || 'CNY')} />
           ) : null}
         </View>
 
         <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            订单备注
-          </ThemedText>
-          {isEditing ? (
-            <View style={[styles.editField, styles.textareaField, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.editFieldLabel}>本单备注</ThemedText>
-              <TextInput
-                multiline
-                numberOfLines={5}
-                onChangeText={setRemarksInput}
-                placeholder="输入订单备注"
-                placeholderTextColor="#9AA3B2"
-                style={[styles.editInput, styles.textareaInput]}
-                textAlignVertical="top"
-                value={remarksInput}
-              />
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+              订单备注
+            </ThemedText>
+            <Pressable onPress={isEditingRemarks ? resetRemarksForm : startEditingRemarks} style={styles.linkButton}>
+              <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                {isEditingRemarks ? '取消' : '修改'}
+              </ThemedText>
+            </Pressable>
+          </View>
+          {isEditingRemarks ? (
+            <View>
+              <View style={[styles.editField, styles.textareaField, { backgroundColor: surfaceMuted }]}>
+                <ThemedText style={styles.editFieldLabel}>本单备注</ThemedText>
+                <TextInput
+                  multiline
+                  numberOfLines={5}
+                  onChangeText={setRemarksInput}
+                  placeholder="输入订单备注"
+                  placeholderTextColor="#9AA3B2"
+                  style={[styles.editInput, styles.textareaInput]}
+                  textAlignVertical="top"
+                  value={remarksInput}
+                />
+              </View>
             </View>
           ) : (
             <ThemedText style={styles.noteText}>{detail?.remarks || '暂无备注'}</ThemedText>
@@ -875,30 +1155,30 @@ export default function SalesOrderDetailScreen() {
       </ScrollView>
 
       <View style={[styles.bottomBar, { backgroundColor: background, borderTopColor: borderColor }]}>
-        {isEditing ? (
+        {isEditingAnySection ? (
           <>
             <Pressable
               accessibilityRole="button"
-              disabled={isSaving}
-              onPress={resetForm}
+              disabled={isSavingCurrentSection}
+              onPress={currentCancelHandler}
               style={[styles.bottomButton, styles.bottomGhostButton, { borderColor }]}
             >
-              <ThemedText style={styles.bottomGhostText}>取消</ThemedText>
+              <ThemedText style={styles.bottomGhostText}>取消修改</ThemedText>
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              disabled={isSaving}
-              onPress={handleSave}
+              disabled={isSavingCurrentSection}
+              onPress={currentSaveHandler}
               style={[styles.bottomButton, styles.bottomPrimaryButton]}
             >
-              <ThemedText style={styles.bottomPrimaryText}>{isSaving ? '保存中...' : '保存修改'}</ThemedText>
+              <ThemedText style={styles.bottomPrimaryText}>{currentSaveLabel}</ThemedText>
             </Pressable>
           </>
         ) : (
           <>
             <Pressable
               accessibilityRole="button"
-              disabled={isCancelling || detail?.documentStatus === 'cancelled'}
+              disabled={isCancelling || isSubmittingDelivery || isCreatingInvoice || detail?.documentStatus === 'cancelled'}
               onPress={handleCancelOrder}
               style={[styles.bottomButton, styles.bottomDangerButton]}
             >
@@ -908,10 +1188,11 @@ export default function SalesOrderDetailScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              onPress={() => setIsEditing(true)}
-              style={[styles.bottomButton, styles.bottomGhostButton, { borderColor }]}
+              disabled={detail?.documentStatus === 'cancelled'}
+              onPress={startEditingAll}
+              style={[styles.bottomButton, styles.bottomPrimaryButton]}
             >
-              <ThemedText style={styles.bottomGhostText}>编辑信息</ThemedText>
+              <ThemedText style={styles.bottomPrimaryText}>编辑订单</ThemedText>
             </Pressable>
           </>
         )}
@@ -941,6 +1222,33 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: 'center',
     width: 36,
+  },
+  topActionPlaceholder: {
+    width: 72,
+  },
+  topActionButton: {
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 36,
+    minWidth: 72,
+    paddingHorizontal: 14,
+  },
+  topActionGhostButton: {
+    backgroundColor: '#FFFFFF',
+  },
+  topActionPrimaryButton: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  topActionGhostText: {
+    color: '#0F172A',
+    fontSize: 13,
+  },
+  topActionPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
   },
   pageTitle: {
     flex: 1,
@@ -1379,6 +1687,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     minHeight: 52,
+  },
+  bottomSingleButton: {
+    flex: 1,
   },
   bottomGhostButton: {
     backgroundColor: '#FFFFFF',

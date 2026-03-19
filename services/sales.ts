@@ -43,6 +43,9 @@ export type SalesOrderDetailV2 = {
   customerAddress: string;
   paidAmount: number | null;
   outstandingAmount: number | null;
+  canSubmitDelivery: boolean;
+  canCreateSalesInvoice: boolean;
+  canRecordPayment: boolean;
   items: {
     itemCode: string;
     itemName: string;
@@ -174,6 +177,9 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
     customerAddress: String(shipping.shipping_address_name ?? customer.shipping_address_name ?? ''),
     paidAmount: toOptionalNumber(data.amounts?.paid_amount),
     outstandingAmount: toOptionalNumber(data.amounts?.outstanding_amount),
+    canSubmitDelivery: Boolean(data.actions?.can_submit_delivery),
+    canCreateSalesInvoice: Boolean(data.actions?.can_create_sales_invoice),
+    canRecordPayment: Boolean(data.actions?.can_record_payment),
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),
@@ -237,6 +243,30 @@ export async function updateSalesOrderItemsV2(payload: UpdateSalesOrderItemsPayl
     orderName: nextOrderName,
     sourceOrderName: typeof data?.source_order === 'string' ? data.source_order : payload.orderName,
     detail,
+  };
+}
+
+export async function submitSalesOrderDeliveryV2(orderName: string) {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.submit_delivery', {
+    order_name: orderName,
+    kwargs: {},
+  });
+
+  return {
+    deliveryNote: typeof data?.delivery_note === 'string' ? data.delivery_note : '',
+    detail: await getSalesOrderDetailV2(orderName),
+  };
+}
+
+export async function createSalesInvoiceForOrderV2(orderName: string) {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.create_sales_invoice', {
+    source_name: orderName,
+    kwargs: {},
+  });
+
+  return {
+    salesInvoice: typeof data?.sales_invoice === 'string' ? data.sales_invoice : '',
+    detail: await getSalesOrderDetailV2(orderName),
   };
 }
 
