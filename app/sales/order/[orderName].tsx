@@ -9,6 +9,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { formatCurrencyValue } from '@/lib/display-currency';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { getPaymentResultHandoff, type PaymentResultHandoff } from '@/lib/payment-result-handoff';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -249,11 +250,94 @@ function getStatusTone(detail: SalesOrderDetailV2 | null) {
   return { backgroundColor: '#DBEAFE', color: '#1D4ED8' };
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function getDocumentStatusLabel(value: string) {
+  switch (value) {
+    case 'draft':
+      return '草稿';
+    case 'submitted':
+      return '已提交';
+    case 'cancelled':
+      return '已作废';
+    default:
+      return value || '—';
+  }
+}
+
+function getFulfillmentStatusLabel(value: string) {
+  switch (value) {
+    case 'pending':
+      return '待出货';
+    case 'partial':
+      return '部分出货';
+    case 'shipped':
+      return '已出货';
+    default:
+      return value || '—';
+  }
+}
+
+function getDeliveryStatusLabel(value: string) {
+  switch (value) {
+    case 'pending':
+      return '待发货';
+    case 'partial':
+      return '部分发货';
+    case 'shipped':
+      return '已发货';
+    case 'delivered':
+      return '已送达';
+    case 'unknown':
+      return '状态待确认';
+    default:
+      return value || '—';
+  }
+}
+
+function getPaymentStatusLabel(value: string) {
+  switch (value) {
+    case 'unpaid':
+      return '未收款';
+    case 'partial':
+      return '部分收款';
+    case 'paid':
+      return '已收款';
+    default:
+      return value || '—';
+  }
+}
+
+function getStatusValueColor(value: string, type: 'document' | 'fulfillment' | 'delivery' | 'payment') {
+  if (!value) {
+    return '#0F172A';
+  }
+
+  if (type === 'document') {
+    if (value === 'cancelled') return '#DC2626';
+    if (value === 'submitted') return '#2563EB';
+    return '#475569';
+  }
+
+  if (type === 'payment') {
+    if (value === 'paid') return '#15803D';
+    if (value === 'partial') return '#D97706';
+    return '#DC2626';
+  }
+
+  if (type === 'fulfillment' || type === 'delivery') {
+    if (value === 'shipped' || value === 'delivered') return '#15803D';
+    if (value === 'partial') return '#D97706';
+    if (value === 'unknown') return '#64748B';
+    return '#2563EB';
+  }
+
+  return '#0F172A';
+}
+
+function InfoRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
     <View style={styles.infoRow}>
       <ThemedText style={styles.infoLabel}>{label}</ThemedText>
-      <ThemedText style={styles.infoValue} type="defaultSemiBold">
+      <ThemedText style={[styles.infoValue, valueColor ? { color: valueColor } : null]} type="defaultSemiBold">
         {value}
       </ThemedText>
     </View>
@@ -285,6 +369,7 @@ export default function SalesOrderDetailScreen() {
   const [editableItems, setEditableItems] = useState<EditableOrderItem[]>([]);
   const [itemUomOptions, setItemUomOptions] = useState<Record<string, string[]>>({});
   const [centerDialog, setCenterDialog] = useState<CenterDialogState>(null);
+  const [recentPaymentNotice, setRecentPaymentNotice] = useState<PaymentResultHandoff | null>(null);
 
   const background = useThemeColor({}, 'background');
   const surface = useThemeColor({}, 'surface');
@@ -294,7 +379,7 @@ export default function SalesOrderDetailScreen() {
   const { showError, showInfo, showSuccess } = useFeedback();
 
   useEffect(() => {
-    if (!orderName) {
+    if (!orderName || !isFocused) {
       return;
     }
 
@@ -324,6 +409,12 @@ export default function SalesOrderDetailScreen() {
             imageUrl: item.imageUrl,
           })) ?? [],
         );
+        if (nextDetail?.latestSalesInvoice) {
+          const paymentNotice = getPaymentResultHandoff(nextDetail.latestSalesInvoice);
+          setRecentPaymentNotice((previous) => paymentNotice ?? previous);
+        } else {
+          setRecentPaymentNotice(null);
+        }
         setMessage(nextDetail ? '' : '未找到对应销售订单。');
       })
       .catch((error) => {
@@ -337,7 +428,7 @@ export default function SalesOrderDetailScreen() {
     return () => {
       active = false;
     };
-  }, [orderName]);
+  }, [isFocused, orderName]);
 
   useEffect(() => {
     if (!isFocused || !isEditingItems) {
@@ -535,6 +626,17 @@ export default function SalesOrderDetailScreen() {
       }
     } catch (error) {
       const appError = normalizeAppError(error, '发货失败。');
+      try {
+        const refreshedDetail = await getSalesOrderDetailV2(orderName);
+        if (refreshedDetail) {
+          setDetail(refreshedDetail);
+        }
+      } catch {}
+      setCenterDialog({
+        title: '出货失败',
+        message: appError.message,
+        tone: 'warning',
+      });
       showError(appError.message);
     } finally {
       setIsSubmittingDelivery(false);
@@ -1162,10 +1264,26 @@ export default function SalesOrderDetailScreen() {
             订单概览
           </ThemedText>
           <InfoRow label="公司" value={detail?.company || '—'} />
-          <InfoRow label="单据状态" value={detail?.documentStatus || '—'} />
-          <InfoRow label="履约状态" value={detail?.fulfillmentStatus || '—'} />
-          <InfoRow label="发货状态" value={detail?.deliveryStatus || '—'} />
-          <InfoRow label="收款状态" value={detail?.paymentStatus || '—'} />
+          <InfoRow
+            label="单据状态"
+            value={getDocumentStatusLabel(detail?.documentStatus || '')}
+            valueColor={getStatusValueColor(detail?.documentStatus || '', 'document')}
+          />
+          <InfoRow
+            label="履约状态"
+            value={getFulfillmentStatusLabel(detail?.fulfillmentStatus || '')}
+            valueColor={getStatusValueColor(detail?.fulfillmentStatus || '', 'fulfillment')}
+          />
+          <InfoRow
+            label="发货状态"
+            value={getDeliveryStatusLabel(detail?.deliveryStatus || '')}
+            valueColor={getStatusValueColor(detail?.deliveryStatus || '', 'delivery')}
+          />
+          <InfoRow
+            label="收款状态"
+            value={getPaymentStatusLabel(detail?.paymentStatus || '')}
+            valueColor={getStatusValueColor(detail?.paymentStatus || '', 'payment')}
+          />
           <InfoRow label="交货日期" value={detail?.deliveryDate || '未设置'} />
         </View>
 
@@ -1206,6 +1324,38 @@ export default function SalesOrderDetailScreen() {
                 </Pressable>
               </View>
             ) : null}
+          </View>
+        ) : null}
+
+        {(recentPaymentNotice && ((recentPaymentNotice.unallocatedAmount ?? 0) > 0 || (recentPaymentNotice.writeoffAmount ?? 0) > 0)) ||
+        ((detail?.latestUnallocatedAmount ?? 0) > 0 || (detail?.latestWriteoffAmount ?? 0) > 0) ? (
+          <View style={[styles.card, styles.paymentNoticeCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.cardTitle} type="defaultSemiBold">
+              最新收款结果
+            </ThemedText>
+            {((recentPaymentNotice?.unallocatedAmount ?? 0) > 0 || (detail?.latestUnallocatedAmount ?? 0) > 0) ? (
+              <ThemedText style={styles.paymentNoticeText}>
+                本单已按应收金额结清，另有{' '}
+                <ThemedText style={styles.paymentNoticeEmphasis} type="defaultSemiBold">
+                  {formatCurrencyValue(
+                    recentPaymentNotice?.unallocatedAmount ?? detail?.latestUnallocatedAmount ?? 0,
+                    detail?.currency || 'CNY',
+                  )}
+                </ThemedText>{' '}
+                作为未分配金额保留，可用于后续预收或其他单据核销。
+              </ThemedText>
+            ) : (
+              <ThemedText style={styles.paymentNoticeText}>
+                本单已按差额核销结清，已处理差额{' '}
+                <ThemedText style={styles.paymentNoticeEmphasis} type="defaultSemiBold">
+                  {formatCurrencyValue(
+                    recentPaymentNotice?.writeoffAmount ?? detail?.latestWriteoffAmount ?? 0,
+                    detail?.currency || 'CNY',
+                  )}
+                </ThemedText>
+                。
+              </ThemedText>
+            )}
           </View>
         ) : null}
 
@@ -1389,9 +1539,35 @@ export default function SalesOrderDetailScreen() {
           <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
             金额结算
           </ThemedText>
-          <InfoRow label="订单金额" value={formatCurrencyValue(detail?.grandTotal ?? null, detail?.currency || 'CNY')} />
-          <InfoRow label="已收金额" value={formatCurrencyValue(detail?.paidAmount ?? null, detail?.currency || 'CNY')} />
-          <InfoRow label="未收金额" value={formatCurrencyValue(detail?.outstandingAmount ?? null, detail?.currency || 'CNY')} />
+          <InfoRow
+            label="订单金额"
+            value={formatCurrencyValue(detail?.grandTotal ?? null, detail?.currency || 'CNY')}
+            valueColor="#475569"
+          />
+          <InfoRow
+            label="实收金额"
+            value={formatCurrencyValue(detail?.actualPaidAmount ?? null, detail?.currency || 'CNY')}
+            valueColor="#15803D"
+          />
+          {(detail?.latestUnallocatedAmount ?? 0) > 0 ? (
+            <InfoRow
+              label="额外收款"
+              value={formatCurrencyValue(detail?.latestUnallocatedAmount ?? null, detail?.currency || 'CNY')}
+              valueColor="#2563EB"
+            />
+          ) : null}
+          {(detail?.totalWriteoffAmount ?? 0) > 0 ? (
+            <InfoRow
+              label="核销金额"
+              value={formatCurrencyValue(detail?.totalWriteoffAmount ?? null, detail?.currency || 'CNY')}
+              valueColor="#D97706"
+            />
+          ) : null}
+          <InfoRow
+            label="未收金额"
+            value={formatCurrencyValue(detail?.outstandingAmount ?? null, detail?.currency || 'CNY')}
+            valueColor={(detail?.outstandingAmount ?? 0) > 0 ? '#DC2626' : '#64748B'}
+          />
           {isEditingItems ? (
             <InfoRow label="商品编辑后金额" value={formatCurrencyValue(editingGrandTotal, detail?.currency || 'CNY')} />
           ) : null}
@@ -1693,6 +1869,19 @@ const styles = StyleSheet.create({
   referenceValue: {
     color: '#0F172A',
     fontSize: 15,
+  },
+  paymentNoticeCard: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    gap: 8,
+  },
+  paymentNoticeText: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  paymentNoticeEmphasis: {
+    color: '#1D4ED8',
   },
   goodsList: {
     gap: 12,

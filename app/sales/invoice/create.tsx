@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useFeedback } from '@/providers/feedback-provider';
 import { createSalesInvoice } from '@/services/gateway';
 import { getAppPreferences } from '@/lib/app-preferences';
+import { getPaymentResultHandoff } from '@/lib/payment-result-handoff';
 
 export default function SalesInvoiceCreateScreen() {
   const router = useRouter();
@@ -18,6 +19,10 @@ export default function SalesInvoiceCreateScreen() {
   const [dueDate, setDueDate] = useState('');
   const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentNotice, setPaymentNotice] = useState<{
+    unallocatedAmount?: number;
+    writeoffAmount?: number;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof params.sourceName === 'string' && params.sourceName.trim()) {
@@ -25,6 +30,17 @@ export default function SalesInvoiceCreateScreen() {
     }
     if (params.notice === 'created' && typeof params.salesInvoice === 'string' && params.salesInvoice.trim()) {
       showSuccess(`已生成销售发票：${params.salesInvoice.trim()}`);
+    }
+    if (typeof params.salesInvoice === 'string' && params.salesInvoice.trim()) {
+      const handoff = getPaymentResultHandoff(params.salesInvoice.trim());
+      setPaymentNotice(
+        handoff
+          ? {
+              unallocatedAmount: handoff.unallocatedAmount,
+              writeoffAmount: handoff.writeoffAmount,
+            }
+          : null,
+      );
     }
   }, [params.notice, params.salesInvoice, params.sourceName, showSuccess]);
 
@@ -59,6 +75,31 @@ export default function SalesInvoiceCreateScreen() {
       title="销售开票"
       description="根据已存在的销售订单生成销售发票，适合作为后续结算与收款依据。">
       <PreferenceSummary title="当前销售模式" modeLabel={preferences.salesFlowMode === 'quick' ? '快捷结算' : '分步处理'} />
+
+      {paymentNotice && ((paymentNotice.unallocatedAmount ?? 0) > 0 || (paymentNotice.writeoffAmount ?? 0) > 0) ? (
+        <View style={styles.noticeCard}>
+          <ThemedText style={styles.noticeTitle} type="defaultSemiBold">
+            最新收款结果
+          </ThemedText>
+          {(paymentNotice.unallocatedAmount ?? 0) > 0 ? (
+            <ThemedText style={styles.noticeText}>
+              当前发票已结清，另有{' '}
+              <ThemedText style={styles.noticeEmphasis} type="defaultSemiBold">
+                {paymentNotice.unallocatedAmount?.toFixed(2)}
+              </ThemedText>{' '}
+              元作为未分配金额保留。
+            </ThemedText>
+          ) : (
+            <ThemedText style={styles.noticeText}>
+              当前发票已按差额核销结清，已处理差额{' '}
+              <ThemedText style={styles.noticeEmphasis} type="defaultSemiBold">
+                {paymentNotice.writeoffAmount?.toFixed(2)}
+              </ThemedText>{' '}
+              元。
+            </ThemedText>
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.formCard}>
         <View style={styles.fieldBlock}>
@@ -109,6 +150,28 @@ export default function SalesInvoiceCreateScreen() {
 }
 
 const styles = StyleSheet.create({
+  noticeCard: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  noticeTitle: {
+    color: '#1D4ED8',
+    fontSize: 14,
+  },
+  noticeText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  noticeEmphasis: {
+    color: '#1D4ED8',
+  },
   formCard: {
     gap: 16,
   },

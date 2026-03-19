@@ -463,6 +463,23 @@ The sales payment page was refined to reduce mis-entry risk and make the result 
 - failure now shows a centered error dialog
   - the user stays on the payment page and can keep editing
 
+### Settlement result behavior
+
+- the payment page now distinguishes four outcomes:
+  - full collection
+  - partial collection
+  - under-collection with write-off settlement
+  - over-collection with unallocated amount
+- order detail should not treat `paid_amount` as the only display truth
+- the preferred order-detail display fields are now:
+  - `payment.actual_paid_amount`
+  - `payment.total_writeoff_amount`
+  - `payment.latest_unallocated_amount`
+- this keeps `实收金额` separate from:
+  - `核销金额`
+  - `额外收款`
+  - `未收金额`
+
 ### Payment mode behavior
 
 - payment modes are still backed by ERPNext `Mode of Payment`
@@ -485,6 +502,46 @@ The sales payment page was refined to reduce mis-entry risk and make the result 
 
 - adding new payment modes is still handled as ERPNext master data management
 - the payment page should only select existing payment modes, not create them on the fly
+
+## Customer Context Notes (2026-03-20)
+
+The create-order page now handles customer defaults more defensively.
+
+### Backend source of truth
+
+- `get_customer_sales_context` remains the backend source for:
+  - default contact
+  - default address
+  - recent addresses
+  - suggested company and warehouse
+
+### Frontend fallback
+
+- the create-order page no longer assumes `defaultAddress.addressDisplay` is always populated
+- if `addressDisplay` is empty, the page now builds a readable shipping address from:
+  - `addressLine1`
+  - `addressLine2`
+  - `city`
+  - `county`
+  - `state`
+  - `country`
+  - `pincode`
+- this avoids blank shipping-address textareas when ERPNext address master data only has structured address fields
+
+### Current local QA data
+
+For current local testing, the following customers were manually supplemented with linked primary contacts and shipping addresses:
+
+- `Palmer Productions Ltd.`
+- `West View Software Ltd.`
+- `Grant Plastics Ltd.`
+
+These records now carry:
+
+- linked primary contact
+- linked primary shipping address
+- default contact phone
+- default contact email
 
 ## Local Android Build Notes
 

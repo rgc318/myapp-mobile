@@ -93,6 +93,8 @@ export type SalesPaymentInput = {
   mode_of_payment?: string;
   reference_no?: string;
   reference_date?: string;
+  settlement_mode?: 'partial' | 'writeoff';
+  writeoff_reason?: string;
 };
 
 function randomRequestId(prefix: string) {
@@ -302,6 +304,8 @@ export async function recordSalesPayment(payload: SalesPaymentInput) {
     mode_of_payment: payload.mode_of_payment,
     reference_no: payload.reference_no,
     reference_date: payload.reference_date,
+    settlement_mode: payload.settlement_mode,
+    writeoff_reason: payload.writeoff_reason,
     request_id: randomRequestId('mobile-sales-payment'),
   });
 }

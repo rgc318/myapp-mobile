@@ -49,6 +49,39 @@ function formatMoney(value: number) {
   return MONEY.format(value);
 }
 
+function composeAddressDisplay(address: {
+  addressDisplay?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  county?: string | null;
+  state?: string | null;
+  country?: string | null;
+  pincode?: string | null;
+} | null | undefined) {
+  if (!address) {
+    return '';
+  }
+
+  const directDisplay = normalizeText(address.addressDisplay ?? '');
+  if (directDisplay) {
+    return directDisplay;
+  }
+
+  return [
+    address.addressLine1,
+    address.addressLine2,
+    address.city,
+    address.county,
+    address.state,
+    address.country,
+    address.pincode,
+  ]
+    .map((value) => normalizeText(value ?? ''))
+    .filter(Boolean)
+    .join(' ');
+}
+
 function TopFieldRow({
                        label,
                        value,
@@ -358,37 +391,72 @@ export default function SalesOrderCreateScreen() {
 
     let active = true;
     setIsLoadingShippingInfo(true);
+    const timer = setTimeout(() => {
+      void customerExists(trimmedCustomer)
+        .then((exists) => {
+          if (!active) {
+            return;
+          }
 
-    void fetchCustomerSalesContext(trimmedCustomer)
-      .then((details) => {
-        if (!active) {
-          return;
-        }
+          if (!exists) {
+            setRecentAddresses([]);
+            setCustomerContextNote('请输入或选择精确客户名称后，再自动带入默认联系人和地址。');
+            setIsLoadingShippingInfo(false);
+            return;
+          }
 
-        setShippingAddress(
-          details.defaultAddress?.addressDisplay || details.recentAddresses[0]?.addressDisplay || '',
-        );
-        setShippingContact(details.defaultContact?.displayName || '');
-        setShippingPhone(details.defaultContact?.phone || '');
-        setRecentAddresses(details.recentAddresses);
-        setCustomerContextNote(
-          details.defaultContact?.displayName
-            ? `默认联系人：${details.defaultContact.displayName}${details.defaultContact.phone ? ` / ${details.defaultContact.phone}` : ''}`
-            : '已载入客户销售上下文，可按本单需要临时调整收货信息。',
-        );
+          void fetchCustomerSalesContext(trimmedCustomer)
+            .then((details) => {
+              if (!active) {
+                return;
+              }
 
-        if (!normalizeText(company) && details.suggestions.company) {
-          setCompany(details.suggestions.company);
-        }
-      })
-      .finally(() => {
-        if (active) {
+              setShippingAddress(
+                composeAddressDisplay(details.defaultAddress) ||
+                  details.recentAddresses[0]?.addressDisplay ||
+                  '',
+              );
+              setShippingContact(details.defaultContact?.displayName || '');
+              setShippingPhone(details.defaultContact?.phone || '');
+              setRecentAddresses(details.recentAddresses);
+              setCustomerContextNote(
+                details.defaultContact?.displayName
+                  ? `默认联系人：${details.defaultContact.displayName}${details.defaultContact.phone ? ` / ${details.defaultContact.phone}` : ''}`
+                  : '已载入客户销售上下文，可按本单需要临时调整收货信息。',
+              );
+
+              if (!normalizeText(company) && details.suggestions.company) {
+                setCompany(details.suggestions.company);
+              }
+            })
+            .catch(() => {
+              if (!active) {
+                return;
+              }
+
+              setRecentAddresses([]);
+              setCustomerContextNote('客户上下文暂时无法加载，请继续选择客户或稍后重试。');
+            })
+            .finally(() => {
+              if (active) {
+                setIsLoadingShippingInfo(false);
+              }
+            });
+        })
+        .catch(() => {
+          if (!active) {
+            return;
+          }
+
+          setRecentAddresses([]);
+          setCustomerContextNote('客户信息校验失败，请重新选择客户。');
           setIsLoadingShippingInfo(false);
-        }
-      });
+        });
+    }, 250);
 
     return () => {
       active = false;
+      clearTimeout(timer);
     };
   }, [company, customer]);
 

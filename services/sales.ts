@@ -43,7 +43,14 @@ export type SalesOrderDetailV2 = {
   addressDisplay: string;
   customerAddress: string;
   paidAmount: number | null;
+  actualPaidAmount: number | null;
   outstandingAmount: number | null;
+  totalWriteoffAmount: number | null;
+  latestPaymentEntry: string;
+  latestPaymentInvoice: string;
+  latestUnallocatedAmount: number | null;
+  latestWriteoffAmount: number | null;
+  latestActualPaidAmount: number | null;
   canSubmitDelivery: boolean;
   canCreateSalesInvoice: boolean;
   canRecordPayment: boolean;
@@ -149,6 +156,15 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
   const salesInvoices = Array.isArray(references.sales_invoices)
     ? references.sales_invoices.map((value: unknown) => String(value ?? '')).filter(Boolean)
     : [];
+  const settledAmount = toOptionalNumber(data.amounts?.paid_amount);
+  const latestWriteoffAmount = toOptionalNumber(payment.latest_writeoff_amount);
+  const totalWriteoffAmount =
+    toOptionalNumber(payment.total_writeoff_amount) ?? latestWriteoffAmount ?? null;
+  const actualPaidAmount =
+    toOptionalNumber(payment.actual_paid_amount) ??
+    (settledAmount !== null
+      ? Math.max(settledAmount - (totalWriteoffAmount ?? 0), 0)
+      : null);
 
   const status =
     typeof fulfillment.status === 'string'
@@ -189,8 +205,19 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
       shipping.shipping_address_text ?? customer.shipping_address_text ?? '',
     ),
     customerAddress: String(shipping.shipping_address_name ?? customer.shipping_address_name ?? ''),
-    paidAmount: toOptionalNumber(data.amounts?.paid_amount),
+    paidAmount: settledAmount,
+    actualPaidAmount,
     outstandingAmount: toOptionalNumber(data.amounts?.outstanding_amount),
+    totalWriteoffAmount,
+    latestPaymentEntry: String(payment.latest_payment_entry ?? references.latest_payment_entry ?? ''),
+    latestPaymentInvoice: String(payment.latest_payment_invoice ?? ''),
+    latestUnallocatedAmount: toOptionalNumber(payment.latest_unallocated_amount),
+    latestWriteoffAmount,
+    latestActualPaidAmount:
+      toOptionalNumber(payment.latest_actual_paid_amount) ??
+      (settledAmount !== null
+        ? Math.max(settledAmount - (latestWriteoffAmount ?? 0), 0)
+        : null),
     canSubmitDelivery: Boolean(data.actions?.can_submit_delivery),
     canCreateSalesInvoice: Boolean(data.actions?.can_create_sales_invoice),
     canRecordPayment: Boolean(data.actions?.can_record_payment),

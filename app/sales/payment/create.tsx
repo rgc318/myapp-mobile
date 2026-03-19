@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { useFeedback } from '@/providers/feedback-provider';
 import { formatCurrencyValue } from '@/lib/display-currency';
+import { rememberPaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { recordSalesPayment } from '@/services/gateway';
 import { checkLinkOptionExists, searchLinkOptions, type LinkOption } from '@/services/master-data';
 
@@ -56,6 +57,7 @@ export default function SalesPaymentCreateScreen() {
   const [modeOptions, setModeOptions] = useState<LinkOption[]>([]);
   const [amountAutoCorrectHint, setAmountAutoCorrectHint] = useState('');
   const [resultDialog, setResultDialog] = useState<ResultDialogState>(null);
+  const [settlementMode, setSettlementMode] = useState<'partial' | 'writeoff'>('partial');
   const currency = typeof params.currency === 'string' && params.currency.trim() ? params.currency.trim() : 'CNY';
   const featuredModeOptions = modeOptions.filter((option, index, array) => {
     if (!isFeaturedMode(option.value)) {
@@ -71,6 +73,16 @@ export default function SalesPaymentCreateScreen() {
     Number.isFinite(currentPaidAmount) &&
     currentPaidAmount > 0 &&
     Math.abs(currentPaidAmount - suggestedAmount) > 0.0001;
+  const isUnderpaidAgainstReceivable =
+    suggestedAmount !== null &&
+    Number.isFinite(currentPaidAmount) &&
+    currentPaidAmount > 0 &&
+    currentPaidAmount < suggestedAmount;
+  const isOverpaidAgainstReceivable =
+    suggestedAmount !== null &&
+    Number.isFinite(currentPaidAmount) &&
+    currentPaidAmount > 0 &&
+    currentPaidAmount > suggestedAmount;
 
   useEffect(() => {
     if (typeof params.referenceName === 'string' && params.referenceName.trim()) {
@@ -144,11 +156,6 @@ export default function SalesPaymentCreateScreen() {
       return;
     }
 
-    if (suggestedAmount !== null && amount > suggestedAmount) {
-      showError(`本次实收金额不能大于应收金额 ${formatCurrencyValue(suggestedAmount, currency)}。`);
-      return;
-    }
-
     if (!trimmedModeOfPayment) {
       showError('请选择付款方式。');
       return;
@@ -169,12 +176,34 @@ export default function SalesPaymentCreateScreen() {
         mode_of_payment: trimmedModeOfPayment,
         reference_no: referenceNo.trim() || undefined,
         reference_date: referenceDate.trim() || undefined,
+        settlement_mode: suggestedAmount !== null && amount < suggestedAmount ? settlementMode : 'partial',
+        writeoff_reason:
+          suggestedAmount !== null && amount < suggestedAmount && settlementMode === 'writeoff'
+            ? '移动端优惠/抹零结清'
+            : undefined,
       });
       const paymentName = String(result?.payment_entry || result?.name || '');
+      const writeoffAmount = Number(result?.writeoff_amount);
+      const unallocatedAmount = Number(result?.unallocated_amount);
+      rememberPaymentResultHandoff({
+        invoiceName: trimmedReference,
+        paymentEntry: paymentName || undefined,
+        writeoffAmount: Number.isFinite(writeoffAmount) ? writeoffAmount : undefined,
+        unallocatedAmount: Number.isFinite(unallocatedAmount) ? unallocatedAmount : undefined,
+        paidAmount: amount,
+        currency,
+      });
       setResultDialog({
         tone: 'success',
         title: '收款登记成功',
-        message: paymentName ? `本次收款已登记成功，收款单号为 ${paymentName}。` : '本次收款已登记成功。',
+        message:
+          settlementMode === 'writeoff' && Number.isFinite(writeoffAmount) && writeoffAmount > 0
+            ? `本次收款已登记成功，收款单号为 ${paymentName || '已生成'}，并已按差额核销 ${formatCurrencyValue(writeoffAmount, currency)}。`
+            : Number.isFinite(unallocatedAmount) && unallocatedAmount > 0
+              ? `本次收款已登记成功，收款单号为 ${paymentName || '已生成'}，超出应收的 ${formatCurrencyValue(unallocatedAmount, currency)} 已按未分配金额保留。`
+            : paymentName
+              ? `本次收款已登记成功，收款单号为 ${paymentName}。`
+              : '本次收款已登记成功。',
         confirmLabel: '返回来源页',
         onConfirm: () => {
           setResultDialog(null);
@@ -244,23 +273,17 @@ export default function SalesPaymentCreateScreen() {
           <ThemedText style={styles.label} type="defaultSemiBold">本次实收金额</ThemedText>
           <TextInput
             keyboardType="decimal-pad"
-            onChangeText={(value) => {
-              const sanitized = value.replace(/[^0-9.]/g, '');
-              setAmountAutoCorrectHint('');
-              if (!sanitized) {
-                setPaidAmount('');
+          onChangeText={(value) => {
+            const sanitized = value.replace(/[^0-9.]/g, '');
+            setAmountAutoCorrectHint('');
+            if (!sanitized) {
+              setPaidAmount('');
                 return;
               }
 
               const amount = Number(sanitized);
               if (!Number.isFinite(amount)) {
                 setPaidAmount(sanitized);
-                return;
-              }
-
-              if (suggestedAmount !== null && amount > suggestedAmount) {
-                setPaidAmount(String(suggestedAmount));
-                setAmountAutoCorrectHint(`实收金额不能大于应收金额，系统已自动修正为 ${formatCurrencyValue(suggestedAmount, currency)}。`);
                 return;
               }
 
@@ -287,7 +310,10 @@ export default function SalesPaymentCreateScreen() {
                 修改实收金额会影响结算结果
               </ThemedText>
               <ThemedText style={styles.warningText}>
-                当前应收金额为 {formatCurrencyValue(suggestedAmount, currency)}，你当前填写的是 {formatCurrencyValue(currentPaidAmount, currency)}。实收金额可以少于应收金额，但不能大于应收金额；如果这不是部分收款、折让或其他特殊情况，建议恢复为默认金额。
+                当前应收金额为 {formatCurrencyValue(suggestedAmount, currency)}，你当前填写的是 {formatCurrencyValue(currentPaidAmount, currency)}。
+                {isOverpaidAgainstReceivable
+                  ? ' 超出应收金额的部分会作为未分配金额保留，适用于客户预收或多付场景。'
+                  : ' 实收金额少于应收金额时，可选择保留未收金额，或按优惠/抹零直接结清。'}
               </ThemedText>
             </View>
           ) : suggestedAmount !== null ? (
@@ -296,11 +322,50 @@ export default function SalesPaymentCreateScreen() {
                 金额填写规则
               </ThemedText>
               <ThemedText style={styles.ruleHintText}>
-                本次实收金额可以少于应收金额，但不能大于应收金额 {formatCurrencyValue(suggestedAmount, currency)}。
+                本次实收金额可以少于、等于或大于应收金额 {formatCurrencyValue(suggestedAmount, currency)}；少收时可保留未收或直接核销结清，多收时超出部分会作为未分配金额保留。
               </ThemedText>
             </View>
           ) : null}
         </View>
+
+        {isUnderpaidAgainstReceivable ? (
+          <View style={styles.fieldBlock}>
+            <ThemedText style={styles.label} type="defaultSemiBold">差额处理方式</ThemedText>
+            <View style={styles.settlementModeGrid}>
+              <Pressable
+                onPress={() => setSettlementMode('partial')}
+                style={[
+                  styles.settlementModeCard,
+                  settlementMode === 'partial' ? styles.settlementModeCardActive : null,
+                ]}>
+                <ThemedText
+                  style={settlementMode === 'partial' ? styles.settlementModeTitleActive : styles.settlementModeTitle}
+                  type="defaultSemiBold">
+                  作为部分收款
+                </ThemedText>
+                <ThemedText style={styles.settlementModeText}>
+                  保留剩余未收金额，后续继续收款。
+                </ThemedText>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setSettlementMode('writeoff')}
+                style={[
+                  styles.settlementModeCard,
+                  settlementMode === 'writeoff' ? styles.settlementModeCardActiveDanger : null,
+                ]}>
+                <ThemedText
+                  style={settlementMode === 'writeoff' ? styles.settlementModeTitleDanger : styles.settlementModeTitle}
+                  type="defaultSemiBold">
+                  优惠/抹零后结清
+                </ThemedText>
+                <ThemedText style={styles.settlementModeText}>
+                  将剩余差额按核销处理，本次直接结清发票。
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.fieldBlock}>
           <ThemedText style={styles.label} type="defaultSemiBold">付款方式</ThemedText>
@@ -386,7 +451,10 @@ export default function SalesPaymentCreateScreen() {
               <ThemedText style={styles.dialogEmphasis} type="defaultSemiBold">
                 {formatCurrencyValue(Number(paidAmount) || 0, currency)}
               </ThemedText>
-              。如果这是部分收款、折让或其他特殊情况，请确认后继续。
+              。
+              {isOverpaidAgainstReceivable
+                ? ' 如果继续登记，超出应收金额的部分将作为未分配金额保留。'
+                : ' 如果这是部分收款、折让或其他特殊情况，请确认后继续。'}
             </ThemedText>
             <View style={styles.dialogActions}>
               <Pressable onPress={() => setConfirmMismatchOpen(false)} style={styles.dialogGhostButton}>
@@ -579,6 +647,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   ruleHintText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  settlementModeGrid: {
+    gap: 10,
+  },
+  settlementModeCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  settlementModeCardActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
+  settlementModeCardActiveDanger: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#EA580C',
+  },
+  settlementModeTitle: {
+    color: '#0F172A',
+    fontSize: 14,
+  },
+  settlementModeTitleActive: {
+    color: '#1D4ED8',
+    fontSize: 14,
+  },
+  settlementModeTitleDanger: {
+    color: '#C2410C',
+    fontSize: 14,
+  },
+  settlementModeText: {
     color: '#475569',
     fontSize: 13,
     lineHeight: 20,
