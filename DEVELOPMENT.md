@@ -2356,3 +2356,123 @@ This round further refined the create-order page and the dedicated product-searc
   - not like four isolated action buttons
 - this same navigation now also cooperates with page-level leave guards
   - pages with unsaved edits can block cross-module jumps before the route is actually changed
+
+## Product And Customer Module Planning (2026-03-20)
+
+The sales flow is now largely stable enough that product and customer management can be treated as the next major frontend workstream.
+
+### Product module target
+
+The product module should become a complete business workbench instead of remaining only a search helper.
+
+Current frontend goal:
+
+- list products
+- view product detail
+- create product
+- update product
+- disable product
+- inspect stock and multiple business prices
+
+Recommended page set:
+
+- product list page
+  - search
+  - status filter
+  - brand / group filter
+  - quick enable / disable
+- product detail page
+  - basic info
+  - sales prices
+  - buying price
+  - stock summary
+  - remarks / description
+- product edit page
+  - image
+  - item name
+  - nickname
+  - barcode
+  - item group / brand
+  - sales prices
+  - buying price
+  - enable / disable
+
+Current interaction rule:
+
+- product “delete” should not be exposed as physical deletion in the mobile UI
+- the safe business action should be:
+  - disable / stop using product
+- products that already participated in transactions should remain queryable as historical master data
+
+### Product price presentation rule
+
+Frontend should not treat product pricing as one single field forever.
+
+Current planned business-facing prices:
+
+- retail price
+- wholesale price
+- buying price
+- valuation / cost reference
+
+Frontend display rule:
+
+- sales flows should prefer selling-side price lists
+- purchase flows should prefer buying-side price lists
+- valuation rate should be shown only as a cost reference
+  - not as the same concept as editable buying quotation price
+
+### Customer module target
+
+The customer module should first focus on practical master-data maintenance instead of advanced CRM workflow.
+
+Current frontend goal:
+
+- list customers
+- view customer detail
+- create customer
+- update customer
+- disable customer
+
+Recommended page set:
+
+- customer list page
+  - search
+  - customer group filter
+  - enable / disable state
+- customer detail page
+  - customer basic info
+  - default contact
+  - default address
+  - default sales price list
+  - remarks
+- customer edit page
+  - customer name
+  - contact display name
+  - phone
+  - email
+  - default address
+  - customer group
+  - default sales price list
+  - remarks
+
+### Customer/address interaction rule
+
+- customer default address remains a master-data default only
+- order address remains an order snapshot
+- customer editing must never be confused with editing an existing order’s shipping snapshot
+
+This rule is especially important because the sales flow has already standardized:
+
+- customer master data provides default suggestions
+- order / delivery / invoice pages must continue to treat document address as independent business snapshot data
+
+### Recommended implementation order
+
+1. complete product list + detail + edit first
+2. add multiple price presentation and editing
+3. complete customer list + detail + edit
+4. only after that, consider advanced customer-business rules such as:
+  - credit control
+  - customer-specific price
+  - default warehouse strategy
