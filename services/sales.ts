@@ -192,6 +192,31 @@ export async function cancelSalesOrderV2(orderName: string) {
   return getSalesOrderDetailV2(orderName);
 }
 
+export async function quickCancelSalesOrderV2(
+  orderName: string,
+  options?: { rollbackPayment?: boolean },
+) {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.quick_cancel_order_v2', {
+    order_name: orderName,
+    rollback_payment: options?.rollbackPayment ?? true,
+  });
+
+  return {
+    orderName: typeof data?.order === 'string' ? data.order : orderName,
+    cancelledPaymentEntries: Array.isArray(data?.cancelled_payment_entries)
+      ? data.cancelled_payment_entries.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+    cancelledSalesInvoice:
+      typeof data?.cancelled_sales_invoice === 'string' ? data.cancelled_sales_invoice : '',
+    cancelledDeliveryNote:
+      typeof data?.cancelled_delivery_note === 'string' ? data.cancelled_delivery_note : '',
+    completedSteps: Array.isArray(data?.completed_steps)
+      ? data.completed_steps.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+    detail: await getSalesOrderDetailV2(orderName),
+  };
+}
+
 export function searchCompanies(query: string) {
   return searchLinkOptions('Company', query);
 }

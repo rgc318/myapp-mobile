@@ -20,6 +20,7 @@ import { fetchProductDetail } from '@/services/products';
 import {
   cancelSalesOrderV2,
   getSalesOrderDetailV2,
+  quickCancelSalesOrderV2,
   updateSalesOrderItemsV2,
   updateSalesOrderV2,
   type SalesOrderDetailV2,
@@ -358,6 +359,7 @@ export default function SalesOrderDetailScreen() {
   const [isSavingItems, setIsSavingItems] = useState(false);
   const [isSavingRemarks, setIsSavingRemarks] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isQuickRollingBack, setIsQuickRollingBack] = useState(false);
   const [deliveryDateInput, setDeliveryDateInput] = useState('');
   const [contactDisplayInput, setContactDisplayInput] = useState('');
   const [contactPhoneInput, setContactPhoneInput] = useState('');
@@ -647,9 +649,10 @@ export default function SalesOrderDetailScreen() {
     setIsEditingContact(false);
   }
 
-  function prepareAllEditingInputs() {
+  function prepareAllEditingInputs(sourceDetail?: SalesOrderDetailV2 | null) {
+    const baseDetail = sourceDetail ?? detail;
     const nextItems =
-      detail?.items.map((item) => ({
+      baseDetail?.items.map((item) => ({
         itemCode: item.itemCode,
         itemName: item.itemName,
         qty: item.qty ?? 1,
@@ -660,11 +663,11 @@ export default function SalesOrderDetailScreen() {
         imageUrl: item.imageUrl,
       })) ?? [];
 
-    setDeliveryDateInput(detail?.deliveryDate ?? '');
-    setContactDisplayInput(detail?.contactDisplay ?? detail?.contactPerson ?? '');
-    setContactPhoneInput(detail?.contactPhone ?? '');
-    setAddressInput(detail?.addressDisplay ?? '');
-    setRemarksInput(detail?.remarks ?? '');
+    setDeliveryDateInput(baseDetail?.deliveryDate ?? '');
+    setContactDisplayInput(baseDetail?.contactDisplay ?? baseDetail?.contactPerson ?? '');
+    setContactPhoneInput(baseDetail?.contactPhone ?? '');
+    setAddressInput(baseDetail?.addressDisplay ?? '');
+    setRemarksInput(baseDetail?.remarks ?? '');
     setEditableItems(nextItems);
     syncScopedDraft(nextItems);
   }
@@ -929,6 +932,41 @@ export default function SalesOrderDetailScreen() {
     return '';
   }
 
+  function getQuickRollbackPlan() {
+    if (!detail || detail.documentStatus === 'cancelled') {
+      return null;
+    }
+
+    const hasPayment = detail.paymentStatus === 'paid' || (detail.paidAmount ?? 0) > 0;
+    const hasInvoice = Boolean(detail.latestSalesInvoice);
+    const hasDelivery = Boolean(detail.latestDeliveryNote);
+
+    if (!hasPayment && !hasInvoice && !hasDelivery) {
+      return null;
+    }
+
+    const steps: string[] = [];
+    if (hasPayment) {
+      steps.push('先回退收款');
+    }
+    if (hasInvoice) {
+      steps.push(`再作废销售发票 ${detail.latestSalesInvoice}`);
+    }
+    if (hasDelivery) {
+      steps.push(`最后作废发货单 ${detail.latestDeliveryNote}`);
+    }
+
+    return {
+      title: '需先回退下游单据',
+      message: hasPayment
+        ? `当前订单已经进入收款或结算阶段，不能直接修改。系统将按顺序${steps.join('、')}，完成后直接回到订单编辑态。`
+        : hasInvoice
+          ? `当前订单已开票，不能直接修改。系统将按顺序${steps.join('、')}，完成后直接回到订单编辑态。`
+          : `当前订单已出货，不能直接修改。系统将${steps.join('、')}，库存回退后直接回到订单编辑态。`,
+      confirmLabel: hasPayment ? '一键回退并修改' : '回退并修改',
+    };
+  }
+
   function getCancelRestrictionMessage() {
     if (!detail) {
       return '';
@@ -967,7 +1005,58 @@ export default function SalesOrderDetailScreen() {
     return false;
   }
 
+  async function handleQuickRollbackAndEdit() {
+    if (!orderName) {
+      return;
+    }
+
+    try {
+      setIsQuickRollingBack(true);
+      const rollbackResult = await quickCancelSalesOrderV2(orderName, { rollbackPayment: true });
+      const nextDetail = rollbackResult.detail;
+      if (nextDetail) {
+        setDetail(nextDetail);
+        prepareAllEditingInputs(nextDetail);
+      }
+      setIsEditingContact(true);
+      setIsEditingItems(true);
+      setIsEditingRemarks(true);
+
+      const rollbackSummary = [
+        rollbackResult.cancelledPaymentEntries.length
+          ? `已回退收款 ${rollbackResult.cancelledPaymentEntries.join('、')}`
+          : '',
+        rollbackResult.cancelledSalesInvoice ? `已作废发票 ${rollbackResult.cancelledSalesInvoice}` : '',
+        rollbackResult.cancelledDeliveryNote ? `已作废发货单 ${rollbackResult.cancelledDeliveryNote}` : '',
+      ]
+        .filter(Boolean)
+        .join('，');
+
+      showSuccess(rollbackSummary ? `${rollbackSummary}，现在可以继续修改订单。` : '下游单据已回退，现在可以继续修改订单。');
+    } catch (error) {
+      const appError = normalizeAppError(error, '快捷回退失败。');
+      showError(appError.message);
+    } finally {
+      setIsQuickRollingBack(false);
+    }
+  }
+
   function startEditingAll() {
+    const rollbackPlan = getQuickRollbackPlan();
+    if (rollbackPlan) {
+      setCenterDialog({
+        title: rollbackPlan.title,
+        message: rollbackPlan.message,
+        tone: 'warning',
+        confirmLabel: rollbackPlan.confirmLabel,
+        confirmTone: 'primary',
+        onConfirm: () => {
+          void handleQuickRollbackAndEdit();
+        },
+      });
+      return;
+    }
+
     if (!ensureOrderEditable()) {
       return;
     }
@@ -1612,11 +1701,17 @@ export default function SalesOrderDetailScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              disabled={isCancelling}
+              disabled={isCancelling || isQuickRollingBack}
               onPress={startEditingAll}
               style={[styles.bottomButton, styles.bottomPrimaryButton]}
             >
-              <ThemedText style={styles.bottomPrimaryText}>编辑订单</ThemedText>
+              <ThemedText style={styles.bottomPrimaryText}>
+                {isQuickRollingBack
+                  ? '回退中...'
+                  : getQuickRollbackPlan()
+                    ? '回退并修改'
+                    : '编辑订单'}
+              </ThemedText>
             </Pressable>
           </>
         )}

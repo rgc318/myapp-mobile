@@ -517,6 +517,31 @@ This round continued refining the mobile sales-order detail page interaction mod
   - `保存修改`
 
 This rule should be preserved unless the whole order-detail IA is redesigned again.
+
+## Roll Back And Edit (2026-03-20)
+
+The order-detail page now treats downstream documents as an edit blocker that can be actively resolved from the same screen.
+
+### Current rule
+
+- if the order has no delivery note, invoice, or payment:
+  - the bottom primary action remains `编辑订单`
+- if the order already has downstream documents:
+  - the bottom primary action switches to `回退并修改`
+  - tapping it opens a centered explanation dialog
+  - the dialog explains which downstream documents will be rolled back in order:
+    - payment entry first, when present
+    - sales invoice next, when present
+    - delivery note last, when present
+- after rollback succeeds:
+  - the page does not leave the user on a blocked order state
+  - it directly enters the all-section edit mode on the same order page
+
+### Why this matters
+
+- the user intent at that moment is usually not "manage history documents"
+- the real goal is "remove blockers and continue editing the order"
+- moving rollback into the edit entrance is more direct than forcing users to visit invoice and delivery pages one by one
   - the frontend should not present this as "save turned the order into a cancelled order"
   - current behavior:
     - the detail page now shows a clearer amendment message when a new order is generated
