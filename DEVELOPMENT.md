@@ -304,6 +304,101 @@ Mobile business pages should treat `收货人` / `联系电话` / `收货地址`
 
 For mobile display, `收货地址` should read like a usable street address, not like the full ERP print-format address block.
 
+## Sales Flow Acceptance Snapshot (2026-03-20)
+
+This section is the current acceptance snapshot for the mobile sales chain:
+
+- sales order create
+- sales order detail and edit
+- delivery confirmation / delivery detail
+- sales invoice detail / preview
+- payment collection
+
+### Current Overall Judgment
+
+The sales chain is now basically feature-complete for the main path and has moved from "prototype / contract alignment" into "acceptance and finish-up".
+
+Current practical status:
+
+- usable for end-to-end demonstration and continued backend integration
+- most major screens and write actions are already connected to the v2 / gateway path
+- still needs one focused acceptance pass before it should be treated as fully stabilized
+
+### Confirmed Implemented
+
+- sales order create
+  - customer sales context default loading is connected
+  - recent address reuse is connected
+  - shared draft and product search return flow are connected
+  - order submit uses `create_order_v2`
+
+- sales order detail
+  - detail read uses `get_sales_order_detail`
+  - header edit uses `update_order_v2`
+  - item edit uses `update_order_items_v2`
+  - cancel uses `cancel_order_v2`
+  - order page no longer directly executes delivery / invoicing writes from the top-right action
+
+- delivery flow
+  - order page now routes into a delivery confirmation page first
+  - delivery submit uses `submit_delivery`
+  - inventory-insufficient flow now escalates into explicit forced delivery handling
+  - main action is fixed in the footer for long-document scenarios
+
+- sales invoice flow
+  - order page now routes into invoice creation / detail flow instead of directly executing write logic
+  - invoice source order is locked when entered from an existing source document
+  - invoice page now behaves more like a printable invoice preview instead of another generic card page
+  - a dedicated preview route exists for later print / PDF integration
+
+- payment flow
+  - payment page uses `update_payment_status`
+  - payment result handoff is connected back into order / invoice pages
+  - writeoff and unallocated amount feedback is already shown in the mobile flow
+
+- address and document readability
+  - shipping address display was compacted to street-address content
+  - order / delivery / invoice pages now avoid showing the full ERP-style address display block
+
+### Acceptance Items Still Recommended
+
+These items should be manually walked through in one continuous business run:
+
+1. create a new sales order with customer defaults
+2. edit order header and order items
+3. submit delivery normally
+4. trigger insufficient inventory and verify forced delivery behavior
+5. create sales invoice from the order / delivery context
+6. record a partial payment
+7. record a full payment or writeoff
+8. re-open order and invoice pages to confirm status aggregation is refreshed correctly
+
+### Main Gaps Before Calling It "Fully Finished"
+
+- print is not fully real yet
+  - invoice preview structure exists
+  - real system print / PDF / share chain is not fully wired yet
+
+- unsaved-change protection is still worth adding
+  - deep edit / confirmation pages can navigate away more easily than a production-hardened ERP-style mobile app would usually allow
+
+- exceptional-state acceptance is still needed
+  - duplicate action attempts
+  - canceled document follow-up behavior
+  - network failure and retry behavior
+  - long item lists and long remarks
+
+- automation coverage is still light
+  - current confidence comes mainly from implementation review and lint validation
+  - the sales chain still benefits from a structured manual acceptance script or future E2E coverage
+
+### Suggested Next Work Order
+
+1. run one full manual acceptance pass across create -> delivery -> invoice -> payment
+2. fix the concrete issues found in that pass instead of adding more new UI first
+3. connect real invoice print / PDF / share capability
+4. add unsaved-change protection for edit-heavy pages if the acceptance pass shows users are still getting lost
+
 ### Order-Detail Follow-up Notes
 
 Additional follow-up work after the first v2 alignment focused on making the order-detail product-edit experience safer and easier to understand.
