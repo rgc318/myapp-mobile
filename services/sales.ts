@@ -99,6 +99,8 @@ export type DeliveryNoteDetailV2 = {
   grandTotal: number | null;
   salesOrders: string[];
   salesInvoices: string[];
+  canCancelDeliveryNote: boolean;
+  cancelDeliveryNoteHint: string;
   contactDisplay: string;
   contactPhone: string;
   addressDisplay: string;
@@ -133,6 +135,8 @@ export type SalesInvoiceDetailV2 = {
   latestPaymentEntry: string;
   salesOrders: string[];
   deliveryNotes: string[];
+  canCancelSalesInvoice: boolean;
+  cancelSalesInvoiceHint: string;
   contactDisplay: string;
   contactPhone: string;
   addressDisplay: string;
@@ -481,6 +485,8 @@ export async function getDeliveryNoteDetailV2(
     salesInvoices: Array.isArray(references.sales_invoices)
       ? references.sales_invoices.map((value: unknown) => String(value ?? '')).filter(Boolean)
       : [],
+    canCancelDeliveryNote: Boolean(data.actions?.can_cancel_delivery_note),
+    cancelDeliveryNoteHint: String(data.actions?.cancel_delivery_note_hint ?? ''),
     contactDisplay: shippingSnapshot.contactDisplay,
     contactPhone: shippingSnapshot.contactPhone,
     addressDisplay: shippingSnapshot.addressDisplay,
@@ -544,6 +550,8 @@ export async function getSalesInvoiceDetailV2(
     deliveryNotes: Array.isArray(references.delivery_notes)
       ? references.delivery_notes.map((value: unknown) => String(value ?? '')).filter(Boolean)
       : [],
+    canCancelSalesInvoice: Boolean(data.actions?.can_cancel_sales_invoice),
+    cancelSalesInvoiceHint: String(data.actions?.cancel_sales_invoice_hint ?? ''),
     contactDisplay: shippingSnapshot.contactDisplay,
     contactPhone: shippingSnapshot.contactPhone,
     addressDisplay: shippingSnapshot.addressDisplay,
@@ -558,6 +566,22 @@ export async function getSalesInvoiceDetailV2(
       imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
     })),
   };
+}
+
+export async function cancelDeliveryNoteV2(deliveryNoteName: string) {
+  await callGatewayMethod<Record<string, any>>('myapp.api.gateway.cancel_delivery_note', {
+    delivery_note_name: deliveryNoteName,
+  });
+
+  return getDeliveryNoteDetailV2(deliveryNoteName);
+}
+
+export async function cancelSalesInvoiceV2(salesInvoiceName: string) {
+  await callGatewayMethod<Record<string, any>>('myapp.api.gateway.cancel_sales_invoice', {
+    sales_invoice_name: salesInvoiceName,
+  });
+
+  return getSalesInvoiceDetailV2(salesInvoiceName);
 }
 
 function toOptionalNumber(value: unknown) {

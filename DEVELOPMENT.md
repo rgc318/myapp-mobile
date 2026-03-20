@@ -1999,3 +1999,70 @@ This round focused on reducing accidental downstream document creation, improvin
 - invoice preview is now structurally present, but not yet a real print/export implementation
 - the invoice detail page now already shows the printable-looking sheet, so the final long-term decision may be to simplify or reduce the separate preview page later
 - purchase-side pages have not yet been upgraded to the same “confirmation page + fixed bottom action + preview-first document page” standard
+
+## Sales Rollback Flow Update (2026-03-20)
+
+This round added the first usable rollback path for already-created sales documents.
+
+### Completed
+
+- delivery-note detail now supports explicit rollback handling
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+  - when viewing an existing delivery note:
+    - the page can now show a destructive `作废发货单` action
+    - the action is only shown when backend detail data reports that cancellation is currently allowed
+  - if a submitted sales invoice still exists downstream:
+    - the page shows a rollback hint instead of exposing the cancel action
+    - the hint explicitly tells the user to cancel the invoice first
+
+- sales-invoice detail now supports explicit rollback handling
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+  - invoice detail now has a dedicated rollback card
+  - submitted invoices expose a destructive `作废销售发票` action
+  - if the invoice already has payment history:
+    - backend may still allow cancellation depending on ERPNext settings
+    - the page shows a warning-style hint so users know cancellation may involve payment unlink behavior
+
+- frontend sales services now understand backend rollback action flags
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+  - delivery-note detail now consumes:
+    - `can_cancel_delivery_note`
+    - `cancel_delivery_note_hint`
+  - sales-invoice detail now consumes:
+    - `can_cancel_sales_invoice`
+    - `cancel_sales_invoice_hint`
+  - new client helpers were added:
+    - `cancelDeliveryNoteV2`
+    - `cancelSalesInvoiceV2`
+
+### Current UX Rules
+
+- sales rollback order is now intentionally explicit:
+  - if invoice exists:
+    - cancel invoice first
+  - if delivery note still exists after invoice rollback:
+    - cancel delivery note second
+  - after that:
+    - return to order detail or edit flow
+
+- rollback is confirmation-based
+  - both invoice and delivery cancellation use centered destructive confirmation dialogs
+  - the request is not sent directly from a single unsafe tap
+
+- rollback permissions now come from backend detail data instead of frontend guessing
+  - this keeps frontend behavior aligned with ERPNext / gateway business rules
+
+### Verified Result In This Round
+
+- real backend verification confirmed:
+  - invoice cancellation re-enables delivery-note cancellation
+  - delivery-note cancellation reverts order delivery state back to pending
+  - order detail then exposes delivery actions again
+
+- current environment behavior for paid invoices:
+  - a paid sales invoice can still be cancelled successfully in this environment
+  - this implies the ERPNext site is currently configured to allow invoice cancellation while automatically handling payment-reference unlinking
+  - frontend should still keep warning copy, because this behavior is environment-setting dependent

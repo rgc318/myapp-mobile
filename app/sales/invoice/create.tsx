@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { PreferenceSummary } from '@/components/preference-summary';
@@ -10,7 +10,7 @@ import { getAppPreferences } from '@/lib/app-preferences';
 import { getPaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { useFeedback } from '@/providers/feedback-provider';
 import { createSalesInvoice } from '@/services/gateway';
-import { getSalesInvoiceDetailV2, type SalesInvoiceDetailV2 } from '@/services/sales';
+import { cancelSalesInvoiceV2, getSalesInvoiceDetailV2, type SalesInvoiceDetailV2 } from '@/services/sales';
 
 function formatCurrency(value: number | null | undefined, currency = 'CNY') {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -49,6 +49,8 @@ export default function SalesInvoiceCreateScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [detail, setDetail] = useState<SalesInvoiceDetailV2 | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [paymentNotice, setPaymentNotice] = useState<{
     unallocatedAmount?: number;
     writeoffAmount?: number;
@@ -152,6 +154,27 @@ export default function SalesInvoiceCreateScreen() {
       pathname: '/sales/invoice/preview',
       params: { salesInvoice: detail.name },
     });
+  }
+
+  async function handleCancelSalesInvoice() {
+    if (!detail?.name) {
+      showError('缺少销售发票号。');
+      return;
+    }
+
+    try {
+      setIsCancelling(true);
+      const nextDetail = await cancelSalesInvoiceV2(detail.name);
+      if (nextDetail) {
+        setDetail(nextDetail);
+      }
+      setShowCancelDialog(false);
+      showSuccess(`销售发票 ${detail.name} 已作废。`);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : '销售发票作废失败。');
+    } finally {
+      setIsCancelling(false);
+    }
   }
 
   if (!params.salesInvoice) {
@@ -293,6 +316,27 @@ export default function SalesInvoiceCreateScreen() {
             </ThemedText>
           </View>
 
+          {detail.canCancelSalesInvoice || detail.cancelSalesInvoiceHint ? (
+            <View style={styles.rollbackCard}>
+              <ThemedText style={styles.rollbackTitle} type="defaultSemiBold">
+                回退处理
+              </ThemedText>
+              <ThemedText style={styles.rollbackText}>
+                {detail.cancelSalesInvoiceHint ||
+                  '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'}
+              </ThemedText>
+              {detail.canCancelSalesInvoice ? (
+                <Pressable
+                  onPress={() => setShowCancelDialog(true)}
+                  style={[styles.rollbackButton, styles.rollbackDangerButton]}>
+                  <ThemedText style={styles.rollbackDangerText} type="defaultSemiBold">
+                    作废销售发票
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
           <SalesInvoiceSheet detail={detail} />
 
           {paymentNotice && ((paymentNotice.unallocatedAmount ?? 0) > 0 || (paymentNotice.writeoffAmount ?? 0) > 0) ? (
@@ -421,7 +465,61 @@ export default function SalesInvoiceCreateScreen() {
           <ThemedText style={styles.hint}>未能加载销售发票详情，请返回订单页后重试。</ThemedText>
         </View>
       )}
+
+      <ConfirmDialog
+        confirmLabel={isCancelling ? '作废中...' : '确认作废'}
+        description="作废后，这张发票将从订单结算链路中移除。如果已经登记收款，系统可能要求先处理收款或解除引用。"
+        onClose={() => {
+          if (!isCancelling) {
+            setShowCancelDialog(false);
+          }
+        }}
+        onConfirm={() => void handleCancelSalesInvoice()}
+        title="作废销售发票？"
+        visible={showCancelDialog}
+      />
     </AppShell>
+  );
+}
+
+function ConfirmDialog({
+  visible,
+  title,
+  description,
+  confirmLabel,
+  onClose,
+  onConfirm,
+}: {
+  visible: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.dialogBackdrop}>
+        <View style={styles.dialogCard}>
+          <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+            {title}
+          </ThemedText>
+          <ThemedText style={styles.dialogDescription}>{description}</ThemedText>
+          <View style={styles.dialogActionRow}>
+            <Pressable onPress={onClose} style={[styles.dialogButton, styles.dialogGhostButton]}>
+              <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                先不处理
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={onConfirm} style={[styles.dialogButton, styles.dialogDangerButton]}>
+              <ThemedText style={styles.dialogDangerText} type="defaultSemiBold">
+                {confirmLabel}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -498,6 +596,40 @@ const styles = StyleSheet.create({
     color: '#7C2D12',
     fontSize: 13,
     lineHeight: 20,
+  },
+  rollbackCard: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  rollbackTitle: {
+    color: '#991B1B',
+    fontSize: 14,
+  },
+  rollbackText: {
+    color: '#7F1D1D',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  rollbackButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  rollbackDangerButton: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FCA5A5',
+    borderWidth: 1,
+  },
+  rollbackDangerText: {
+    color: '#DC2626',
+    fontSize: 14,
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',
@@ -648,5 +780,58 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     lineHeight: 22,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  dialogCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    width: '100%',
+  },
+  dialogTitle: {
+    color: '#991B1B',
+    fontSize: 18,
+  },
+  dialogDescription: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  dialogActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  dialogButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingHorizontal: 14,
+  },
+  dialogGhostButton: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+  },
+  dialogGhostText: {
+    color: '#1D4ED8',
+    fontSize: 15,
+  },
+  dialogDangerButton: {
+    backgroundColor: '#DC2626',
+  },
+  dialogDangerText: {
+    color: '#FFFFFF',
+    fontSize: 15,
   },
 });
