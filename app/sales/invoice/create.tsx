@@ -94,6 +94,7 @@ export default function SalesInvoiceCreateScreen() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [showPaymentRollbackDialog, setShowPaymentRollbackDialog] = useState(false);
   const [showCancelPaymentDialog, setShowCancelPaymentDialog] = useState(false);
+  const [cancelResultOpen, setCancelResultOpen] = useState(false);
   const [paymentNotice, setPaymentNotice] = useState<{
     unallocatedAmount?: number;
     writeoffAmount?: number;
@@ -224,6 +225,7 @@ export default function SalesInvoiceCreateScreen() {
         setDetail(nextDetail);
       }
       setShowCancelDialog(false);
+      setCancelResultOpen(true);
       showSuccess(`销售发票 ${detail.name} 已作废。`);
     } catch (error) {
       showError(error instanceof Error ? error.message : '销售发票作废失败。');
@@ -252,6 +254,7 @@ export default function SalesInvoiceCreateScreen() {
       }
       setShowPaymentRollbackDialog(false);
       setShowCancelDialog(false);
+      setCancelResultOpen(true);
       showSuccess(`已先回退收款单 ${detail.latestPaymentEntry}，再作废销售发票 ${detail.name}。`);
     } catch (error) {
       showError(error instanceof Error ? error.message : '收款回退或发票作废失败。');
@@ -729,6 +732,33 @@ export default function SalesInvoiceCreateScreen() {
         onConfirm={() => void handleCancelPaymentThenInvoice()}
         visible={showPaymentRollbackDialog}
       />
+
+      <InvoiceCancelResultDialog
+        deliveryNoteName={detail?.deliveryNotes[0] ?? ''}
+        onClose={() => setCancelResultOpen(false)}
+        onViewDelivery={() => {
+          if (!detail?.deliveryNotes[0]) {
+            return;
+          }
+          setCancelResultOpen(false);
+          router.replace({
+            pathname: '/sales/delivery/create',
+            params: { deliveryNote: detail.deliveryNotes[0] },
+          });
+        }}
+        onViewOrder={() => {
+          if (!detail?.salesOrders[0]) {
+            return;
+          }
+          setCancelResultOpen(false);
+          router.replace({
+            pathname: '/sales/order/[orderName]',
+            params: { orderName: detail.salesOrders[0] },
+          });
+        }}
+        orderName={detail?.salesOrders[0] ?? ''}
+        visible={cancelResultOpen}
+      />
     </AppShell>
   );
 }
@@ -817,6 +847,58 @@ function PaymentRollbackDialog({
             <Pressable onPress={onClose} style={[styles.dialogButton, styles.dialogSoftButton]}>
               <ThemedText style={styles.dialogSoftText} type="defaultSemiBold">
                 先不处理
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function InvoiceCancelResultDialog({
+  visible,
+  orderName,
+  deliveryNoteName,
+  onClose,
+  onViewOrder,
+  onViewDelivery,
+}: {
+  visible: boolean;
+  orderName: string;
+  deliveryNoteName: string;
+  onClose: () => void;
+  onViewOrder: () => void;
+  onViewDelivery: () => void;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.dialogBackdrop}>
+        <View style={[styles.dialogCard, styles.paymentRollbackDialogCard]}>
+          <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+            销售发票已作废
+          </ThemedText>
+          <ThemedText style={styles.dialogDescription}>
+            这张发票已经从订单结算链路中移除。建议先返回订单查看最新状态；如果你想继续沿发货链路核对，也可以直接查看对应发货单。
+          </ThemedText>
+          <View style={styles.paymentRollbackActionStack}>
+            {orderName ? (
+              <Pressable onPress={onViewOrder} style={[styles.dialogButton, styles.dialogDangerButton]}>
+                <ThemedText style={styles.dialogDangerText} type="defaultSemiBold">
+                  返回订单
+                </ThemedText>
+              </Pressable>
+            ) : null}
+            {deliveryNoteName ? (
+              <Pressable onPress={onViewDelivery} style={[styles.dialogButton, styles.dialogGhostButton]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  查看发货单
+                </ThemedText>
+              </Pressable>
+            ) : null}
+            <Pressable onPress={onClose} style={[styles.dialogButton, styles.dialogSoftButton]}>
+              <ThemedText style={styles.dialogSoftText} type="defaultSemiBold">
+                留在本页
               </ThemedText>
             </Pressable>
           </View>

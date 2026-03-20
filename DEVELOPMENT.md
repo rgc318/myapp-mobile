@@ -2137,3 +2137,27 @@ This round further tightened invoice-page behavior so the page reads more clearl
   - if payment exists but no rollbackable payment entry is found:
     - frontend blocks invoice cancellation
     - user must investigate with admin support instead of forcing an unsafe rollback path
+
+- successful rollback actions now guide the user back into the main document flow
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+  - after cancelling a delivery note:
+    - frontend no longer leaves the user with only a toast
+    - a result dialog now offers:
+      - `返回订单`
+      - `留在本页`
+  - after cancelling a sales invoice:
+    - frontend now offers:
+      - `返回订单`
+      - `查看发货单`
+      - `留在本页`
+  - rationale:
+    - cancelled documents are historical records
+    - the next meaningful business action usually belongs on the order page, or occasionally the delivery-note page
+
+- dangerous actions are now visually pushed lower on both invoice and delivery pages
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+  - delivery-note `作废发货单` is no longer mixed into the main “后续操作” area
+  - it now lives in a dedicated lower `回退处理` section, matching the invoice-page pattern

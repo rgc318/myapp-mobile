@@ -72,6 +72,7 @@ export default function SalesDeliveryCreateScreen() {
   const [showRiskDialog, setShowRiskDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelResultOpen, setCancelResultOpen] = useState(false);
 
   useEffect(() => {
     if (params.notice === 'created' && deliveryNote) {
@@ -233,6 +234,7 @@ export default function SalesDeliveryCreateScreen() {
         setDetail(nextDetail);
       }
       setShowCancelDialog(false);
+      setCancelResultOpen(true);
       showSuccess(`发货单 ${detail.name} 已作废，库存与订单履约状态已自动回退。`);
     } catch (error) {
       showError(error instanceof Error ? error.message : '发货单作废失败。');
@@ -561,18 +563,6 @@ export default function SalesDeliveryCreateScreen() {
                 当前发货单已经作废，建议返回订单查看最新履约状态；如需继续开票，应基于仍然有效的订单或发票链路重新处理，不应从这张历史发货单继续发起。
               </ThemedText>
             ) : null}
-            {detail.cancelDeliveryNoteHint ? (
-              <ThemedText style={styles.rollbackHint}>{detail.cancelDeliveryNoteHint}</ThemedText>
-            ) : null}
-            {detail.canCancelDeliveryNote && !isCancelledDetail ? (
-              <Pressable
-                onPress={() => setShowCancelDialog(true)}
-                style={[styles.actionButton, styles.dangerGhostActionButton]}>
-                <ThemedText style={styles.dangerGhostActionText} type="defaultSemiBold">
-                  作废发货单
-                </ThemedText>
-              </Pressable>
-            ) : null}
           </View>
 
           <View style={styles.sectionCard}>
@@ -625,6 +615,27 @@ export default function SalesDeliveryCreateScreen() {
               <ThemedText style={styles.noteText}>{detail.remarks}</ThemedText>
             </View>
           ) : null}
+
+          {!isCancelledDetail && (detail.canCancelDeliveryNote || detail.cancelDeliveryNoteHint) ? (
+            <View style={styles.rollbackCard}>
+              <ThemedText style={styles.rollbackTitle} type="subtitle">
+                回退处理
+              </ThemedText>
+              <ThemedText style={styles.rollbackText}>
+                {detail.cancelDeliveryNoteHint ||
+                  '如需回退这张发货单，系统会自动恢复库存并把订单履约状态退回到待发货。请确认当前没有仍在生效的下游发票。'}
+              </ThemedText>
+              {detail.canCancelDeliveryNote ? (
+                <Pressable
+                  onPress={() => setShowCancelDialog(true)}
+                  style={[styles.actionButton, styles.dangerGhostActionButton]}>
+                  <ThemedText style={styles.dangerGhostActionText} type="defaultSemiBold">
+                    作废发货单
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
         </ScrollView>
       ) : (
         <View style={styles.emptyCard}>
@@ -643,6 +654,23 @@ export default function SalesDeliveryCreateScreen() {
         onConfirm={() => void handleCancelDeliveryNote()}
         title="作废发货单？"
         visible={showCancelDialog}
+      />
+
+      <ResultDialog
+        onClose={() => setCancelResultOpen(false)}
+        onConfirm={() => {
+          setCancelResultOpen(false);
+          if (detail?.salesOrders[0]) {
+            router.replace({
+              pathname: '/sales/order/[orderName]',
+              params: { orderName: detail.salesOrders[0] },
+            });
+          }
+        }}
+        confirmLabel="返回订单"
+        description="这张发货单已经作废，库存和订单履约状态已回退。建议回到订单查看最新状态并决定是否重新发货。"
+        title="发货单已作废"
+        visible={cancelResultOpen}
       />
     </AppShell>
   );
@@ -715,6 +743,47 @@ function ConfirmDialog({
               </ThemedText>
             </Pressable>
             <Pressable onPress={onConfirm} style={[styles.dialogButton, styles.dialogDangerButton]}>
+              <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                {confirmLabel}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function ResultDialog({
+  visible,
+  title,
+  description,
+  confirmLabel,
+  onClose,
+  onConfirm,
+}: {
+  visible: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.dialogBackdrop}>
+        <View style={[styles.dialogCard, styles.confirmDialogCard]}>
+          <ThemedText style={styles.confirmDialogTitle} type="defaultSemiBold">
+            {title}
+          </ThemedText>
+          <ThemedText style={styles.confirmDialogMessage}>{description}</ThemedText>
+          <View style={styles.dialogActions}>
+            <Pressable onPress={onClose} style={[styles.dialogButton, styles.dialogGhostButton]}>
+              <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                留在本页
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={onConfirm} style={[styles.dialogButton, styles.dialogPrimaryButton]}>
               <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
                 {confirmLabel}
               </ThemedText>
@@ -858,6 +927,23 @@ const styles = StyleSheet.create({
   },
   actionHint: {
     color: '#64748B',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  rollbackCard: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 12,
+    padding: 18,
+  },
+  rollbackTitle: {
+    color: '#991B1B',
+    fontSize: 16,
+  },
+  rollbackText: {
+    color: '#7F1D1D',
     fontSize: 13,
     lineHeight: 20,
   },
