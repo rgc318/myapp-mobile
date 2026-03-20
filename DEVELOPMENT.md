@@ -737,6 +737,30 @@ The order-detail page now treats stock-shortage failures as a business decision 
 - some real-world warehouse scenarios still require urgent shipment before stock bookkeeping catches up
 - the current interaction keeps the safe path as default while still letting privileged users proceed when necessary
 
+## Quick Create With Forced Delivery (2026-03-20)
+
+The create-order page now uses the same risk-handling principle for `快速开单`.
+
+### Current rule
+
+- `快速开单` remains the default fast path:
+  - create order
+  - auto submit delivery note
+  - auto create sales invoice
+- when quick create is blocked by stock shortage:
+  - the page does not silently fall back
+  - it shows a centered confirmation dialog with the backend stock-shortage reason
+  - the user can choose:
+    - `返回检查`
+    - `强制出货并开票`
+- the second step retries quick create with `force_delivery=1`
+
+### Why this matters
+
+- frequent operators keep the one-tap fast path when stock is normal
+- dangerous stock bypass is still hidden behind an explicit failure and confirmation step
+- the mobile UI now keeps `快速开单` and manual `出货` aligned under the same forced-delivery business rule
+
 ## Customer Context Notes (2026-03-20)
 
 The create-order page now handles customer defaults more defensively.

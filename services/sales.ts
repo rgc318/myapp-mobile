@@ -1,12 +1,17 @@
 import { callGatewayMethod } from '@/lib/api-client';
 import { compactAddressText } from '@/lib/form-utils';
-import { createSalesOrderV2, type SalesOrderItemInput } from '@/services/gateway';
+import {
+  createSalesOrderV2,
+  quickCreateSalesOrderV2,
+  type SalesOrderItemInput,
+} from '@/services/gateway';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
 
 export type CreateSalesOrderPayload = {
   customer: string;
   company: string;
   items: SalesOrderItemInput[];
+  force_delivery?: boolean;
   transaction_date?: string;
   remarks?: string;
   customer_info?: {
@@ -197,6 +202,10 @@ export function companyExists(company: string) {
 
 export function submitSalesOrderV2(payload: CreateSalesOrderPayload) {
   return createSalesOrderV2(payload);
+}
+
+export function submitQuickSalesOrderV2(payload: CreateSalesOrderPayload) {
+  return quickCreateSalesOrderV2(payload);
 }
 
 function normalizeShippingText(value: unknown) {

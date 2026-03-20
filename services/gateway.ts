@@ -62,6 +62,7 @@ export type SalesOrderV2Input = {
   company: string;
   items: SalesOrderItemInput[];
   immediate?: boolean;
+  force_delivery?: boolean;
   transaction_date?: string;
   remarks?: string;
   customer_info?: {
@@ -197,11 +198,26 @@ export async function createSalesOrderV2(payload: SalesOrderV2Input) {
     company: payload.company,
     items: payload.items,
     immediate: payload.immediate ?? false,
+    force_delivery: payload.force_delivery ? 1 : 0,
     transaction_date: payload.transaction_date,
     remarks: payload.remarks,
     customer_info: payload.customer_info,
     shipping_info: payload.shipping_info,
     request_id: randomRequestId('mobile-sales-order-v2'),
+  });
+}
+
+export async function quickCreateSalesOrderV2(payload: SalesOrderV2Input) {
+  return postGateway<any>('myapp.api.gateway.quick_create_order_v2', {
+    customer: payload.customer,
+    company: payload.company,
+    items: payload.items,
+    force_delivery: payload.force_delivery ? 1 : 0,
+    transaction_date: payload.transaction_date,
+    remarks: payload.remarks,
+    customer_info: payload.customer_info,
+    shipping_info: payload.shipping_info,
+    request_id: randomRequestId('mobile-sales-order-quick-v2'),
   });
 }
 

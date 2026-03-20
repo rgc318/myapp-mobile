@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
@@ -33,7 +33,12 @@ import {
   getProductDetail,
   type LinkOption,
 } from '@/services/master-data';
-import { companyExists, searchCompanies, submitSalesOrderV2 } from '@/services/sales';
+import {
+  companyExists,
+  searchCompanies,
+  submitQuickSalesOrderV2,
+  submitSalesOrderV2,
+} from '@/services/sales';
 
 const MONEY = new Intl.NumberFormat('zh-CN', {
   minimumFractionDigits: 2,
@@ -41,6 +46,14 @@ const MONEY = new Intl.NumberFormat('zh-CN', {
 });
 
 type MessageTone = 'info' | 'success' | 'error';
+type SubmitMode = 'save' | 'quick';
+
+const ITEM_REQUIRED_MESSAGE = '还没有销售商品，请先选择商品。';
+
+function isQuickCreateForceDeliveryCandidate(message: string) {
+  const normalized = normalizeText(message);
+  return normalized.includes('库存不足') || normalized.includes('可用库存不足');
+}
 
 type TopFieldRowProps = {
   label: string;
@@ -314,9 +327,17 @@ export default function SalesOrderCreateScreen() {
   const [companyError, setCompanyError] = useState('');
   const [showOrderMeta, setShowOrderMeta] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMode, setSubmitMode] = useState<SubmitMode>('save');
+  const [showQuickCreateConfirm, setShowQuickCreateConfirm] = useState(false);
+  const [showQuickForceConfirm, setShowQuickForceConfirm] = useState(false);
+  const [quickForceMessage, setQuickForceMessage] = useState('');
   const [pendingRemovedItem, setPendingRemovedItem] = useState<SalesOrderDraftItem | null>(null);
+  const scrollRef = useRef<ScrollView | null>(null);
   const removeUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCustomerRef = useRef('');
+  const customerSectionYRef = useRef(0);
+  const itemsSectionYRef = useRef(0);
+  const shippingSectionYRef = useRef(0);
   const shippingAddressTouchedRef = useRef(false);
   const shippingContactTouchedRef = useRef(false);
   const shippingPhoneTouchedRef = useRef(false);
@@ -333,6 +354,20 @@ export default function SalesOrderCreateScreen() {
 
   const syncDraft = () => {
     setDraftItems([...getSalesOrderDraft()]);
+  };
+
+  const handleCustomerChange = (value: string) => {
+    setCustomer(value);
+    if (customerError) {
+      setCustomerError('');
+    }
+  };
+
+  const handleCompanyChange = (value: string) => {
+    setCompany(value);
+    if (companyError) {
+      setCompanyError('');
+    }
   };
 
   const handleShippingAddressChange = (value: string) => {
@@ -391,6 +426,13 @@ export default function SalesOrderCreateScreen() {
       active = false;
     };
   }, [draftItems]);
+
+  useEffect(() => {
+    if (draftItems.length > 0 && messageTone === 'error' && message === ITEM_REQUIRED_MESSAGE) {
+      setMessage('');
+      setMessageTone('info');
+    }
+  }, [draftItems, message, messageTone]);
 
 
 
@@ -519,6 +561,12 @@ export default function SalesOrderCreateScreen() {
     setMessageTone(tone);
   };
 
+  const scrollToSection = (y: number) => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(y - 16, 0), animated: true });
+    });
+  };
+
   const totalQty = useMemo(
     () => draftItems.reduce((sum, item) => sum + item.qty, 0),
     [draftItems],
@@ -532,13 +580,13 @@ export default function SalesOrderCreateScreen() {
   const discountAmount = 0;
   const freightAmount = 0;
   const receivableAmount = goodsAmount - discountAmount + freightAmount;
-  const paidNowAmount = 0;
 
   const loadCustomers = (query: string) => searchCustomers(query);
   const loadCompanies = (query: string) => searchCompanies(query);
 
   const validateLinks = async () => {
     let valid = true;
+    let firstInvalidSection: 'customer' | 'items' | 'shipping' | null = null;
 
     setCustomerError('');
     setCompanyError('');
@@ -549,19 +597,37 @@ export default function SalesOrderCreateScreen() {
     if (customerRequiredError) {
       setCustomerError(customerRequiredError);
       valid = false;
+      firstInvalidSection ??= 'customer';
     }
 
     if (companyRequiredError) {
       setCompanyError(companyRequiredError);
       valid = false;
+      firstInvalidSection ??= 'shipping';
     }
 
     if (!draftItems.length) {
-      setStatusMessage('还没有销售商品，请先选择商品。', 'error');
+      setStatusMessage(ITEM_REQUIRED_MESSAGE, 'error');
       valid = false;
+      firstInvalidSection ??= 'items';
     }
 
     if (!valid) {
+      showError(
+        firstInvalidSection === 'customer'
+          ? '请先选择客户。'
+          : firstInvalidSection === 'items'
+            ? '请先添加销售商品。'
+            : '请先完善发货信息。',
+      );
+      if (firstInvalidSection === 'customer') {
+        scrollToSection(customerSectionYRef.current);
+      } else if (firstInvalidSection === 'items') {
+        scrollToSection(itemsSectionYRef.current);
+      } else if (firstInvalidSection === 'shipping') {
+        setShowOrderMeta(true);
+        scrollToSection(shippingSectionYRef.current);
+      }
       return false;
     }
 
@@ -573,11 +639,25 @@ export default function SalesOrderCreateScreen() {
     if (!customerOk) {
       setCustomerError('客户不存在，请重新选择。');
       valid = false;
+      firstInvalidSection ??= 'customer';
     }
 
     if (!companyOk) {
       setCompanyError('公司不存在，请重新选择。');
       valid = false;
+      firstInvalidSection ??= 'shipping';
+    }
+
+    if (!valid) {
+      showError(
+        firstInvalidSection === 'customer' ? '客户不存在，请重新选择。' : '公司不存在，请重新选择。',
+      );
+      if (firstInvalidSection === 'customer') {
+        scrollToSection(customerSectionYRef.current);
+      } else if (firstInvalidSection === 'shipping') {
+        setShowOrderMeta(true);
+        scrollToSection(shippingSectionYRef.current);
+      }
     }
 
     return valid;
@@ -601,7 +681,31 @@ export default function SalesOrderCreateScreen() {
     queueUndoForRemovedItem(item);
   };
 
-  const handleSubmit = async () => {
+  const buildOrderPayload = (options?: { forceDelivery?: boolean }) => ({
+    customer,
+    company,
+    force_delivery: options?.forceDelivery,
+    transaction_date: postingDate,
+    remarks: toOptionalText(remarks),
+    customer_info: {
+      contact_display_name: toOptionalText(shippingContact),
+      contact_phone: toOptionalText(shippingPhone),
+    },
+    shipping_info: {
+      receiver_name: toOptionalText(shippingContact),
+      receiver_phone: toOptionalText(shippingPhone),
+      shipping_address_text: toOptionalText(compactAddressText(shippingAddress)),
+    },
+    items: draftItems.map((item) => ({
+      item_code: item.itemCode,
+      qty: item.qty,
+      price: item.price ?? undefined,
+      warehouse: item.warehouse || preferences.defaultWarehouse || undefined,
+      uom: item.uom || undefined,
+    })),
+  });
+
+  const handleSubmit = async (mode: SubmitMode = 'save', options?: { forceDelivery?: boolean }) => {
     setStatusMessage('', 'info');
 
     const valid = await validateLinks();
@@ -609,31 +713,14 @@ export default function SalesOrderCreateScreen() {
       return;
     }
 
+    setSubmitMode(mode);
     setIsSubmitting(true);
 
     try {
-      const result = await submitSalesOrderV2({
-        customer,
-        company,
-        transaction_date: postingDate,
-        remarks: toOptionalText(remarks),
-        customer_info: {
-          contact_display_name: toOptionalText(shippingContact),
-          contact_phone: toOptionalText(shippingPhone),
-        },
-        shipping_info: {
-          receiver_name: toOptionalText(shippingContact),
-          receiver_phone: toOptionalText(shippingPhone),
-          shipping_address_text: toOptionalText(compactAddressText(shippingAddress)),
-        },
-        items: draftItems.map((item) => ({
-          item_code: item.itemCode,
-          qty: item.qty,
-          price: item.price ?? undefined,
-          warehouse: item.warehouse || preferences.defaultWarehouse || undefined,
-          uom: item.uom || undefined,
-        })),
-      });
+      const result =
+        mode === 'quick'
+          ? await submitQuickSalesOrderV2(buildOrderPayload(options))
+          : await submitSalesOrderV2(buildOrderPayload(options));
 
       const orderName =
         typeof result?.order === 'string' && result.order.trim()
@@ -641,13 +728,39 @@ export default function SalesOrderCreateScreen() {
           : typeof result?.order_name === 'string' && result.order_name.trim()
             ? result.order_name.trim()
             : '';
+      const salesInvoiceName =
+        typeof result?.sales_invoice === 'string' && result.sales_invoice.trim()
+          ? result.sales_invoice.trim()
+          : '';
 
       clearSalesOrderDraft();
       syncDraft();
-      setStatusMessage(orderName ? `销售单 ${orderName} 已创建。` : '销售单已按 v2 接口创建。', 'success');
-      showSuccess(orderName ? `销售单 ${orderName} 已创建。` : '销售单已创建。');
+      setStatusMessage(
+        mode === 'quick'
+          ? orderName
+            ? `销售单 ${orderName} 已快速开单，并自动完成发货与开票。`
+            : '销售单已快速开单。'
+          : orderName
+            ? `销售单 ${orderName} 已保存。`
+            : '销售单已保存。',
+        'success',
+      );
+      showSuccess(
+        mode === 'quick'
+          ? salesInvoiceName
+            ? `已快速开单，销售发票 ${salesInvoiceName} 已生成。`
+            : '已快速开单。'
+          : orderName
+            ? `销售单 ${orderName} 已保存。`
+            : '销售单已保存。',
+      );
 
-      if (orderName) {
+      if (mode === 'quick' && salesInvoiceName) {
+        router.replace({
+          pathname: '/sales/invoice/create',
+          params: { salesInvoice: salesInvoiceName, notice: 'created' },
+        });
+      } else if (orderName) {
         router.replace({
           pathname: '/sales/order/[orderName]',
           params: { orderName },
@@ -655,6 +768,16 @@ export default function SalesOrderCreateScreen() {
       }
     } catch (error) {
       const appError = normalizeAppError(error, '提交失败，请稍后重试。');
+      if (
+        mode === 'quick' &&
+        !options?.forceDelivery &&
+        isQuickCreateForceDeliveryCandidate(appError.message)
+      ) {
+        setQuickForceMessage(appError.message);
+        setShowQuickForceConfirm(true);
+        setStatusMessage(appError.message, 'error');
+        return;
+      }
       setStatusMessage(
         appError.message,
         'error',
@@ -662,6 +785,7 @@ export default function SalesOrderCreateScreen() {
       showError(appError.message);
     } finally {
       setIsSubmitting(false);
+      setSubmitMode('save');
     }
   };
 
@@ -674,7 +798,7 @@ export default function SalesOrderCreateScreen() {
 
   return (
     <View style={[styles.page, { backgroundColor: background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} ref={scrollRef}>
         <View style={styles.topBar}>
           <Pressable onPress={() => router.back()} style={styles.iconCircle}>
             <IconSymbol color="#111827" name="chevron.left" size={20} />
@@ -697,7 +821,11 @@ export default function SalesOrderCreateScreen() {
           <WorkflowQuickNav compact />
         </View>
 
-        <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+        <View
+          onLayout={(event) => {
+            customerSectionYRef.current = event.nativeEvent.layout.y;
+          }}
+          style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.heroHeader}>
             <View>
               <ThemedText type="title">销售单</ThemedText>
@@ -717,7 +845,7 @@ export default function SalesOrderCreateScreen() {
             helperText="选择当前订单的往来客户"
             label="客户"
             loadOptions={loadCustomers}
-            onChangeText={setCustomer}
+            onChangeText={handleCustomerChange}
             placeholder="请选择客户"
             value={customer}
           />
@@ -782,7 +910,11 @@ export default function SalesOrderCreateScreen() {
           </Pressable>
         </View>
 
-        <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
+        <View
+          onLayout={(event) => {
+            itemsSectionYRef.current = event.nativeEvent.layout.y;
+          }}
+          style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionAccent, { backgroundColor: tintColor }]} />
             <View>
@@ -849,6 +981,17 @@ export default function SalesOrderCreateScreen() {
             </>
           )}
 
+          {!draftItems.length ? (
+            <View style={styles.validationCard}>
+              <ThemedText style={styles.validationTitle} type="defaultSemiBold">
+                还没有销售商品
+              </ThemedText>
+              <ThemedText style={styles.validationText}>
+                请先通过“选择商品”或“扫码添加”把本单要卖的商品加入进来，再继续保存或快速开单。
+              </ThemedText>
+            </View>
+          ) : null}
+
           <View style={[styles.sectionFooter, { borderTopColor: borderColor }]}>
             <ThemedText style={styles.sectionFooterText}>
               合计 已选 {totalQty} 项
@@ -859,7 +1002,11 @@ export default function SalesOrderCreateScreen() {
           </View>
         </View>
 
-        <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
+        <View
+          onLayout={(event) => {
+            shippingSectionYRef.current = event.nativeEvent.layout.y;
+          }}
+          style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
           <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
             金额汇总
           </ThemedText>
@@ -896,7 +1043,7 @@ export default function SalesOrderCreateScreen() {
                 helperText={'\u9ed8\u8ba4\u53d1\u8d27\u516c\u53f8\uff0c\u901a\u5e38\u65e0\u9700\u9891\u7e41\u8c03\u6574'}
                 label={'\u516c\u53f8'}
                 loadOptions={loadCompanies}
-                onChangeText={setCompany}
+              onChangeText={handleCompanyChange}
                 placeholder={'\u8bf7\u9009\u62e9\u516c\u53f8'}
                 value={company}
               />
@@ -996,22 +1143,23 @@ export default function SalesOrderCreateScreen() {
             应收: ¥ {formatMoney(receivableAmount)}
           </ThemedText>
           <ThemedText style={styles.bottomSecondaryAmount}>
-            本次实收: ¥ {formatMoney(paidNowAmount)}
+            快速开单会自动生成发货单和销售发票
           </ThemedText>
         </View>
 
         <View style={styles.bottomActions}>
           <Pressable
-            onPress={() => setStatusMessage('收款功能开发中。', 'info')}
+            disabled={isSubmitting}
+            onPress={() => void handleSubmit('save')}
             style={[styles.secondaryButton, { borderColor }]}>
             <ThemedText style={styles.secondaryButtonText} type="defaultSemiBold">
-              收款
+              仅保存
             </ThemedText>
           </Pressable>
 
           <Pressable
             disabled={isSubmitting}
-            onPress={handleSubmit}
+            onPress={() => setShowQuickCreateConfirm(true)}
             style={[
               styles.primaryButton,
               { backgroundColor: tintColor, opacity: isSubmitting ? 0.7 : 1 },
@@ -1020,12 +1168,96 @@ export default function SalesOrderCreateScreen() {
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
-                保存
+                快速开单
               </ThemedText>
             )}
           </Pressable>
         </View>
       </View>
+
+      <Modal animationType="fade" onRequestClose={() => setShowQuickCreateConfirm(false)} transparent visible={showQuickCreateConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              确认快速开单？
+            </ThemedText>
+            <ThemedText style={styles.dialogText}>
+              系统将自动保存订单、创建发货单并生成销售发票。若商品、地址或金额仍可能调整，建议先选择“仅保存”。
+            </ThemedText>
+            <View style={styles.dialogTipCard}>
+              <ThemedText style={styles.dialogTipTitle} type="defaultSemiBold">
+                执行后会发生什么
+              </ThemedText>
+              <ThemedText style={styles.dialogTipText}>
+                下单成功后会直接进入发票详情页，后续如需修改，应走快捷回退或分步回退流程。
+              </ThemedText>
+            </View>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setShowQuickCreateConfirm(false)}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  先不处理
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowQuickCreateConfirm(false);
+                  void handleSubmit('quick');
+                }}
+                style={[styles.dialogButton, styles.dialogPrimaryButton, { backgroundColor: tintColor }]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  {isSubmitting && submitMode === 'quick' ? '开单中...' : '确认快速开单'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowQuickForceConfirm(false)}
+        transparent
+        visible={showQuickForceConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              库存不足，是否继续快速开单？
+            </ThemedText>
+            <ThemedText style={styles.dialogText}>
+              正常快速开单已被库存校验拦截。如果你确认按实物先出货，可以继续强制出货并完成开票。
+            </ThemedText>
+            <View style={styles.dialogTipCard}>
+              <ThemedText style={styles.dialogTipTitle} type="defaultSemiBold">
+                当前拦截原因
+              </ThemedText>
+              <ThemedText style={styles.dialogTipText}>
+                {quickForceMessage || '库存不足，请先核对库存和订单数量。'}
+              </ThemedText>
+            </View>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setShowQuickForceConfirm(false)}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  返回检查
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowQuickForceConfirm(false);
+                  void handleSubmit('quick', { forceDelivery: true });
+                }}
+                style={[styles.dialogButton, styles.dialogDangerButton]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  强制出货并开票
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1233,6 +1465,24 @@ const styles = StyleSheet.create({
   draftHint: {
     color: '#6B7280',
     fontSize: 13,
+  },
+  validationCard: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  validationTitle: {
+    color: '#991B1B',
+    fontSize: 14,
+  },
+  validationText: {
+    color: '#7F1D1D',
+    fontSize: 13,
+    lineHeight: 20,
   },
   itemList: {
     gap: 12,
@@ -1506,6 +1756,75 @@ const styles = StyleSheet.create({
   bottomActions: {
     flexDirection: 'row',
     gap: 10,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.22)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  dialogCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    maxWidth: 420,
+    padding: 20,
+    width: '100%',
+  },
+  dialogTitle: {
+    color: '#0F172A',
+    fontSize: 18,
+  },
+  dialogText: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  dialogTipCard: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dialogTipTitle: {
+    color: '#9A3412',
+    fontSize: 14,
+  },
+  dialogTipText: {
+    color: '#7C2D12',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dialogButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  dialogGhostButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+  },
+  dialogGhostText: {
+    color: '#1D4ED8',
+  },
+  dialogPrimaryButton: {
+    backgroundColor: '#2563EB',
+  },
+  dialogDangerButton: {
+    backgroundColor: '#DC2626',
+  },
+  dialogPrimaryText: {
+    color: '#FFFFFF',
   },
   secondaryButton: {
     alignItems: 'center',
