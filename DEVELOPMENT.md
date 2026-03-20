@@ -536,6 +536,12 @@ The order-detail page now treats downstream documents as an edit blocker that ca
 - after rollback succeeds:
   - the page does not leave the user on a blocked order state
   - it directly enters the all-section edit mode on the same order page
+- the same rollback rule now also applies to section-level edit entries:
+  - `收货与联系人 -> 修改`
+  - `销售商品 -> 修改商品`
+  - `订单备注 -> 修改`
+  - these local actions no longer stop at a dead-end warning dialog
+  - after rollback succeeds, each action returns to its own corresponding edit context instead of always forcing full-page edit
 
 ### Why this matters
 

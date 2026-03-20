@@ -47,6 +47,8 @@ type CenterDialogState = {
   onConfirm?: (() => void) | null;
 } | null;
 
+type EditEntryMode = 'all' | 'contact' | 'items' | 'remarks';
+
 function HighlightedDialogMessage({
   message,
   tone,
@@ -707,7 +709,7 @@ export default function SalesOrderDetailScreen() {
   }
 
   function startEditingContact() {
-    if (!ensureOrderEditable()) {
+    if (!requestEditEntry('contact')) {
       return;
     }
     setIsEditingItems(false);
@@ -720,7 +722,7 @@ export default function SalesOrderDetailScreen() {
   }
 
   function startEditingItems() {
-    if (!ensureOrderEditable()) {
+    if (!requestEditEntry('items')) {
       return;
     }
     setIsEditingContact(false);
@@ -802,7 +804,7 @@ export default function SalesOrderDetailScreen() {
   }
 
   function startEditingRemarks() {
-    if (!ensureOrderEditable()) {
+    if (!requestEditEntry('remarks')) {
       return;
     }
     setIsEditingContact(false);
@@ -1005,7 +1007,53 @@ export default function SalesOrderDetailScreen() {
     return false;
   }
 
-  async function handleQuickRollbackAndEdit() {
+  function enterEditMode(mode: EditEntryMode, sourceDetail?: SalesOrderDetailV2 | null) {
+    if (mode === 'all') {
+      prepareAllEditingInputs(sourceDetail);
+      setIsEditingContact(true);
+      setIsEditingItems(true);
+      setIsEditingRemarks(true);
+      return;
+    }
+
+    if (mode === 'contact') {
+      setIsEditingItems(false);
+      setIsEditingRemarks(false);
+      setDeliveryDateInput(sourceDetail?.deliveryDate ?? detail?.deliveryDate ?? '');
+      setContactDisplayInput(sourceDetail?.contactDisplay ?? sourceDetail?.contactPerson ?? detail?.contactDisplay ?? detail?.contactPerson ?? '');
+      setContactPhoneInput(sourceDetail?.contactPhone ?? detail?.contactPhone ?? '');
+      setAddressInput(sourceDetail?.addressDisplay ?? detail?.addressDisplay ?? '');
+      setIsEditingContact(true);
+      return;
+    }
+
+    if (mode === 'items') {
+      setIsEditingContact(false);
+      setIsEditingRemarks(false);
+      const nextItems =
+        (sourceDetail ?? detail)?.items.map((item) => ({
+          itemCode: item.itemCode,
+          itemName: item.itemName,
+          qty: item.qty ?? 1,
+          rate: item.rate,
+          amount: item.amount,
+          warehouse: item.warehouse,
+          uom: item.uom,
+          imageUrl: item.imageUrl,
+        })) ?? [];
+      setEditableItems(nextItems);
+      syncScopedDraft(nextItems);
+      setIsEditingItems(true);
+      return;
+    }
+
+    setIsEditingContact(false);
+    setIsEditingItems(false);
+    setRemarksInput(sourceDetail?.remarks ?? detail?.remarks ?? '');
+    setIsEditingRemarks(true);
+  }
+
+  async function handleQuickRollbackAndEdit(mode: EditEntryMode) {
     if (!orderName) {
       return;
     }
@@ -1016,11 +1064,10 @@ export default function SalesOrderDetailScreen() {
       const nextDetail = rollbackResult.detail;
       if (nextDetail) {
         setDetail(nextDetail);
-        prepareAllEditingInputs(nextDetail);
+        enterEditMode(mode, nextDetail);
+      } else {
+        enterEditMode(mode);
       }
-      setIsEditingContact(true);
-      setIsEditingItems(true);
-      setIsEditingRemarks(true);
 
       const rollbackSummary = [
         rollbackResult.cancelledPaymentEntries.length
@@ -1041,7 +1088,7 @@ export default function SalesOrderDetailScreen() {
     }
   }
 
-  function startEditingAll() {
+  function requestEditEntry(mode: EditEntryMode) {
     const rollbackPlan = getQuickRollbackPlan();
     if (rollbackPlan) {
       setCenterDialog({
@@ -1051,19 +1098,24 @@ export default function SalesOrderDetailScreen() {
         confirmLabel: rollbackPlan.confirmLabel,
         confirmTone: 'primary',
         onConfirm: () => {
-          void handleQuickRollbackAndEdit();
+          void handleQuickRollbackAndEdit(mode);
         },
       });
-      return;
+      return false;
     }
 
     if (!ensureOrderEditable()) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function startEditingAll() {
+    if (!requestEditEntry('all')) {
       return;
     }
-    prepareAllEditingInputs();
-    setIsEditingContact(true);
-    setIsEditingItems(true);
-    setIsEditingRemarks(true);
+    enterEditMode('all');
   }
 
   const workflowAction = detail?.canSubmitDelivery
