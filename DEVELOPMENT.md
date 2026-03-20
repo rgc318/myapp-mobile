@@ -258,6 +258,52 @@ This detail is important and should be preserved if order-product search flow is
 - legacy helpers still exist in some older modules even though core detail flows are now on v2
 - delivery / invoice / payment pages still need similar contract cleanup later
 
+## Address Display Refinement (2026-03-20)
+
+This round tightened how customer shipping addresses are carried into mobile order and document pages.
+
+### Problem
+
+- backend customer context may return ERP-style `address_display`
+- that string can contain:
+  - street address
+  - city / province
+  - postcode
+  - country
+  - phone / email
+- directly showing or re-submitting the full display string made mobile pages look noisy and duplicated data that is already shown in dedicated contact fields
+
+Typical bad result on mobile:
+
+- `北京市朝阳区测试客户路 100 号`
+- `北京`
+- `100000`
+- `China`
+
+### Current Rule
+
+- if structured address fields exist, mobile now prefers:
+  - `address_line1`
+  - `address_line2`
+- `address_display` is now only a fallback source
+- fallback display is compacted to the address body only
+- phone, email, postcode, country, and standalone city/province lines should not appear inside the mobile `收货地址` field
+
+### Affected Flows
+
+- sales order create
+- customer sales context default address
+- recent address chips
+- sales order detail
+- delivery note detail
+- sales invoice detail
+
+### Intent
+
+Mobile business pages should treat `收货人` / `联系电话` / `收货地址` as separate fields.
+
+For mobile display, `收货地址` should read like a usable street address, not like the full ERP print-format address block.
+
 ### Order-Detail Follow-up Notes
 
 Additional follow-up work after the first v2 alignment focused on making the order-detail product-edit experience safer and easier to understand.

@@ -1,4 +1,5 @@
 import { callGatewayMethod } from '@/lib/api-client';
+import { compactAddressText } from '@/lib/form-utils';
 
 export type ProductSearchItem = {
   itemCode: string;
@@ -242,7 +243,7 @@ function mapCustomerSalesContext(data: Record<string, any>): CustomerSalesContex
             typeof defaultAddress.address_title === 'string' ? defaultAddress.address_title : null,
           addressDisplay:
             typeof defaultAddress.address_display === 'string'
-              ? defaultAddress.address_display
+              ? compactAddressText(defaultAddress.address_display)
               : null,
           addressLine1:
             typeof defaultAddress.address_line1 === 'string'
@@ -261,7 +262,10 @@ function mapCustomerSalesContext(data: Record<string, any>): CustomerSalesContex
       : null,
     recentAddresses: recentAddresses.map((row: Record<string, unknown>) => ({
       name: typeof row.name === 'string' ? row.name : null,
-      addressDisplay: typeof row.address_display === 'string' ? row.address_display : null,
+      addressDisplay:
+        typeof row.address_display === 'string'
+          ? compactAddressText(row.address_display)
+          : null,
     })),
     suggestions: {
       company: typeof suggestions.company === 'string' ? suggestions.company : null,

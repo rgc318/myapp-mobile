@@ -10,7 +10,13 @@ import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
-import { normalizeText, requireText, toOptionalText } from '@/lib/form-utils';
+import {
+  compactAddressText,
+  composeStructuredAddressText,
+  normalizeText,
+  requireText,
+  toOptionalText,
+} from '@/lib/form-utils';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -64,23 +70,15 @@ function composeAddressDisplay(address: {
     return '';
   }
 
-  const directDisplay = normalizeText(address.addressDisplay ?? '');
-  if (directDisplay) {
-    return directDisplay;
+  const structuredDisplay = composeStructuredAddressText({
+    addressLine1: address.addressLine1,
+    addressLine2: address.addressLine2,
+  });
+  if (structuredDisplay) {
+    return structuredDisplay;
   }
 
-  return [
-    address.addressLine1,
-    address.addressLine2,
-    address.city,
-    address.county,
-    address.state,
-    address.country,
-    address.pincode,
-  ]
-    .map((value) => normalizeText(value ?? ''))
-    .filter(Boolean)
-    .join(' ');
+  return compactAddressText(address.addressDisplay ?? '');
 }
 
 function TopFieldRow({
@@ -414,12 +412,17 @@ export default function SalesOrderCreateScreen() {
 
               setShippingAddress(
                 composeAddressDisplay(details.defaultAddress) ||
-                  details.recentAddresses[0]?.addressDisplay ||
+                  compactAddressText(details.recentAddresses[0]?.addressDisplay) ||
                   '',
               );
               setShippingContact(details.defaultContact?.displayName || '');
               setShippingPhone(details.defaultContact?.phone || '');
-              setRecentAddresses(details.recentAddresses);
+              setRecentAddresses(
+                details.recentAddresses.map((address) => ({
+                  ...address,
+                  addressDisplay: compactAddressText(address.addressDisplay),
+                })),
+              );
               setCustomerContextNote(
                 details.defaultContact?.displayName
                   ? `默认联系人：${details.defaultContact.displayName}${details.defaultContact.phone ? ` / ${details.defaultContact.phone}` : ''}`
@@ -592,7 +595,7 @@ export default function SalesOrderCreateScreen() {
         shipping_info: {
           receiver_name: toOptionalText(shippingContact),
           receiver_phone: toOptionalText(shippingPhone),
-          shipping_address_text: toOptionalText(shippingAddress),
+          shipping_address_text: toOptionalText(compactAddressText(shippingAddress)),
         },
         items: draftItems.map((item) => ({
           item_code: item.itemCode,
@@ -917,10 +920,10 @@ export default function SalesOrderCreateScreen() {
                     {recentAddresses.map((address, index) => (
                       <Pressable
                         key={`${address.name ?? 'text'}-${index}`}
-                        onPress={() => setShippingAddress(address.addressDisplay || '')}
+                        onPress={() => setShippingAddress(compactAddressText(address.addressDisplay))}
                         style={[styles.recentAddressChip, { backgroundColor: accentSoft, borderColor }]}>
                         <ThemedText numberOfLines={2} style={styles.recentAddressText}>
-                          {address.addressDisplay || '未命名地址'}
+                          {compactAddressText(address.addressDisplay) || '未命名地址'}
                         </ThemedText>
                       </Pressable>
                     ))}

@@ -1,4 +1,5 @@
 import { callGatewayMethod } from '@/lib/api-client';
+import { compactAddressText } from '@/lib/form-utils';
 import { createSalesOrderV2, type SalesOrderItemInput } from '@/services/gateway';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
 
@@ -263,8 +264,8 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
       shipping.contact_display ?? customer.contact_display_name ?? '',
     ),
     contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
-    addressDisplay: String(
-      shipping.shipping_address_text ?? customer.shipping_address_text ?? '',
+    addressDisplay: compactAddressText(
+      String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
     ),
     customerAddress: String(shipping.shipping_address_name ?? customer.shipping_address_name ?? ''),
     paidAmount: settledAmount,
@@ -420,7 +421,9 @@ export async function getDeliveryNoteDetailV2(
       : [],
     contactDisplay: String(shipping.contact_display ?? customer.contact_display_name ?? ''),
     contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
-    addressDisplay: String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
+    addressDisplay: compactAddressText(
+      String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
+    ),
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),
@@ -482,7 +485,9 @@ export async function getSalesInvoiceDetailV2(
       : [],
     contactDisplay: String(shipping.contact_display ?? customer.contact_display_name ?? ''),
     contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
-    addressDisplay: String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
+    addressDisplay: compactAddressText(
+      String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
+    ),
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),
