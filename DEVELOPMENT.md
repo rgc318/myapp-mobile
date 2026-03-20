@@ -2216,3 +2216,79 @@ This round further tightened invoice-page behavior so the page reads more clearl
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
   - delivery-note `作废发货单` is no longer mixed into the main “后续操作” area
   - it now lives in a dedicated lower `回退处理` section, matching the invoice-page pattern
+
+## Sales Draft And Edit Guard Update (2026-03-20)
+
+This round tightened two related behaviors:
+
+- create-order local draft persistence
+- order-detail unsaved-change protection
+
+The goal is to make long editing sessions safer without forcing users through extra save dialogs for clearly internal transitions.
+
+### Create-order draft behavior
+
+- files:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/sales-order-draft.ts`
+- the create-order page no longer stores only item lines
+- local draft now persists the main form snapshot as well, including:
+  - customer
+  - company
+  - remarks
+  - shipping contact
+  - shipping phone
+  - shipping address
+  - current item lines
+- successful order creation now clears both:
+  - item draft
+  - form draft
+
+### Create-order leave guard
+
+- the create-order page now treats partially filled content as a draft session
+- if the operator has entered meaningful content but has not yet created the order:
+  - back navigation is intercepted
+  - the user sees an explicit leave-confirm dialog
+- current dialog intent:
+  - remind users that current content is only a local draft
+  - prevent accidental loss caused by habitual back-navigation or module switching
+
+### Order-detail unsaved edit guard
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+- order-detail now compares current edit state against the last loaded order state
+- unsaved-change detection currently covers:
+  - contact / shipping edits
+  - remark edits
+  - item-line edits
+- when unsaved changes exist:
+  - top back
+  - module navigation
+  - jumps to delivery / invoice / payment pages
+  - other external document jumps
+  now require a confirm-or-abandon decision first
+
+### Safe internal navigation rule
+
+- not every route change during editing should be treated as abandoning the edit session
+- adding or replacing products from:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+  is treated as safe internal navigation
+- before this jump:
+  - scoped order-edit draft is synchronized
+  - the page marks the transition as allowed
+- rationale:
+  - product search is part of the edit workflow itself
+  - users should not be blocked by an “abandon edits” warning when they are simply continuing item editing in the dedicated search page
+
+### Current interaction rule
+
+- leaving create-order before submit:
+  - warn and keep local draft
+- leaving order-detail edit mode for another business page:
+  - warn before abandoning edits
+- navigating from order-detail into product search for item replacement:
+  - do not warn
+  - preserve scoped draft and continue the same edit session
