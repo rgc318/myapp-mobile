@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
@@ -130,6 +130,66 @@ function ResultRow({
   );
 }
 
+function DraftItemRow({
+  item,
+  onAdd,
+  onDecrease,
+}: {
+  item: SalesOrderDraftItem;
+  onAdd: (item: SalesOrderDraftItem) => void;
+  onDecrease: (item: SalesOrderDraftItem) => void;
+}) {
+  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const tintColor = useThemeColor({}, 'tint');
+
+  return (
+    <View style={styles.draftItemRow}>
+      <View style={[styles.draftThumbWrap, { backgroundColor: surfaceMuted }]}>
+        {item.imageUrl ? (
+          <Image contentFit="cover" source={item.imageUrl} style={styles.draftThumbImage} />
+        ) : (
+          <IconSymbol color={tintColor} name="shippingbox.fill" size={18} />
+        )}
+      </View>
+
+      <View style={styles.draftItemMain}>
+        <ThemedText numberOfLines={1} style={styles.draftItemTitle} type="defaultSemiBold">
+          {item.itemName || item.itemCode}
+        </ThemedText>
+        <ThemedText style={styles.draftItemPrice} type="defaultSemiBold">
+          {item.price == null ? '--' : `¥ ${item.price}`}
+        </ThemedText>
+        <ThemedText style={styles.draftItemMeta}>
+          编码 {item.itemCode}
+        </ThemedText>
+        <ThemedText style={styles.draftItemMeta}>
+          {item.warehouse || '未指定仓库'}
+        </ThemedText>
+      </View>
+
+      <View style={styles.draftItemAside}>
+        <View style={[styles.stepper, { backgroundColor: surfaceMuted, borderColor: 'rgba(148,163,184,0.22)' }]}>
+          <Pressable onPress={() => onDecrease(item)} style={styles.stepperButton}>
+            <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
+              -
+            </ThemedText>
+          </Pressable>
+          <View style={styles.stepperValueWrap}>
+            <ThemedText style={styles.stepperValue} type="defaultSemiBold">
+              {item.qty}
+            </ThemedText>
+          </View>
+          <Pressable onPress={() => onAdd(item)} style={styles.stepperButton}>
+            <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
+              +
+            </ThemedText>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function ProductSearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -151,6 +211,7 @@ export default function ProductSearchScreen() {
   const draftScope = typeof params.draftScope === 'string' ? params.draftScope : undefined;
   const returnOrderName = typeof params.returnOrderName === 'string' ? params.returnOrderName : '';
   const [draftItems, setDraftItems] = useState(() => getSalesOrderDraft(draftScope));
+  const [showDraftSheet, setShowDraftSheet] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const surface = useThemeColor({}, 'surface');
@@ -161,6 +222,10 @@ export default function ProductSearchScreen() {
   const draftCount = draftItems.length;
   const totalSelectedQty = useMemo(
     () => draftItems.reduce((sum, item) => sum + item.qty, 0),
+    [draftItems],
+  );
+  const totalSelectedAmount = useMemo(
+    () => draftItems.reduce((sum, item) => sum + (item.price ?? 0) * item.qty, 0),
     [draftItems],
   );
 
@@ -291,6 +356,33 @@ export default function ProductSearchScreen() {
     setMessage(`\u5df2\u8c03\u6574 ${item.itemName || item.itemCode} \u6570\u91cf\uff0c\u5f53\u524d\u4e3a ${nextQty} \u4ef6\u3002`);
   };
 
+  const handleDraftIncrease = (item: SalesOrderDraftItem) => {
+    addItemToSalesOrderDraft(
+      {
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        imageUrl: item.imageUrl ?? null,
+        price: item.price,
+        stockQty: null,
+        uom: item.uom,
+        warehouse: item.warehouse,
+      },
+      draftScope,
+    );
+    syncDraftState();
+  };
+
+  const handleDraftDecrease = (item: SalesOrderDraftItem) => {
+    if (item.qty <= 1) {
+      removeSalesOrderDraftItem(item.draftKey, draftScope);
+      syncDraftState();
+      return;
+    }
+
+    updateSalesOrderDraftQty(item.draftKey, item.qty - 1, draftScope);
+    syncDraftState();
+  };
+
   useEffect(() => {
     setDraftItems(getSalesOrderDraft(draftScope));
     const initialQuery = typeof params.query === 'string' ? params.query.trim() : '';
@@ -324,7 +416,33 @@ export default function ProductSearchScreen() {
     <AppShell
       compactHeader
       contentCard={false}
-      description={isOrderMode ? '\u641c\u7d22\u5546\u54c1\u540e\u52a0\u5165\u5f53\u524d\u8ba2\u5355\u8349\u7a3f\uff0c\u518d\u8fd4\u56de\u8ba2\u5355\u9875\u7ee7\u7eed\u586b\u5199\u6570\u91cf\u3001\u4ef7\u683c\u548c\u5907\u6ce8\u3002' : '\u7528\u4e8e\u67e5\u8be2\u5546\u54c1\u5e93\u5b58\u3001\u4ef7\u683c\u548c\u57fa\u7840\u4fe1\u606f\uff0c\u4e0d\u5173\u8054\u5f53\u524d\u8ba2\u5355\u8349\u7a3f\u3002'}
+      description={isOrderMode ? '\u641c\u7d22\u5546\u54c1\u5e76\u52a0\u5165\u5f53\u524d\u8ba2\u5355\u3002' : '\u7528\u4e8e\u67e5\u8be2\u5546\u54c1\u5e93\u5b58\u3001\u4ef7\u683c\u548c\u57fa\u7840\u4fe1\u606f\u3002'}
+      footer={
+        isOrderMode ? (
+          <View style={styles.footerBar}>
+            <Pressable
+              onPress={() => setShowDraftSheet(true)}
+              style={[styles.footerDraftTrigger, { backgroundColor: surface }]}>
+              <View style={styles.footerIconWrap}>
+                <IconSymbol color={tintColor} name="cart.fill" size={18} />
+              </View>
+              <View style={styles.footerCopy}>
+                <ThemedText style={styles.footerTitle} type="defaultSemiBold">
+                  已选 {draftCount} 项，合计 {totalSelectedQty} 件
+                </ThemedText>
+                <ThemedText style={styles.footerHint}>
+                  点击查看已加入商品
+                </ThemedText>
+              </View>
+            </Pressable>
+            <Pressable onPress={handleReturnToOrder} style={[styles.returnButton, { backgroundColor: tintColor }]}>
+              <ThemedText style={styles.returnButtonText} type="defaultSemiBold">
+                返回订单页
+              </ThemedText>
+            </Pressable>
+          </View>
+        ) : null
+      }
       title={isOrderMode ? '\u5546\u54c1\u641c\u7d22' : '\u5546\u54c1\u67e5\u8be2'}>
       <View style={[styles.searchCard, { backgroundColor: surface, borderColor }]}>
         <View style={[styles.searchInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
@@ -347,26 +465,13 @@ export default function ProductSearchScreen() {
         </Pressable>
       </View>
 
-      {isOrderMode ? (
-      <View style={[styles.selectionCard, { backgroundColor: surface, borderColor }]}>
-        <View style={styles.selectionCopy}>
-          <ThemedText type="defaultSemiBold">{'\u5f53\u524d\u8ba2\u5355\u8349\u7a3f'}</ThemedText>
-          <ThemedText style={styles.selectionHint}>
-            {'\u5df2\u52a0\u5165 '} {draftCount} {' \u9879\u5546\u54c1\uff0c\u5408\u8ba1 '} {totalSelectedQty} {' \u4ef6\uff0c\u9009\u5b8c\u540e\u8fd4\u56de\u8ba2\u5355\u9875\u7ee7\u7eed\u586b\u5199\u3002'}
-          </ThemedText>
-          <ThemedText style={styles.metaText}>
-            {message || '\u8f93\u5165\u5173\u952e\u8bcd\u540e\u5373\u53ef\u641c\u7d22\u5546\u54c1\uff0c\u627e\u5230\u540e\u53ef\u76f4\u63a5\u52a0\u51cf\u5546\u54c1\u6570\u91cf\u3002'}
-          </ThemedText>
-        </View>
-        <Pressable onPress={handleReturnToOrder} style={[styles.returnButton, { backgroundColor: tintColor }]}>
-          <ThemedText style={styles.returnButtonText} type="defaultSemiBold">
-            {'\u8fd4\u56de\u8ba2\u5355\u9875'}
-          </ThemedText>
-        </Pressable>
-      </View>
-      ) : null}
-
       <View style={styles.resultList}>
+        {message ? (
+          <View style={[styles.inlineNotice, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.metaText}>{message}</ThemedText>
+          </View>
+        ) : null}
+
         {results.map((item) => (
           <ResultRow
             isOrderMode={isOrderMode}
@@ -438,6 +543,73 @@ export default function ProductSearchScreen() {
           </View>
         ) : null}
       </View>
+
+      {isOrderMode ? <View style={styles.bottomSpacer} /> : null}
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setShowDraftSheet(false)}
+        transparent
+        visible={showDraftSheet && isOrderMode}>
+        <View style={styles.sheetBackdrop}>
+          <Pressable onPress={() => setShowDraftSheet(false)} style={styles.sheetDismissArea} />
+          <View style={[styles.sheetCard, { backgroundColor: surface, borderColor }]}>
+            <View style={styles.sheetHeader}>
+              <View>
+                <ThemedText style={styles.sheetTitle} type="defaultSemiBold">
+                  当前订单商品
+                </ThemedText>
+                <ThemedText style={styles.sheetHint}>
+                  已选 {draftCount} 项，合计 {totalSelectedQty} 件
+                </ThemedText>
+              </View>
+              <Pressable onPress={() => setShowDraftSheet(false)} style={styles.sheetCloseButton}>
+                <ThemedText style={styles.sheetCloseText} type="defaultSemiBold">
+                  收起
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {draftItems.length ? (
+              <>
+                <ScrollView contentContainerStyle={styles.sheetList} style={styles.sheetScroll}>
+                  {draftItems.map((item) => (
+                    <DraftItemRow
+                      item={item}
+                      key={item.draftKey}
+                      onAdd={handleDraftIncrease}
+                      onDecrease={handleDraftDecrease}
+                    />
+                  ))}
+                </ScrollView>
+                <View style={styles.sheetFooter}>
+                  <View>
+                    <ThemedText style={styles.sheetTotalLabel}>草稿合计</ThemedText>
+                    <ThemedText style={styles.sheetTotalValue} type="defaultSemiBold">
+                      ¥ {totalSelectedAmount.toFixed(2)}
+                    </ThemedText>
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      setShowDraftSheet(false);
+                      handleReturnToOrder();
+                    }}
+                    style={[styles.returnButton, { backgroundColor: tintColor }]}>
+                    <ThemedText style={styles.returnButtonText} type="defaultSemiBold">
+                      返回订单页
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <View style={styles.emptyDraftState}>
+                <ThemedText type="defaultSemiBold">还没有加入商品</ThemedText>
+                <ThemedText style={styles.metaText}>搜索并点击“加入订单”后，这里会显示当前草稿商品。</ThemedText>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </AppShell>
   );
 }
@@ -475,31 +647,59 @@ const styles = StyleSheet.create({
   searchButtonText: {
     color: '#FFF',
   },
-  selectionCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    gap: 14,
-    padding: 16,
-  },
-  selectionCopy: {
-    gap: 6,
-  },
-  selectionHint: {
-    opacity: 0.76,
-  },
   metaText: {
     opacity: 0.7,
+  },
+  footerBar: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  footerDraftTrigger: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 52,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  footerIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 22,
+  },
+  footerCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  footerTitle: {
+    color: '#0F172A',
+    fontSize: 15,
+  },
+  footerHint: {
+    color: '#64748B',
+    fontSize: 12,
   },
   returnButton: {
     alignItems: 'center',
     borderRadius: 14,
     justifyContent: 'center',
     minHeight: 44,
+    minWidth: 118,
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   returnButtonText: {
     color: '#FFF',
+  },
+  inlineNotice: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   resultList: {
     gap: 12,
@@ -635,5 +835,110 @@ const styles = StyleSheet.create({
     minHeight: 46,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  bottomSpacer: {
+    height: 86,
+  },
+  sheetBackdrop: {
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheetDismissArea: {
+    flex: 1,
+  },
+  sheetCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    maxHeight: '72%',
+    padding: 18,
+  },
+  sheetHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sheetTitle: {
+    fontSize: 18,
+  },
+  sheetHint: {
+    color: '#64748B',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  sheetCloseButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  sheetCloseText: {
+    color: '#2563EB',
+  },
+  sheetScroll: {
+    maxHeight: 360,
+  },
+  sheetList: {
+    gap: 12,
+    paddingBottom: 8,
+  },
+  draftItemRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  draftThumbWrap: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 56,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 56,
+  },
+  draftThumbImage: {
+    height: '100%',
+    width: '100%',
+  },
+  draftItemMain: {
+    flex: 1,
+    gap: 4,
+  },
+  draftItemTitle: {
+    color: '#0F172A',
+  },
+  draftItemPrice: {
+    color: '#A86518',
+    fontSize: 14,
+  },
+  draftItemMeta: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  draftItemAside: {
+    alignItems: 'flex-end',
+    minWidth: 112,
+    paddingRight: 6,
+  },
+  sheetFooter: {
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148,163,184,0.18)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 14,
+  },
+  sheetTotalLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  sheetTotalValue: {
+    color: '#A86518',
+    fontSize: 20,
+    marginTop: 2,
+  },
+  emptyDraftState: {
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 24,
   },
 });
