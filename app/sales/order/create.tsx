@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { LinkOptionInput } from '@/components/link-option-input';
@@ -20,8 +20,10 @@ import {
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
+  getSalesOrderDraftForm,
   removeSalesOrderDraftItem,
   restoreSalesOrderDraftItem,
+  updateSalesOrderDraftForm,
   updateSalesOrderDraftField,
   updateSalesOrderDraftQty,
   type SalesOrderDraftItem,
@@ -306,17 +308,19 @@ function SalesItemRow({
 
 export default function SalesOrderCreateScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const preferences = getAppPreferences();
   const { profile } = useAuth();
   const { showError, showSuccess } = useFeedback();
   const isFocused = useIsFocused();
+  const initialDraftForm = getSalesOrderDraftForm();
 
-  const [customer, setCustomer] = useState('');
-  const [company, setCompany] = useState(preferences.defaultCompany);
-  const [remarks, setRemarks] = useState('');
-  const [shippingAddress, setShippingAddress] = useState('');
-  const [shippingContact, setShippingContact] = useState('');
-  const [shippingPhone, setShippingPhone] = useState('');
+  const [customer, setCustomer] = useState(initialDraftForm.customer);
+  const [company, setCompany] = useState(initialDraftForm.company || preferences.defaultCompany);
+  const [remarks, setRemarks] = useState(initialDraftForm.remarks);
+  const [shippingAddress, setShippingAddress] = useState(initialDraftForm.shippingAddress);
+  const [shippingContact, setShippingContact] = useState(initialDraftForm.shippingContact);
+  const [shippingPhone, setShippingPhone] = useState(initialDraftForm.shippingPhone);
   const [recentAddresses, setRecentAddresses] = useState<{ name: string | null; addressDisplay: string | null }[]>([]);
   const [customerContextNote, setCustomerContextNote] = useState('');
   const [isLoadingShippingInfo, setIsLoadingShippingInfo] = useState(false);
@@ -330,6 +334,7 @@ export default function SalesOrderCreateScreen() {
   const [submitMode, setSubmitMode] = useState<SubmitMode>('save');
   const [showQuickCreateConfirm, setShowQuickCreateConfirm] = useState(false);
   const [showQuickForceConfirm, setShowQuickForceConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [quickForceMessage, setQuickForceMessage] = useState('');
   const [pendingRemovedItem, setPendingRemovedItem] = useState<SalesOrderDraftItem | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
@@ -341,6 +346,8 @@ export default function SalesOrderCreateScreen() {
   const shippingAddressTouchedRef = useRef(false);
   const shippingContactTouchedRef = useRef(false);
   const shippingPhoneTouchedRef = useRef(false);
+  const allowLeaveRef = useRef(false);
+  const pendingNavigationActionRef = useRef<any>(null);
 
   const postingDate = new Date().toISOString().slice(0, 10);
 
@@ -391,13 +398,63 @@ export default function SalesOrderCreateScreen() {
     }
 
     setDraftItems([...getSalesOrderDraft()]);
-  }, [isFocused]);
+    const nextDraftForm = getSalesOrderDraftForm();
+    setCustomer(nextDraftForm.customer);
+    setCompany(nextDraftForm.company || preferences.defaultCompany);
+    setRemarks(nextDraftForm.remarks);
+    setShippingAddress(nextDraftForm.shippingAddress);
+    setShippingContact(nextDraftForm.shippingContact);
+    setShippingPhone(nextDraftForm.shippingPhone);
+    lastCustomerRef.current = normalizeText(nextDraftForm.customer);
+    shippingAddressTouchedRef.current = Boolean(normalizeText(nextDraftForm.shippingAddress));
+    shippingContactTouchedRef.current = Boolean(normalizeText(nextDraftForm.shippingContact));
+    shippingPhoneTouchedRef.current = Boolean(normalizeText(nextDraftForm.shippingPhone));
+  }, [isFocused, preferences.defaultCompany]);
+
+  useEffect(() => {
+    updateSalesOrderDraftForm({
+      customer,
+      company,
+      remarks,
+      shippingAddress,
+      shippingContact,
+      shippingPhone,
+    });
+  }, [company, customer, remarks, shippingAddress, shippingContact, shippingPhone]);
 
   useEffect(() => () => {
     if (removeUndoTimerRef.current) {
       clearTimeout(removeUndoTimerRef.current);
     }
   }, []);
+
+  const hasDraftContent = useMemo(
+    () =>
+      Boolean(
+        normalizeText(customer) ||
+          (normalizeText(company) && normalizeText(company) !== normalizeText(preferences.defaultCompany)) ||
+          normalizeText(remarks) ||
+          normalizeText(shippingAddress) ||
+          normalizeText(shippingContact) ||
+          normalizeText(shippingPhone) ||
+          draftItems.length,
+      ),
+    [company, customer, draftItems.length, preferences.defaultCompany, remarks, shippingAddress, shippingContact, shippingPhone],
+  );
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (allowLeaveRef.current || !hasDraftContent || isSubmitting) {
+        return;
+      }
+
+      event.preventDefault();
+      pendingNavigationActionRef.current = event.data.action;
+      setShowLeaveConfirm(true);
+    });
+
+    return unsubscribe;
+  }, [hasDraftContent, isSubmitting, navigation]);
   useEffect(() => {
     const missingImageItems = draftItems.filter((item) => !item.imageUrl && item.itemCode);
 
@@ -734,6 +791,7 @@ export default function SalesOrderCreateScreen() {
           : '';
 
       clearSalesOrderDraft();
+      allowLeaveRef.current = true;
       syncDraft();
       setStatusMessage(
         mode === 'quick'
@@ -800,7 +858,15 @@ export default function SalesOrderCreateScreen() {
     <View style={[styles.page, { backgroundColor: background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} ref={scrollRef}>
         <View style={styles.topBar}>
-          <Pressable onPress={() => router.back()} style={styles.iconCircle}>
+          <Pressable
+            onPress={() => {
+              if (hasDraftContent && !allowLeaveRef.current && !isSubmitting) {
+                setShowLeaveConfirm(true);
+                return;
+              }
+              router.back();
+            }}
+            style={styles.iconCircle}>
             <IconSymbol color="#111827" name="chevron.left" size={20} />
           </Pressable>
 
@@ -1252,6 +1318,52 @@ export default function SalesOrderCreateScreen() {
                 style={[styles.dialogButton, styles.dialogDangerButton]}>
                 <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
                   强制出货并开票
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowLeaveConfirm(false)}
+        transparent
+        visible={showLeaveConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              离开当前开单页？
+            </ThemedText>
+            <ThemedText style={styles.dialogText}>
+              当前填写内容已经暂存为草稿。离开后可以稍后继续编辑，但本次内容还没有正式提交为销售订单。
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => {
+                  pendingNavigationActionRef.current = null;
+                  setShowLeaveConfirm(false);
+                }}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  继续填写
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowLeaveConfirm(false);
+                  const pendingAction = pendingNavigationActionRef.current;
+                  pendingNavigationActionRef.current = null;
+                  allowLeaveRef.current = true;
+                  if (pendingAction) {
+                    navigation.dispatch(pendingAction);
+                  } else {
+                    router.back();
+                  }
+                }}
+                style={[styles.dialogButton, styles.dialogPrimaryButton, { backgroundColor: tintColor }]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  离开页面
                 </ThemedText>
               </Pressable>
             </View>

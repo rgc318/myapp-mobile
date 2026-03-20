@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 
 type WorkflowQuickNavProps = {
   compact?: boolean;
+  onBeforeNavigate?: () => boolean;
 };
 
 const NAV_ITEMS = [
@@ -34,28 +35,33 @@ function getActiveKey(pathname: string) {
   return '';
 }
 
-export function WorkflowQuickNav({ compact = false }: WorkflowQuickNavProps) {
+export function WorkflowQuickNav({ compact = false, onBeforeNavigate }: WorkflowQuickNavProps) {
   const router = useRouter();
   const pathname = usePathname();
   const activeKey = getActiveKey(pathname);
 
   return (
     <View style={[styles.wrap, compact ? styles.wrapCompact : null]}>
-      <View style={styles.row}>
+      <View style={[styles.rail, compact ? styles.railCompact : null]}>
         {NAV_ITEMS.map((item) => {
           const isActive = item.key === activeKey;
 
           return (
             <Pressable
               key={item.key}
-              onPress={() => router.replace(item.href)}
+              onPress={() => {
+                if (onBeforeNavigate && !onBeforeNavigate()) {
+                  return;
+                }
+                router.replace(item.href);
+              }}
               style={[
-                styles.button,
-                isActive ? styles.buttonActive : styles.buttonIdle,
-                compact ? styles.buttonCompact : null,
+                styles.tab,
+                compact ? styles.tabCompact : null,
+                isActive ? styles.tabActive : null,
               ]}>
               <ThemedText
-                style={isActive ? styles.buttonTextActive : styles.buttonTextIdle}
+                style={isActive ? styles.tabTextActive : styles.tabTextIdle}
                 type="defaultSemiBold">
                 {item.label}
               </ThemedText>
@@ -74,39 +80,46 @@ const styles = StyleSheet.create({
   wrapCompact: {
     marginTop: 2,
   },
-  row: {
+  rail: {
+    backgroundColor: '#EEF3F8',
+    borderRadius: 18,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    padding: 4,
   },
-  button: {
-    borderRadius: 999,
-    borderWidth: 1,
-    minWidth: 68,
-    paddingHorizontal: 14,
+  railCompact: {
+    borderRadius: 16,
+    padding: 3,
+  },
+  tab: {
+    alignItems: 'center',
+    borderRadius: 14,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 8,
     paddingVertical: 10,
   },
-  buttonCompact: {
-    minWidth: 62,
-    paddingHorizontal: 12,
+  tabCompact: {
+    minHeight: 38,
     paddingVertical: 8,
   },
-  buttonIdle: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#D7DEE7',
+  tabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  buttonActive: {
-    backgroundColor: '#EAF2FF',
-    borderColor: '#93C5FD',
-  },
-  buttonTextIdle: {
-    color: '#334155',
-    fontSize: 13,
+  tabTextIdle: {
+    color: '#475569',
+    fontSize: 14,
     textAlign: 'center',
   },
-  buttonTextActive: {
+  tabTextActive: {
     color: '#1D4ED8',
-    fontSize: 13,
+    fontSize: 14,
+    letterSpacing: 0.2,
     textAlign: 'center',
   },
 });

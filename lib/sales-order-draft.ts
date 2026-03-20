@@ -13,10 +13,21 @@ export type SalesOrderDraftItem = {
   warehouse: string | null;
 };
 
+export type SalesOrderDraftForm = {
+  customer: string;
+  company: string;
+  remarks: string;
+  shippingAddress: string;
+  shippingContact: string;
+  shippingPhone: string;
+};
+
 const STORAGE_KEY = 'myapp-mobile.sales-order-draft';
+const FORM_STORAGE_KEY = 'myapp-mobile.sales-order-draft-form';
 const DEFAULT_SCOPE = 'default';
 
 let memoryDraftByScope: Record<string, SalesOrderDraftItem[]> = {};
+let memoryDraftFormByScope: Record<string, SalesOrderDraftForm> = {};
 
 function buildDraftKey(item: {
   itemCode: string;
@@ -51,6 +62,10 @@ function getStorageKey(scope: string) {
   return `${STORAGE_KEY}.${scope || DEFAULT_SCOPE}`;
 }
 
+function getFormStorageKey(scope: string) {
+  return `${FORM_STORAGE_KEY}.${scope || DEFAULT_SCOPE}`;
+}
+
 function getScope(scope?: string) {
   return scope?.trim() || DEFAULT_SCOPE;
 }
@@ -81,6 +96,38 @@ export function getSalesOrderDraft(scope?: string) {
   return memoryDraftByScope[normalizedScope] ?? [];
 }
 
+function normalizeDraftForm(value: Partial<SalesOrderDraftForm> | null | undefined): SalesOrderDraftForm {
+  return {
+    customer: typeof value?.customer === 'string' ? value.customer : '',
+    company: typeof value?.company === 'string' ? value.company : '',
+    remarks: typeof value?.remarks === 'string' ? value.remarks : '',
+    shippingAddress: typeof value?.shippingAddress === 'string' ? value.shippingAddress : '',
+    shippingContact: typeof value?.shippingContact === 'string' ? value.shippingContact : '',
+    shippingPhone: typeof value?.shippingPhone === 'string' ? value.shippingPhone : '',
+  };
+}
+
+export function getSalesOrderDraftForm(scope?: string) {
+  const normalizedScope = getScope(scope);
+
+  if (memoryDraftFormByScope[normalizedScope]) {
+    return memoryDraftFormByScope[normalizedScope];
+  }
+
+  if (canUseWebStorage()) {
+    try {
+      const raw = window.localStorage.getItem(getFormStorageKey(normalizedScope));
+      memoryDraftFormByScope[normalizedScope] = raw
+        ? normalizeDraftForm(JSON.parse(raw))
+        : normalizeDraftForm(null);
+    } catch {
+      memoryDraftFormByScope[normalizedScope] = normalizeDraftForm(null);
+    }
+  }
+
+  return memoryDraftFormByScope[normalizedScope] ?? normalizeDraftForm(null);
+}
+
 function persistDraft(nextDraft: SalesOrderDraftItem[], scope?: string) {
   const normalizedScope = getScope(scope);
   memoryDraftByScope[normalizedScope] = nextDraft;
@@ -90,10 +137,32 @@ function persistDraft(nextDraft: SalesOrderDraftItem[], scope?: string) {
   }
 }
 
+function persistDraftForm(nextDraftForm: SalesOrderDraftForm, scope?: string) {
+  const normalizedScope = getScope(scope);
+  memoryDraftFormByScope[normalizedScope] = nextDraftForm;
+
+  if (canUseWebStorage()) {
+    window.localStorage.setItem(getFormStorageKey(normalizedScope), JSON.stringify(nextDraftForm));
+  }
+}
+
 export function replaceSalesOrderDraft(items: Partial<SalesOrderDraftItem>[], scope?: string) {
   const normalizedItems = items.map((item) => normalizeDraftItem(item)).filter((item) => item.itemCode);
   persistDraft(normalizedItems, scope);
   return normalizedItems;
+}
+
+export function updateSalesOrderDraftForm(
+  patch: Partial<SalesOrderDraftForm>,
+  scope?: string,
+) {
+  const current = getSalesOrderDraftForm(scope);
+  const nextDraftForm = normalizeDraftForm({
+    ...current,
+    ...patch,
+  });
+  persistDraftForm(nextDraftForm, scope);
+  return nextDraftForm;
 }
 
 export function addItemToSalesOrderDraft(item: ProductSearchItem, scope?: string) {
@@ -180,4 +249,5 @@ export function removeSalesOrderDraftItem(draftKey: string, scope?: string) {
 
 export function clearSalesOrderDraft(scope?: string) {
   persistDraft([], scope);
+  persistDraftForm(normalizeDraftForm(null), scope);
 }

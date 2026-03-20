@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { useIsFocused } from '@react-navigation/native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -346,8 +346,29 @@ function InfoRow({ label, value, valueColor }: { label: string; value: string; v
   );
 }
 
+function normalizeEditableText(value: string | null | undefined) {
+  return (value ?? '').trim();
+}
+
+function buildComparableItemSignature(items: {
+  itemCode: string;
+  qty: number | null;
+  rate: number | null;
+  warehouse: string;
+  uom: string;
+}[]) {
+  return items.map((item) => ({
+    itemCode: item.itemCode,
+    qty: item.qty ?? 0,
+    rate: item.rate ?? 0,
+    warehouse: item.warehouse || '',
+    uom: item.uom || '',
+  }));
+}
+
 export default function SalesOrderDetailScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { orderName } = useLocalSearchParams<{ orderName: string }>();
   const isFocused = useIsFocused();
   const orderDraftScope = orderName ? `order-edit:${orderName}` : 'order-edit';
@@ -371,6 +392,10 @@ export default function SalesOrderDetailScreen() {
   const [itemUomOptions, setItemUomOptions] = useState<Record<string, string[]>>({});
   const [centerDialog, setCenterDialog] = useState<CenterDialogState>(null);
   const [recentPaymentNotice, setRecentPaymentNotice] = useState<PaymentResultHandoff | null>(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const pendingNavigationActionRef = useRef<any>(null);
+  const pendingLeaveCallbackRef = useRef<(() => void) | null>(null);
+  const allowLeaveRef = useRef(false);
 
   const background = useThemeColor({}, 'background');
   const surface = useThemeColor({}, 'surface');
@@ -541,6 +566,77 @@ export default function SalesOrderDetailScreen() {
     () => editableItems.reduce((sum, item) => sum + (item.rate ?? 0) * item.qty, 0),
     [editableItems],
   );
+  const isSavingCurrentSection = isEditingAllSections
+    ? isSavingContact || isSavingItems || isSavingRemarks
+    : isEditingItems
+      ? isSavingItems
+      : isEditingRemarks
+        ? isSavingRemarks
+        : isSavingContact;
+  const detailItemSignature = useMemo(
+    () =>
+      buildComparableItemSignature(
+        detail?.items.map((item) => ({
+          itemCode: item.itemCode,
+          qty: item.qty,
+          rate: item.rate,
+          warehouse: item.warehouse,
+          uom: item.uom,
+        })) ?? [],
+      ),
+    [detail],
+  );
+  const editableItemSignature = useMemo(
+    () => buildComparableItemSignature(editableItems),
+    [editableItems],
+  );
+  const hasUnsavedContactChanges =
+    isEditingContact &&
+    (
+      normalizeEditableText(deliveryDateInput) !== normalizeEditableText(detail?.deliveryDate) ||
+      normalizeEditableText(contactDisplayInput) !== normalizeEditableText(detail?.contactDisplay ?? detail?.contactPerson) ||
+      normalizeEditableText(contactPhoneInput) !== normalizeEditableText(detail?.contactPhone) ||
+      normalizeEditableText(addressInput) !== normalizeEditableText(detail?.addressDisplay)
+    );
+  const hasUnsavedRemarkChanges =
+    isEditingRemarks &&
+    normalizeEditableText(remarksInput) !== normalizeEditableText(detail?.remarks);
+  const hasUnsavedItemChanges =
+    isEditingItems &&
+    JSON.stringify(editableItemSignature) !== JSON.stringify(detailItemSignature);
+  const hasUnsavedEdits = hasUnsavedContactChanges || hasUnsavedRemarkChanges || hasUnsavedItemChanges;
+
+  function requestLeaveConfirmation(onProceed?: () => void) {
+    if (allowLeaveRef.current || !hasUnsavedEdits || isSavingCurrentSection) {
+      onProceed?.();
+      return true;
+    }
+
+    pendingLeaveCallbackRef.current = onProceed ?? null;
+    setShowLeaveConfirm(true);
+    return false;
+  }
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (allowLeaveRef.current || !hasUnsavedEdits || isSavingCurrentSection) {
+        return;
+      }
+
+      event.preventDefault();
+      pendingNavigationActionRef.current = event.data.action;
+      pendingLeaveCallbackRef.current = null;
+      setShowLeaveConfirm(true);
+    });
+
+    return unsubscribe;
+  }, [allowLeaveRef, hasUnsavedEdits, isSavingCurrentSection, navigation, pendingNavigationActionRef]);
+
+  useEffect(() => {
+    if (isFocused) {
+      allowLeaveRef.current = false;
+    }
+  }, [isFocused, allowLeaveRef]);
 
   async function handleSaveContact() {
     if (!orderName) {
@@ -622,11 +718,13 @@ export default function SalesOrderDetailScreen() {
       return;
     }
 
-    router.push({
-      pathname: '/sales/delivery/create',
-      params: {
-        orderName,
-      },
+    requestLeaveConfirmation(() => {
+      router.push({
+        pathname: '/sales/delivery/create',
+        params: {
+          orderName,
+        },
+      });
     });
   }
 
@@ -635,11 +733,13 @@ export default function SalesOrderDetailScreen() {
       return;
     }
 
-    router.push({
-      pathname: '/sales/invoice/create',
-      params: {
-        sourceName: orderName,
-      },
+    requestLeaveConfirmation(() => {
+      router.push({
+        pathname: '/sales/invoice/create',
+        params: {
+          sourceName: orderName,
+        },
+      });
     });
   }
 
@@ -785,6 +885,7 @@ export default function SalesOrderDetailScreen() {
       clearSalesOrderDraft(orderDraftScope);
 
       if (itemUpdateResult.orderName !== orderName) {
+        allowLeaveRef.current = true;
         showInfo(
           `商品修改已生效，系统已生成新订单 ${itemUpdateResult.orderName}，原订单 ${itemUpdateResult.sourceOrderName || orderName} 已作废。`,
         );
@@ -846,6 +947,7 @@ export default function SalesOrderDetailScreen() {
     }
 
     syncScopedDraft(editableItems);
+    allowLeaveRef.current = true;
     router.push({
       pathname: '/common/product-search',
       params: {
@@ -861,12 +963,14 @@ export default function SalesOrderDetailScreen() {
       return;
     }
 
-    router.push({
-      pathname: '/sales/delivery/create',
-      params: {
-        orderName: detail.name,
-        deliveryNote: detail.latestDeliveryNote,
-      },
+    requestLeaveConfirmation(() => {
+      router.push({
+        pathname: '/sales/delivery/create',
+        params: {
+          orderName: detail.name,
+          deliveryNote: detail.latestDeliveryNote,
+        },
+      });
     });
   }
 
@@ -875,12 +979,14 @@ export default function SalesOrderDetailScreen() {
       return;
     }
 
-    router.push({
-      pathname: '/sales/invoice/create',
-      params: {
-        sourceName: detail.name,
-        salesInvoice: detail.latestSalesInvoice,
-      },
+    requestLeaveConfirmation(() => {
+      router.push({
+        pathname: '/sales/invoice/create',
+        params: {
+          sourceName: detail.name,
+          salesInvoice: detail.latestSalesInvoice,
+        },
+      });
     });
   }
 
@@ -889,18 +995,20 @@ export default function SalesOrderDetailScreen() {
       return;
     }
 
-    router.push({
-      pathname: '/sales/payment/create',
-      params: {
-        referenceName: detail.latestSalesInvoice,
-        defaultPaidAmount:
-          detail.outstandingAmount != null
-            ? String(detail.outstandingAmount)
-            : detail.grandTotal != null
-              ? String(detail.grandTotal)
-              : '',
-        currency: detail.currency || 'CNY',
-      },
+    requestLeaveConfirmation(() => {
+      router.push({
+        pathname: '/sales/payment/create',
+        params: {
+          referenceName: detail.latestSalesInvoice,
+          defaultPaidAmount:
+            detail.outstandingAmount != null
+              ? String(detail.outstandingAmount)
+              : detail.grandTotal != null
+                ? String(detail.grandTotal)
+                : '',
+          currency: detail.currency || 'CNY',
+        },
+      });
     });
   }
 
@@ -1236,13 +1344,6 @@ export default function SalesOrderDetailScreen() {
       : isEditingRemarks
         ? resetRemarksForm
         : resetContactForm;
-  const isSavingCurrentSection = isEditingAllSections
-    ? isSavingContact || isSavingItems || isSavingRemarks
-    : isEditingItems
-      ? isSavingItems
-      : isEditingRemarks
-        ? isSavingRemarks
-        : isSavingContact;
   const currentSaveLabel = isEditingAllSections
     ? isSavingCurrentSection
       ? '保存订单中...'
@@ -1300,7 +1401,12 @@ export default function SalesOrderDetailScreen() {
     <View style={[styles.screen, { backgroundColor: background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
-          <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.topIconButton}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              requestLeaveConfirmation(() => router.back());
+            }}
+            style={styles.topIconButton}>
             <IconSymbol color="#0F172A" name="chevron.left" size={22} />
           </Pressable>
           <ThemedText style={styles.pageTitle} type="title">
@@ -1330,7 +1436,10 @@ export default function SalesOrderDetailScreen() {
         </View>
 
         <View style={styles.quickNavWrap}>
-          <WorkflowQuickNav compact />
+          <WorkflowQuickNav
+            compact
+            onBeforeNavigate={() => requestLeaveConfirmation()}
+          />
         </View>
 
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
@@ -1818,6 +1927,56 @@ export default function SalesOrderDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal animationType="fade" onRequestClose={() => setShowLeaveConfirm(false)} transparent visible={showLeaveConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={[styles.dialogTitle, styles.dialogTitleWarning]} type="defaultSemiBold">
+              当前修改尚未保存
+            </ThemedText>
+            <HighlightedDialogMessage
+              message="你正在编辑订单内容，当前修改还没有保存。现在离开会放弃本次修改。"
+              tone="warning"
+            />
+
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => {
+                  pendingNavigationActionRef.current = null;
+                  pendingLeaveCallbackRef.current = null;
+                  setShowLeaveConfirm(false);
+                }}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  继续编辑
+                </ThemedText>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowLeaveConfirm(false);
+                  const pendingAction = pendingNavigationActionRef.current;
+                  pendingNavigationActionRef.current = null;
+                  const pendingCallback = pendingLeaveCallbackRef.current;
+                  pendingLeaveCallbackRef.current = null;
+                  allowLeaveRef.current = true;
+                  if (pendingAction) {
+                    navigation.dispatch(pendingAction);
+                  } else if (pendingCallback) {
+                    pendingCallback();
+                  } else {
+                    router.back();
+                  }
+                }}
+                style={[styles.dialogButton, styles.dialogDangerButton]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  放弃修改
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2155,9 +2314,10 @@ const styles = StyleSheet.create({
   },
   priceChipField: {
     borderRadius: 14,
-    flex: 0.82,
+    flex: 0.48,
     gap: 4,
     minHeight: 50,
+    maxWidth: 136,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
