@@ -241,6 +241,8 @@ export default function SalesDeliveryCreateScreen() {
     }
   }
 
+  const isCancelledDetail = detail?.documentStatus === 'cancelled';
+
   if (!deliveryNote) {
     return (
       <>
@@ -436,8 +438,10 @@ export default function SalesDeliveryCreateScreen() {
                 </ThemedText>
                 <ThemedText style={styles.heroSubtitle}>{detail.name}</ThemedText>
               </View>
-              <View style={styles.badge}>
-                <ThemedText style={styles.badgeText} type="defaultSemiBold">
+              <View style={[styles.badge, isCancelledDetail ? styles.cancelledBadge : null]}>
+                <ThemedText
+                  style={[styles.badgeText, isCancelledDetail ? styles.cancelledBadgeText : null]}
+                  type="defaultSemiBold">
                   {formatStatusLabel(detail.documentStatus)}
                 </ThemedText>
               </View>
@@ -501,7 +505,7 @@ export default function SalesDeliveryCreateScreen() {
 
           <View style={styles.sectionCard}>
             <ThemedText style={styles.sectionTitle} type="subtitle">
-              后续操作
+              {isCancelledDetail ? '历史单据跳转' : '后续操作'}
             </ThemedText>
             <View style={styles.actionRow}>
               {detail.salesOrders[0] ? (
@@ -532,7 +536,7 @@ export default function SalesDeliveryCreateScreen() {
                     查看发票
                   </ThemedText>
                 </Pressable>
-              ) : detail.salesOrders[0] ? (
+              ) : detail.salesOrders[0] && !isCancelledDetail ? (
                 <Pressable
                   onPress={() =>
                     router.push({
@@ -547,15 +551,20 @@ export default function SalesDeliveryCreateScreen() {
                 </Pressable>
               ) : null}
             </View>
-            {!detail.salesInvoices.length && detail.salesOrders[0] ? (
+            {!detail.salesInvoices.length && detail.salesOrders[0] && !isCancelledDetail ? (
               <ThemedText style={styles.actionHint}>
                 当前移动端仍以销售订单作为开票来源，这里会带你回到订单链路继续开票。
+              </ThemedText>
+            ) : null}
+            {isCancelledDetail ? (
+              <ThemedText style={styles.actionHint}>
+                当前发货单已经作废，建议返回订单查看最新履约状态；如需继续开票，应基于仍然有效的订单或发票链路重新处理，不应从这张历史发货单继续发起。
               </ThemedText>
             ) : null}
             {detail.cancelDeliveryNoteHint ? (
               <ThemedText style={styles.rollbackHint}>{detail.cancelDeliveryNoteHint}</ThemedText>
             ) : null}
-            {detail.canCancelDeliveryNote ? (
+            {detail.canCancelDeliveryNote && !isCancelledDetail ? (
               <Pressable
                 onPress={() => setShowCancelDialog(true)}
                 style={[styles.actionButton, styles.dangerGhostActionButton]}>
@@ -766,6 +775,12 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#2563EB',
     fontSize: 13,
+  },
+  cancelledBadge: {
+    backgroundColor: '#FEE2E2',
+  },
+  cancelledBadgeText: {
+    color: '#DC2626',
   },
   heroStats: {
     flexDirection: 'row',

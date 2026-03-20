@@ -2066,3 +2066,74 @@ This round added the first usable rollback path for already-created sales docume
   - a paid sales invoice can still be cancelled successfully in this environment
   - this implies the ERPNext site is currently configured to allow invoice cancellation while automatically handling payment-reference unlinking
   - frontend should still keep warning copy, because this behavior is environment-setting dependent
+
+## Sales Invoice UX Refinement Update (2026-03-20)
+
+This round further tightened invoice-page behavior so the page reads more clearly as a document state page, not just a generic action hub.
+
+### Completed
+
+- invoice detail status is now state-driven
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+  - the page now separates:
+    - document status
+    - settlement status
+  - visible states are now easier to distinguish:
+    - `已作废`
+    - `待收款`
+    - `已结清`
+  - cancelled invoices now use red status semantics and are treated as historical documents
+
+- invoice detail refreshes when returning from payment registration
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+  - the page now reloads invoice detail on focus
+  - this fixes the case where:
+    - user registers payment
+    - returns to invoice detail
+    - invoice page previously still showed stale `待收款` state
+
+- paid invoices no longer expose a frontend path for “仅作废发票”
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+  - rationale:
+    - cancelling only the invoice leaves the original payment as unallocated amount
+    - this can make later re-invoicing and periodic settlement less safe for business users
+  - current frontend rule:
+    - unpaid invoice:
+      - can cancel invoice directly
+    - paid invoice:
+      - must rollback payment first, then cancel invoice
+
+- invoice detail now supports standalone payment rollback
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+  - a dedicated `回退收款` action is now available when the invoice has a linked payment entry
+  - this action only cancels `Payment Entry`
+  - the invoice itself remains valid and returns to `待收款`
+
+- rollback section moved lower in the page
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+  - dangerous rollback controls are now placed after amount-settlement information
+  - this reduces accidental taps while keeping rollback available when users intentionally scroll into risk-handling actions
+
+### Current UX Rules
+
+- invoice detail now distinguishes between common and dangerous actions
+  - common actions:
+    - print preview
+    - collect payment
+    - view related order / delivery note
+  - dangerous actions:
+    - rollback payment
+    - rollback payment then cancel invoice
+    - cancel unpaid invoice
+
+- paid-invoice rollback policy is intentionally conservative
+  - frontend no longer treats “cancel invoice only” as a normal user-facing option
+  - if payment exists but no rollbackable payment entry is found:
+    - frontend blocks invoice cancellation
+    - user must investigate with admin support instead of forcing an unsafe rollback path

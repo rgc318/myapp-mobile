@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
@@ -10,7 +10,12 @@ import { getAppPreferences } from '@/lib/app-preferences';
 import { getPaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { useFeedback } from '@/providers/feedback-provider';
 import { createSalesInvoice } from '@/services/gateway';
-import { cancelSalesInvoiceV2, getSalesInvoiceDetailV2, type SalesInvoiceDetailV2 } from '@/services/sales';
+import {
+  cancelPaymentEntryV2,
+  cancelSalesInvoiceV2,
+  getSalesInvoiceDetailV2,
+  type SalesInvoiceDetailV2,
+} from '@/services/sales';
 
 function formatCurrency(value: number | null | undefined, currency = 'CNY') {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -37,6 +42,42 @@ function formatStatusLabel(status: string) {
   }
 }
 
+function buildSettlementLabel(detail: SalesInvoiceDetailV2) {
+  if (detail.documentStatus === 'cancelled') {
+    return '已作废';
+  }
+
+  if ((detail.outstandingAmount ?? 0) > 0) {
+    return '待收款';
+  }
+
+  return '已结清';
+}
+
+function buildSettlementTone(detail: SalesInvoiceDetailV2) {
+  if (detail.documentStatus === 'cancelled') {
+    return 'danger';
+  }
+
+  if ((detail.outstandingAmount ?? 0) > 0) {
+    return 'warning';
+  }
+
+  return 'success';
+}
+
+function buildInvoiceStatusHint(detail: SalesInvoiceDetailV2) {
+  if (detail.documentStatus === 'cancelled') {
+    return '这张销售发票已经作废，当前页面仅作为历史单据查看页使用。若还需要继续业务处理，请返回订单或发货单查看最新状态。';
+  }
+
+  if ((detail.outstandingAmount ?? 0) > 0) {
+    return '当前发票仍有未收金额，可继续登记收款；如果需要回改单据，请先确认是否要同步回退收款登记。';
+  }
+
+  return '当前发票已经结清，若仍需回退单据，请先确认是否需要回退对应收款，再处理发票作废。';
+}
+
 export default function SalesInvoiceCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ sourceName?: string; salesInvoice?: string; notice?: string }>();
@@ -51,10 +92,16 @@ export default function SalesInvoiceCreateScreen() {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showPaymentRollbackDialog, setShowPaymentRollbackDialog] = useState(false);
+  const [showCancelPaymentDialog, setShowCancelPaymentDialog] = useState(false);
   const [paymentNotice, setPaymentNotice] = useState<{
     unallocatedAmount?: number;
     writeoffAmount?: number;
   } | null>(null);
+  const isCancelledDetail = detail?.documentStatus === 'cancelled';
+  const settlementTone = detail ? buildSettlementTone(detail) : 'warning';
+  const salesInvoiceName =
+    typeof params.salesInvoice === 'string' ? params.salesInvoice.trim() : '';
 
   useEffect(() => {
     if (lockedSourceName) {
@@ -63,53 +110,61 @@ export default function SalesInvoiceCreateScreen() {
     if (params.notice === 'created' && typeof params.salesInvoice === 'string' && params.salesInvoice.trim()) {
       showSuccess(`已生成销售发票：${params.salesInvoice.trim()}`);
     }
-    if (typeof params.salesInvoice === 'string' && params.salesInvoice.trim()) {
-      const handoff = getPaymentResultHandoff(params.salesInvoice.trim());
-      setPaymentNotice(
-        handoff
-          ? {
-              unallocatedAmount: handoff.unallocatedAmount,
-              writeoffAmount: handoff.writeoffAmount,
-            }
-          : null,
-      );
-    }
   }, [lockedSourceName, params.notice, params.salesInvoice, showSuccess]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const refreshPaymentNotice = useCallback(() => {
+    if (!salesInvoiceName) {
+      setPaymentNotice(null);
+      return;
+    }
 
-    async function loadDetail() {
-      const salesInvoiceName =
-        typeof params.salesInvoice === 'string' ? params.salesInvoice.trim() : '';
+    const handoff = getPaymentResultHandoff(salesInvoiceName);
+    setPaymentNotice(
+      handoff
+        ? {
+            unallocatedAmount: handoff.unallocatedAmount,
+            writeoffAmount: handoff.writeoffAmount,
+          }
+        : null,
+    );
+  }, [salesInvoiceName]);
+
+  const loadDetail = useCallback(
+    async (silently = false) => {
       if (!salesInvoiceName) {
         setDetail(null);
         return;
       }
 
       try {
-        setIsLoadingDetail(true);
+        if (!silently) {
+          setIsLoadingDetail(true);
+        }
         const nextDetail = await getSalesInvoiceDetailV2(salesInvoiceName);
-        if (isMounted) {
-          setDetail(nextDetail);
-        }
+        setDetail(nextDetail);
       } catch (error) {
-        if (isMounted) {
-          setDetail(null);
-        }
+        setDetail(null);
         showError(error instanceof Error ? error.message : '销售发票详情加载失败。');
       } finally {
-        if (isMounted) {
+        if (!silently) {
           setIsLoadingDetail(false);
         }
       }
-    }
+    },
+    [salesInvoiceName, showError],
+  );
 
+  useEffect(() => {
+    refreshPaymentNotice();
     void loadDetail();
-    return () => {
-      isMounted = false;
-    };
-  }, [params.salesInvoice, showError]);
+  }, [loadDetail, refreshPaymentNotice]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshPaymentNotice();
+      void loadDetail(true);
+    }, [loadDetail, refreshPaymentNotice]),
+  );
 
   async function handleSubmit() {
     const trimmedSource = sourceName.trim();
@@ -175,6 +230,68 @@ export default function SalesInvoiceCreateScreen() {
     } finally {
       setIsCancelling(false);
     }
+  }
+
+  async function handleCancelPaymentThenInvoice() {
+    if (!detail?.name) {
+      showError('缺少销售发票号。');
+      return;
+    }
+
+    if (!detail.latestPaymentEntry) {
+      showError('当前发票已存在收款结果，但未找到可回退的收款单，请先联系管理员核对后再处理发票作废。');
+      return;
+    }
+
+    try {
+      setIsCancelling(true);
+      await cancelPaymentEntryV2(detail.latestPaymentEntry);
+      const nextDetail = await cancelSalesInvoiceV2(detail.name);
+      if (nextDetail) {
+        setDetail(nextDetail);
+      }
+      setShowPaymentRollbackDialog(false);
+      setShowCancelDialog(false);
+      showSuccess(`已先回退收款单 ${detail.latestPaymentEntry}，再作废销售发票 ${detail.name}。`);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : '收款回退或发票作废失败。');
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
+  async function handleCancelPaymentOnly() {
+    if (!detail?.latestPaymentEntry) {
+      showError('当前没有可回退的收款单。');
+      return;
+    }
+
+    try {
+      setIsCancelling(true);
+      await cancelPaymentEntryV2(detail.latestPaymentEntry);
+      await loadDetail(true);
+      refreshPaymentNotice();
+      setShowCancelPaymentDialog(false);
+      showSuccess(`收款单 ${detail.latestPaymentEntry} 已回退，当前发票已恢复为待收款状态。`);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : '收款回退失败。');
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
+  function requestInvoiceCancellation() {
+    const hasPayment =
+      Boolean(detail?.latestPaymentEntry) ||
+      (detail?.actualPaidAmount ?? 0) > 0 ||
+      (detail?.paidAmount ?? 0) > 0;
+
+    if (hasPayment) {
+      setShowPaymentRollbackDialog(true);
+      return;
+    }
+
+    setShowCancelDialog(true);
   }
 
   if (!params.salesInvoice) {
@@ -252,8 +369,13 @@ export default function SalesInvoiceCreateScreen() {
       title="销售发票详情"
       description="查看销售发票的金额结算、来源订单、发货关联与最新收款结果。"
       footer={
-        detail ? (
+        detail && !isCancelledDetail ? (
           <View style={styles.detailFooterWrap}>
+            <ThemedText style={styles.footerHint}>
+              {(detail.outstandingAmount ?? 0) > 0
+                ? '当前发票仍有效，可继续收款或打印留档。'
+                : '当前发票已结清，可继续打印留档；若要回退，请先确认是否需要同步回退收款。'}
+            </ThemedText>
             <View style={styles.footerRow}>
               <Pressable
                 onPress={openPrintPreview}
@@ -299,12 +421,71 @@ export default function SalesInvoiceCreateScreen() {
       ) : detail ? (
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           <View style={styles.statusStrip}>
-            <ThemedText style={styles.statusStripLabel}>单据状态</ThemedText>
-            <View style={styles.badge}>
-              <ThemedText style={styles.badgeText} type="defaultSemiBold">
-                {formatStatusLabel(detail.documentStatus)}
+            <View style={styles.statusStripMeta}>
+              <ThemedText style={styles.statusStripLabel}>单据状态</ThemedText>
+              <ThemedText style={styles.statusStripTitle} type="defaultSemiBold">
+                {isCancelledDetail ? '已作废历史发票' : '有效销售发票'}
               </ThemedText>
             </View>
+            <View style={styles.statusBadgeGroup}>
+              <View style={[styles.badge, isCancelledDetail ? styles.cancelledBadge : null]}>
+                <ThemedText
+                  style={[styles.badgeText, isCancelledDetail ? styles.cancelledBadgeText : null]}
+                  type="defaultSemiBold">
+                  {formatStatusLabel(detail.documentStatus)}
+                </ThemedText>
+              </View>
+              <View
+                style={[
+                  styles.badge,
+                  styles.settlementBadge,
+                  settlementTone === 'success'
+                    ? styles.successBadge
+                    : settlementTone === 'danger'
+                      ? styles.cancelledBadge
+                      : styles.warningBadge,
+                ]}>
+                <ThemedText
+                  style={[
+                    styles.badgeText,
+                    settlementTone === 'success'
+                      ? styles.successBadgeText
+                      : settlementTone === 'danger'
+                        ? styles.cancelledBadgeText
+                        : styles.warningBadgeText,
+                  ]}
+                  type="defaultSemiBold">
+                  {buildSettlementLabel(detail)}
+                </ThemedText>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryCell}>
+              <ThemedText style={styles.summaryLabel}>发票号</ThemedText>
+              <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+                {detail.name}
+              </ThemedText>
+            </View>
+            <View style={styles.summaryCell}>
+              <ThemedText style={styles.summaryLabel}>最新收款单</ThemedText>
+              <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+                {detail.latestPaymentEntry || '暂未收款'}
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={[styles.statusHintCard, isCancelledDetail ? styles.cancelledStatusHintCard : null]}>
+            <ThemedText
+              style={[styles.statusHintTitle, isCancelledDetail ? styles.cancelledStatusHintTitle : null]}
+              type="defaultSemiBold">
+              {isCancelledDetail ? '历史发票' : '当前状态'}
+            </ThemedText>
+            <ThemedText
+              style={[styles.statusHintText, isCancelledDetail ? styles.cancelledStatusHintText : null]}>
+              {buildInvoiceStatusHint(detail)}
+            </ThemedText>
           </View>
 
           <View style={styles.printHintCard}>
@@ -312,30 +493,11 @@ export default function SalesInvoiceCreateScreen() {
               打印与交付
             </ThemedText>
             <ThemedText style={styles.printHintText}>
-              先核对客户、金额和开票商品，再使用打印预览确认版式；后续这里会承接打印、分享 PDF 和补打。
+              {isCancelledDetail
+                ? '当前页面保留这张历史发票的可视版式，便于核对和留档；如需继续业务处理，请回到仍然有效的订单或发货单。'
+                : '先核对客户、金额和开票商品，再使用打印预览确认版式；后续这里会承接打印、分享 PDF 和补打。'}
             </ThemedText>
           </View>
-
-          {detail.canCancelSalesInvoice || detail.cancelSalesInvoiceHint ? (
-            <View style={styles.rollbackCard}>
-              <ThemedText style={styles.rollbackTitle} type="defaultSemiBold">
-                回退处理
-              </ThemedText>
-              <ThemedText style={styles.rollbackText}>
-                {detail.cancelSalesInvoiceHint ||
-                  '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'}
-              </ThemedText>
-              {detail.canCancelSalesInvoice ? (
-                <Pressable
-                  onPress={() => setShowCancelDialog(true)}
-                  style={[styles.rollbackButton, styles.rollbackDangerButton]}>
-                  <ThemedText style={styles.rollbackDangerText} type="defaultSemiBold">
-                    作废销售发票
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
 
           <SalesInvoiceSheet detail={detail} />
 
@@ -378,7 +540,7 @@ export default function SalesInvoiceCreateScreen() {
             </View>
             <View style={styles.row}>
               <ThemedText style={styles.rowLabel}>打印状态</ThemedText>
-              <ThemedText style={styles.rowValue}>待接入</ThemedText>
+              <ThemedText style={styles.rowValue}>{isCancelledDetail ? '历史留档' : '待接入'}</ThemedText>
             </View>
           </View>
 
@@ -417,7 +579,35 @@ export default function SalesInvoiceCreateScreen() {
                     </ThemedText>
                   </Pressable>
                 ) : null}
+
+                {!isCancelledDetail && (detail.outstandingAmount ?? 0) > 0 ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/sales/payment/create',
+                        params: {
+                          salesInvoice: detail.name,
+                          amount: String(detail.outstandingAmount ?? ''),
+                          currency: detail.currency,
+                        },
+                      })
+                    }
+                    style={styles.actionButton}>
+                    <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                      前往收款
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
               </View>
+              {isCancelledDetail ? (
+                <ThemedText style={styles.helperText}>
+                  当前发票已经作废，这里只保留返回上游单据的入口，不再继续暴露收款或发票回退类动作。
+                </ThemedText>
+              ) : (detail.outstandingAmount ?? 0) > 0 ? (
+                <ThemedText style={styles.helperText}>
+                  这张发票目前仍有效且存在未收金额，可以从这里继续进入收款流程。
+                </ThemedText>
+              ) : null}
             </View>
           ) : null}
 
@@ -459,6 +649,41 @@ export default function SalesInvoiceCreateScreen() {
             </View>
           </View>
 
+          {!isCancelledDetail &&
+          (detail.canCancelSalesInvoice || detail.cancelSalesInvoiceHint || detail.latestPaymentEntry) ? (
+            <View style={styles.rollbackCard}>
+              <ThemedText style={styles.rollbackTitle} type="defaultSemiBold">
+                回退处理
+              </ThemedText>
+              <ThemedText style={styles.rollbackText}>
+                {detail.latestPaymentEntry
+                  ? '这张发票已经有关联收款。若只是收款登记有误，可先单独回退收款；若订单金额或开票结果有问题，应先回退收款，再作废发票。'
+                  : detail.cancelSalesInvoiceHint ||
+                    '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'}
+              </ThemedText>
+              <View style={styles.rollbackActionRow}>
+                {detail.latestPaymentEntry ? (
+                  <Pressable
+                    onPress={() => setShowCancelPaymentDialog(true)}
+                    style={[styles.rollbackButton, styles.rollbackSecondaryButton]}>
+                    <ThemedText style={styles.rollbackSecondaryText} type="defaultSemiBold">
+                      回退收款
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+                {detail.canCancelSalesInvoice ? (
+                  <Pressable
+                    onPress={requestInvoiceCancellation}
+                    style={[styles.rollbackButton, styles.rollbackDangerButton]}>
+                    <ThemedText style={styles.rollbackDangerText} type="defaultSemiBold">
+                      {detail.latestPaymentEntry ? '回退收款并作废发票' : '作废销售发票'}
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
         </ScrollView>
       ) : (
         <View style={styles.emptyCard}>
@@ -477,6 +702,32 @@ export default function SalesInvoiceCreateScreen() {
         onConfirm={() => void handleCancelSalesInvoice()}
         title="作废销售发票？"
         visible={showCancelDialog}
+      />
+
+      <ConfirmDialog
+        confirmLabel={isCancelling ? '回退中...' : '确认回退收款'}
+        description="回退后，这张发票上的收款登记会被撤销，未收金额会恢复。发票本身不会作废，可继续重新收款或再决定是否回退整张发票。"
+        onClose={() => {
+          if (!isCancelling) {
+            setShowCancelPaymentDialog(false);
+          }
+        }}
+        onConfirm={() => void handleCancelPaymentOnly()}
+        title="回退这张发票的收款？"
+        visible={showCancelPaymentDialog}
+      />
+
+      <PaymentRollbackDialog
+        confirmLabel={isCancelling ? '处理中...' : '先回退收款再作废发票'}
+        invoiceName={detail?.name ?? ''}
+        paymentEntryName={detail?.latestPaymentEntry ?? ''}
+        onClose={() => {
+          if (!isCancelling) {
+            setShowPaymentRollbackDialog(false);
+          }
+        }}
+        onConfirm={() => void handleCancelPaymentThenInvoice()}
+        visible={showPaymentRollbackDialog}
       />
     </AppShell>
   );
@@ -523,6 +774,58 @@ function ConfirmDialog({
   );
 }
 
+function PaymentRollbackDialog({
+  visible,
+  invoiceName,
+  paymentEntryName,
+  confirmLabel,
+  onClose,
+  onConfirm,
+}: {
+  visible: boolean;
+  invoiceName: string;
+  paymentEntryName: string;
+  confirmLabel: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.dialogBackdrop}>
+        <View style={[styles.dialogCard, styles.paymentRollbackDialogCard]}>
+          <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+            这张发票已有收款记录
+          </ThemedText>
+          <ThemedText style={styles.dialogDescription}>
+            当前发票 {invoiceName || '未命名发票'} 已关联收款单 {paymentEntryName || '未命名收款单'}。
+            为避免留下未分配金额并影响后续结算，这里只保留“先回退收款，再作废发票”的处理方式。
+          </ThemedText>
+          <View style={styles.paymentRollbackTipCard}>
+            <ThemedText style={styles.paymentRollbackTipTitle} type="defaultSemiBold">
+              推荐处理顺序
+            </ThemedText>
+            <ThemedText style={styles.paymentRollbackTipText}>
+              先作废收款单，资金会从这张发票上回退；再作废发票，避免留下“发票已作废但资金仍作为未分配金额保留”的状态。
+            </ThemedText>
+          </View>
+          <View style={styles.paymentRollbackActionStack}>
+            <Pressable onPress={onConfirm} style={[styles.dialogButton, styles.dialogDangerButton]}>
+              <ThemedText style={styles.dialogDangerText} type="defaultSemiBold">
+                {confirmLabel}
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={onClose} style={[styles.dialogButton, styles.dialogSoftButton]}>
+              <ThemedText style={styles.dialogSoftText} type="defaultSemiBold">
+                先不处理
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     gap: 16,
@@ -543,10 +846,23 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: 'space-between',
   },
+  statusStripMeta: {
+    flex: 1,
+    gap: 4,
+  },
   statusStripLabel: {
     color: '#64748B',
     fontSize: 13,
     marginTop: 8,
+  },
+  statusStripTitle: {
+    color: '#0F172A',
+    fontSize: 20,
+    lineHeight: 28,
+  },
+  statusBadgeGroup: {
+    alignItems: 'flex-end',
+    gap: 8,
   },
   badge: {
     backgroundColor: '#DBEAFE',
@@ -557,6 +873,77 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#2563EB',
     fontSize: 13,
+  },
+  cancelledBadge: {
+    backgroundColor: '#FEE2E2',
+  },
+  cancelledBadgeText: {
+    color: '#DC2626',
+  },
+  settlementBadge: {
+    minWidth: 78,
+  },
+  successBadge: {
+    backgroundColor: '#DCFCE7',
+  },
+  successBadgeText: {
+    color: '#15803D',
+  },
+  warningBadge: {
+    backgroundColor: '#FEF3C7',
+  },
+  warningBadgeText: {
+    color: '#B45309',
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  summaryCell: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D7DEE7',
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  summaryLabel: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  summaryValue: {
+    color: '#0F172A',
+    fontSize: 15,
+  },
+  statusHintCard: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  cancelledStatusHintCard: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  statusHintTitle: {
+    color: '#1D4ED8',
+    fontSize: 14,
+  },
+  cancelledStatusHintTitle: {
+    color: '#991B1B',
+  },
+  statusHintText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  cancelledStatusHintText: {
+    color: '#7F1D1D',
   },
   noticeCard: {
     backgroundColor: '#EFF6FF',
@@ -618,9 +1005,14 @@ const styles = StyleSheet.create({
   rollbackButton: {
     alignItems: 'center',
     borderRadius: 14,
+    flex: 1,
     minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: 14,
+  },
+  rollbackActionRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
   rollbackDangerButton: {
     backgroundColor: '#FFFFFF',
@@ -629,6 +1021,15 @@ const styles = StyleSheet.create({
   },
   rollbackDangerText: {
     color: '#DC2626',
+    fontSize: 14,
+  },
+  rollbackSecondaryButton: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+    borderWidth: 1,
+  },
+  rollbackSecondaryText: {
+    color: '#C2410C',
     fontSize: 14,
   },
   sectionCard: {
@@ -750,6 +1151,11 @@ const styles = StyleSheet.create({
   detailFooterWrap: {
     gap: 8,
   },
+  footerHint: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
   footerButton: {
     flex: 1,
   },
@@ -796,6 +1202,10 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     width: '100%',
   },
+  paymentRollbackDialogCard: {
+    borderColor: '#FECACA',
+    borderWidth: 1,
+  },
   dialogTitle: {
     color: '#991B1B',
     fontSize: 18,
@@ -823,8 +1233,17 @@ const styles = StyleSheet.create({
     borderColor: '#BFDBFE',
     borderWidth: 1,
   },
+  dialogSoftButton: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D7DEE7',
+    borderWidth: 1,
+  },
   dialogGhostText: {
     color: '#1D4ED8',
+    fontSize: 15,
+  },
+  dialogSoftText: {
+    color: '#475569',
     fontSize: 15,
   },
   dialogDangerButton: {
@@ -833,5 +1252,27 @@ const styles = StyleSheet.create({
   dialogDangerText: {
     color: '#FFFFFF',
     fontSize: 15,
+  },
+  paymentRollbackTipCard: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  paymentRollbackTipTitle: {
+    color: '#9A3412',
+    fontSize: 14,
+  },
+  paymentRollbackTipText: {
+    color: '#7C2D12',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  paymentRollbackActionStack: {
+    gap: 10,
+    marginTop: 4,
   },
 });

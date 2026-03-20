@@ -584,6 +584,18 @@ export async function cancelSalesInvoiceV2(salesInvoiceName: string) {
   return getSalesInvoiceDetailV2(salesInvoiceName);
 }
 
+export async function cancelPaymentEntryV2(paymentEntryName: string) {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.cancel_payment_entry', {
+    payment_entry_name: paymentEntryName,
+  });
+
+  return {
+    paymentEntry: String(data?.payment_entry ?? paymentEntryName),
+    documentStatus: String(data?.document_status ?? ''),
+    references: Array.isArray(data?.references) ? data.references : [],
+  };
+}
+
 function toOptionalNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
