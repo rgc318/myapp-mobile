@@ -399,6 +399,54 @@ These items should be manually walked through in one continuous business run:
 3. connect real invoice print / PDF / share capability
 4. add unsaved-change protection for edit-heavy pages if the acceptance pass shows users are still getting lost
 
+## Sales Address And Payment Follow-up (2026-03-20)
+
+This round closed the remaining gaps that were still visible after the first sales-flow acceptance pass.
+
+### Final Address Rule On Mobile
+
+For the mobile app, the shipping address model is intentionally simple:
+
+- customer default address is only a suggestion source
+- switching customer may auto-fill the current order form once
+- after that, the order shipping address is treated as independent order data
+- downstream delivery / invoice / payment pages should rely on the order or document snapshot returned by backend
+- frontend should not try to re-derive document address from customer profile once the order already exists
+
+### Current Frontend Behavior
+
+- create-order page
+  - auto-fill only happens when `customer` actually changes
+  - later typing in `收货人 / 联系电话 / 收货地址` should not be overwritten by unrelated state updates
+- order detail page
+  - single-section contact save and full-page edit save now both expect backend to preserve the same order address snapshot
+- delivery / invoice detail pages
+  - display the backend document snapshot
+  - do not locally fall back to customer default address
+
+### Payment Entry Param Compatibility
+
+Sales payment create page now accepts both of the following navigation shapes:
+
+- order-detail style
+  - `referenceName`
+  - `defaultPaidAmount`
+  - `currency`
+- invoice-detail style
+  - `salesInvoice`
+  - `amount`
+  - `currency`
+
+Purpose:
+
+- older and newer entry points can both prefill the invoice number and suggested amount
+- frontend does not need temporary route-specific hacks while sales pages are still converging toward one convention
+
+### Recommended Next Cleanup
+
+- later unify all sales payment entry points to one parameter convention
+- keep the current compatibility layer until all call sites are migrated
+
 ### Order-Detail Follow-up Notes
 
 Additional follow-up work after the first v2 alignment focused on making the order-detail product-edit experience safer and easier to understand.

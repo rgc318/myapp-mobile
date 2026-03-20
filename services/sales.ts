@@ -195,6 +195,71 @@ export function submitSalesOrderV2(payload: CreateSalesOrderPayload) {
   return createSalesOrderV2(payload);
 }
 
+function normalizeShippingText(value: unknown) {
+  return compactAddressText(typeof value === 'string' ? value : String(value ?? ''));
+}
+
+function normalizeShippingField(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function buildShippingSnapshotFromOrderData(data: Record<string, any>) {
+  const shipping = data.shipping ?? {};
+
+  return {
+    contactPerson: normalizeShippingField(shipping.contact_person),
+    contactDisplay:
+      normalizeShippingField(shipping.contact_display) || normalizeShippingField(shipping.contact_person),
+    contactPhone: normalizeShippingField(shipping.contact_phone),
+    addressDisplay: normalizeShippingText(shipping.shipping_address_text),
+    customerAddress: normalizeShippingField(shipping.shipping_address_name),
+  };
+}
+
+async function resolveSourceOrderShippingSnapshot(sourceOrderName: string) {
+  const trimmedSourceOrderName = sourceOrderName.trim();
+  if (!trimmedSourceOrderName) {
+    return null;
+  }
+
+  const data = await callGatewayMethod<Record<string, any>>(
+    'myapp.api.gateway.get_sales_order_detail',
+    { order_name: trimmedSourceOrderName },
+  );
+
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  return buildShippingSnapshotFromOrderData(data);
+}
+
+async function resolveDocumentShippingSnapshot(
+  shipping: Record<string, unknown>,
+  sourceOrders: string[],
+) {
+  const directSnapshot = {
+    contactDisplay: normalizeShippingField(shipping.contact_display),
+    contactPhone: normalizeShippingField(shipping.contact_phone),
+    addressDisplay: normalizeShippingText(shipping.shipping_address_text),
+  };
+
+  if (directSnapshot.contactDisplay || directSnapshot.contactPhone || directSnapshot.addressDisplay) {
+    return directSnapshot;
+  }
+
+  const sourceOrderSnapshot = await resolveSourceOrderShippingSnapshot(sourceOrders[0] ?? '');
+  if (!sourceOrderSnapshot) {
+    return directSnapshot;
+  }
+
+  return {
+    contactDisplay: sourceOrderSnapshot.contactDisplay || sourceOrderSnapshot.contactPerson,
+    contactPhone: sourceOrderSnapshot.contactPhone,
+    addressDisplay: sourceOrderSnapshot.addressDisplay,
+  };
+}
+
 export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrderDetailV2 | null> {
   const data = await callGatewayMethod<Record<string, any>>(
     'myapp.api.gateway.get_sales_order_detail',
@@ -206,7 +271,6 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
   }
 
   const customer = data.customer ?? {};
-  const shipping = data.shipping ?? {};
   const meta = data.meta ?? {};
   const items = Array.isArray(data.items) ? data.items : [];
   const fulfillment = data.fulfillment ?? {};
@@ -228,6 +292,7 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
     (settledAmount !== null
       ? Math.max(settledAmount - (totalWriteoffAmount ?? 0), 0)
       : null);
+  const shippingSnapshot = buildShippingSnapshotFromOrderData(data);
 
   const status =
     typeof fulfillment.status === 'string'
@@ -259,15 +324,11 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
     completionStatus: String(data.completion?.status ?? ''),
     deliveryDate: String(meta.delivery_date ?? ''),
     remarks: String(meta.remarks ?? ''),
-    contactPerson: String(shipping.contact_person ?? customer.contact_person ?? ''),
-    contactDisplay: String(
-      shipping.contact_display ?? customer.contact_display_name ?? '',
-    ),
-    contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
-    addressDisplay: compactAddressText(
-      String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
-    ),
-    customerAddress: String(shipping.shipping_address_name ?? customer.shipping_address_name ?? ''),
+    contactPerson: shippingSnapshot.contactPerson,
+    contactDisplay: shippingSnapshot.contactDisplay,
+    contactPhone: shippingSnapshot.contactPhone,
+    addressDisplay: shippingSnapshot.addressDisplay,
+    customerAddress: shippingSnapshot.customerAddress,
     paidAmount: settledAmount,
     actualPaidAmount,
     outstandingAmount: toOptionalNumber(data.amounts?.outstanding_amount),
@@ -396,15 +457,18 @@ export async function getDeliveryNoteDetailV2(
     return null;
   }
 
-  const customer = data.customer ?? {};
   const shipping = data.shipping ?? {};
   const meta = data.meta ?? {};
   const items = Array.isArray(data.items) ? data.items : [];
   const references = data.references ?? {};
+  const salesOrders = Array.isArray(references.sales_orders)
+    ? references.sales_orders.map((value: unknown) => String(value ?? '')).filter(Boolean)
+    : [];
+  const shippingSnapshot = await resolveDocumentShippingSnapshot(shipping, salesOrders);
 
   return {
     name: String(data.delivery_note_name ?? deliveryNoteName),
-    customer: String(customer.display_name ?? customer.name ?? ''),
+    customer: String((data.customer ?? {}).display_name ?? (data.customer ?? {}).name ?? ''),
     company: String(meta.company ?? ''),
     currency: String(meta.currency ?? 'CNY'),
     postingDate: String(meta.posting_date ?? ''),
@@ -413,17 +477,13 @@ export async function getDeliveryNoteDetailV2(
     documentStatus: String(data.document_status ?? ''),
     totalQty: toOptionalNumber(data.fulfillment?.total_qty),
     grandTotal: toOptionalNumber(data.amounts?.delivery_amount_estimate),
-    salesOrders: Array.isArray(references.sales_orders)
-      ? references.sales_orders.map((value: unknown) => String(value ?? '')).filter(Boolean)
-      : [],
+    salesOrders,
     salesInvoices: Array.isArray(references.sales_invoices)
       ? references.sales_invoices.map((value: unknown) => String(value ?? '')).filter(Boolean)
       : [],
-    contactDisplay: String(shipping.contact_display ?? customer.contact_display_name ?? ''),
-    contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
-    addressDisplay: compactAddressText(
-      String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
-    ),
+    contactDisplay: shippingSnapshot.contactDisplay,
+    contactPhone: shippingSnapshot.contactPhone,
+    addressDisplay: shippingSnapshot.addressDisplay,
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),
@@ -449,18 +509,21 @@ export async function getSalesInvoiceDetailV2(
     return null;
   }
 
-  const customer = data.customer ?? {};
   const shipping = data.shipping ?? {};
   const meta = data.meta ?? {};
   const payment = data.payment ?? {};
   const references = data.references ?? {};
   const items = Array.isArray(data.items) ? data.items : [];
+  const salesOrders = Array.isArray(references.sales_orders)
+    ? references.sales_orders.map((value: unknown) => String(value ?? '')).filter(Boolean)
+    : [];
   const totalWriteoffAmount = toOptionalNumber(payment.total_writeoff_amount);
   const paidAmount = toOptionalNumber(payment.paid_amount);
+  const shippingSnapshot = await resolveDocumentShippingSnapshot(shipping, salesOrders);
 
   return {
     name: String(data.sales_invoice_name ?? salesInvoiceName),
-    customer: String(customer.display_name ?? customer.name ?? ''),
+    customer: String((data.customer ?? {}).display_name ?? (data.customer ?? {}).name ?? ''),
     company: String(meta.company ?? ''),
     currency: String(meta.currency ?? 'CNY'),
     postingDate: String(meta.posting_date ?? ''),
@@ -477,17 +540,13 @@ export async function getSalesInvoiceDetailV2(
     totalWriteoffAmount,
     latestUnallocatedAmount: toOptionalNumber(payment.latest_unallocated_amount),
     latestPaymentEntry: String(payment.latest_payment_entry ?? references.latest_payment_entry ?? ''),
-    salesOrders: Array.isArray(references.sales_orders)
-      ? references.sales_orders.map((value: unknown) => String(value ?? '')).filter(Boolean)
-      : [],
+    salesOrders,
     deliveryNotes: Array.isArray(references.delivery_notes)
       ? references.delivery_notes.map((value: unknown) => String(value ?? '')).filter(Boolean)
       : [],
-    contactDisplay: String(shipping.contact_display ?? customer.contact_display_name ?? ''),
-    contactPhone: String(shipping.contact_phone ?? customer.contact_phone ?? ''),
-    addressDisplay: compactAddressText(
-      String(shipping.shipping_address_text ?? customer.shipping_address_text ?? ''),
-    ),
+    contactDisplay: shippingSnapshot.contactDisplay,
+    contactPhone: shippingSnapshot.contactPhone,
+    addressDisplay: shippingSnapshot.addressDisplay,
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),

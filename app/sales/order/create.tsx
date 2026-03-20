@@ -316,6 +316,10 @@ export default function SalesOrderCreateScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingRemovedItem, setPendingRemovedItem] = useState<SalesOrderDraftItem | null>(null);
   const removeUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCustomerRef = useRef('');
+  const shippingAddressTouchedRef = useRef(false);
+  const shippingContactTouchedRef = useRef(false);
+  const shippingPhoneTouchedRef = useRef(false);
 
   const postingDate = new Date().toISOString().slice(0, 10);
 
@@ -329,6 +333,21 @@ export default function SalesOrderCreateScreen() {
 
   const syncDraft = () => {
     setDraftItems([...getSalesOrderDraft()]);
+  };
+
+  const handleShippingAddressChange = (value: string) => {
+    shippingAddressTouchedRef.current = true;
+    setShippingAddress(value);
+  };
+
+  const handleShippingContactChange = (value: string) => {
+    shippingContactTouchedRef.current = true;
+    setShippingContact(value);
+  };
+
+  const handleShippingPhoneChange = (value: string) => {
+    shippingPhoneTouchedRef.current = true;
+    setShippingPhone(value);
   };
 
   useEffect(() => {
@@ -377,6 +396,14 @@ export default function SalesOrderCreateScreen() {
 
   useEffect(() => {
     const trimmedCustomer = normalizeText(customer);
+    const customerChanged = trimmedCustomer !== lastCustomerRef.current;
+
+    if (customerChanged) {
+      lastCustomerRef.current = trimmedCustomer;
+      shippingAddressTouchedRef.current = false;
+      shippingContactTouchedRef.current = false;
+      shippingPhoneTouchedRef.current = false;
+    }
 
     if (!trimmedCustomer) {
       setShippingAddress('');
@@ -410,13 +437,15 @@ export default function SalesOrderCreateScreen() {
                 return;
               }
 
-              setShippingAddress(
-                composeAddressDisplay(details.defaultAddress) ||
-                  compactAddressText(details.recentAddresses[0]?.addressDisplay) ||
-                  '',
-              );
-              setShippingContact(details.defaultContact?.displayName || '');
-              setShippingPhone(details.defaultContact?.phone || '');
+              if (customerChanged) {
+                setShippingAddress(
+                  composeAddressDisplay(details.defaultAddress) ||
+                    compactAddressText(details.recentAddresses[0]?.addressDisplay) ||
+                    '',
+                );
+                setShippingContact(details.defaultContact?.displayName || '');
+                setShippingPhone(details.defaultContact?.phone || '');
+              }
               setRecentAddresses(
                 details.recentAddresses.map((address) => ({
                   ...address,
@@ -876,7 +905,7 @@ export default function SalesOrderCreateScreen() {
                 <View style={styles.shippingFieldBlock}>
                   <ThemedText style={styles.shippingFieldLabel} type="defaultSemiBold">{'\u6536\u8d27\u8054\u7cfb\u4eba'}</ThemedText>
                   <TextInput
-                    onChangeText={setShippingContact}
+                    onChangeText={handleShippingContactChange}
                     placeholder={'\u4ece\u5ba2\u6237\u8d44\u6599\u5e26\u5165\uff0c\u53ef\u4e34\u65f6\u4fee\u6539'}
                     placeholderTextColor="#9CA3AF"
                     style={[styles.shippingInput, { backgroundColor: surfaceMuted, borderColor }]}
@@ -888,7 +917,7 @@ export default function SalesOrderCreateScreen() {
                   <ThemedText style={styles.shippingFieldLabel} type="defaultSemiBold">{'\u8054\u7cfb\u7535\u8bdd'}</ThemedText>
                   <TextInput
                     keyboardType="phone-pad"
-                    onChangeText={setShippingPhone}
+                    onChangeText={handleShippingPhoneChange}
                     placeholder={'\u4ece\u5ba2\u6237\u8d44\u6599\u5e26\u5165\uff0c\u53ef\u4e34\u65f6\u4fee\u6539'}
                     placeholderTextColor="#9CA3AF"
                     style={[styles.shippingInput, { backgroundColor: surfaceMuted, borderColor }]}
@@ -902,7 +931,7 @@ export default function SalesOrderCreateScreen() {
                 <TextInput
                   multiline
                   numberOfLines={4}
-                  onChangeText={setShippingAddress}
+                  onChangeText={handleShippingAddressChange}
                   placeholder={'\u9009\u5b9a\u5ba2\u6237\u540e\u81ea\u52a8\u5e26\u51fa\uff0c\u672c\u5355\u53ef\u4ee5\u4e34\u65f6\u4fee\u6539'}
                   placeholderTextColor="#9CA3AF"
                   style={[styles.shippingTextarea, { backgroundColor: surfaceMuted, borderColor }]}
@@ -920,7 +949,7 @@ export default function SalesOrderCreateScreen() {
                     {recentAddresses.map((address, index) => (
                       <Pressable
                         key={`${address.name ?? 'text'}-${index}`}
-                        onPress={() => setShippingAddress(compactAddressText(address.addressDisplay))}
+                        onPress={() => handleShippingAddressChange(compactAddressText(address.addressDisplay))}
                         style={[styles.recentAddressChip, { backgroundColor: accentSoft, borderColor }]}>
                         <ThemedText numberOfLines={2} style={styles.recentAddressText}>
                           {compactAddressText(address.addressDisplay) || '未命名地址'}

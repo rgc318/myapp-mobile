@@ -42,7 +42,13 @@ type ResultDialogState = {
 
 export default function SalesPaymentCreateScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ referenceName?: string; defaultPaidAmount?: string; currency?: string }>();
+  const params = useLocalSearchParams<{
+    referenceName?: string;
+    salesInvoice?: string;
+    defaultPaidAmount?: string;
+    amount?: string;
+    currency?: string;
+  }>();
   const { showError } = useFeedback();
   const [referenceName, setReferenceName] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
@@ -85,17 +91,29 @@ export default function SalesPaymentCreateScreen() {
     currentPaidAmount > suggestedAmount;
 
   useEffect(() => {
-    if (typeof params.referenceName === 'string' && params.referenceName.trim()) {
-      setReferenceName(params.referenceName.trim());
+    const nextReferenceName =
+      typeof params.referenceName === 'string' && params.referenceName.trim()
+        ? params.referenceName.trim()
+        : typeof params.salesInvoice === 'string' && params.salesInvoice.trim()
+          ? params.salesInvoice.trim()
+          : '';
+    if (nextReferenceName) {
+      setReferenceName(nextReferenceName);
     }
-    if (typeof params.defaultPaidAmount === 'string' && params.defaultPaidAmount.trim()) {
-      const amount = Number(params.defaultPaidAmount);
+    const nextDefaultAmount =
+      typeof params.defaultPaidAmount === 'string' && params.defaultPaidAmount.trim()
+        ? params.defaultPaidAmount
+        : typeof params.amount === 'string' && params.amount.trim()
+          ? params.amount
+          : '';
+    if (nextDefaultAmount) {
+      const amount = Number(nextDefaultAmount);
       if (Number.isFinite(amount) && amount > 0) {
         setSuggestedAmount(amount);
         setPaidAmount(String(amount));
       }
     }
-  }, [params.defaultPaidAmount, params.referenceName]);
+  }, [params.amount, params.defaultPaidAmount, params.referenceName, params.salesInvoice]);
 
   useEffect(() => {
     let cancelled = false;
