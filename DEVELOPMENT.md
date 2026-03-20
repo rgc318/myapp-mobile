@@ -2292,3 +2292,67 @@ The goal is to make long editing sessions safer without forcing users through ex
 - navigating from order-detail into product search for item replacement:
   - do not warn
   - preserve scoped draft and continue the same edit session
+
+## Create-order And Product Search UX Update (2026-03-20)
+
+This round further refined the create-order page and the dedicated product-search page so frequent operators can move faster without losing context.
+
+### Create-order bottom action rule
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- the old bottom `收款` action has been removed from create-order
+- current bottom actions are now:
+  - `仅保存`
+  - `快速开单`
+- rationale:
+  - create-order should only expose actions directly related to the current order form
+  - payment belongs to invoice / settlement stages instead of the initial order form
+- current meaning:
+  - `仅保存`
+    - create the order only
+  - `快速开单`
+    - create order
+    - auto submit delivery note
+    - auto create sales invoice
+
+### Create-order validation feedback
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- missing required information is no longer treated as weak inline copy only
+- current validation behavior:
+  - submit first shows a clear blocking message
+  - the page then scrolls to the first invalid section
+  - customer / product / shipping-related inline warnings clear automatically after the operator fixes the field
+- rationale:
+  - create-order is a long page
+  - error handling must both explain the problem and bring the user back to the correct section
+
+### Product-search draft cart behavior
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- the old middle “当前订单草稿” card has been removed
+- product-search now uses a bottom summary bar instead
+- current behavior:
+  - left side shows current draft summary:
+    - selected line count
+    - total quantity
+  - tapping the summary opens the current draft-cart panel
+  - the draft-cart panel can directly change quantities with `- / +`
+  - right side keeps a direct `返回订单页` action
+- rationale:
+  - the search page should focus on product finding and quick quantity adjustment
+  - current selected goods should feel closer to a shopping-cart tray than a repeated explanatory card
+
+### Workflow navigation visual rule
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/workflow-quick-nav.tsx`
+- the old scattered capsule buttons were redesigned into a segmented module switcher
+- current navigation intent:
+  - behave like lightweight module navigation
+  - not like four isolated action buttons
+- this same navigation now also cooperates with page-level leave guards
+  - pages with unsaved edits can block cross-module jumps before the route is actually changed
