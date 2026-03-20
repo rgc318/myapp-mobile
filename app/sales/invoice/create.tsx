@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View }
 
 import { AppShell } from '@/components/app-shell';
 import { PreferenceSummary } from '@/components/preference-summary';
+import { SalesInvoiceSheet } from '@/components/sales-invoice-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { getPaymentResultHandoff } from '@/lib/payment-result-handoff';
@@ -39,8 +40,9 @@ function formatStatusLabel(status: string) {
 export default function SalesInvoiceCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ sourceName?: string; salesInvoice?: string; notice?: string }>();
+  const lockedSourceName = typeof params.sourceName === 'string' ? params.sourceName.trim() : '';
   const preferences = getAppPreferences();
-  const { showError, showSuccess } = useFeedback();
+  const { showError, showInfo, showSuccess } = useFeedback();
   const [sourceName, setSourceName] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [remarks, setRemarks] = useState('');
@@ -53,8 +55,8 @@ export default function SalesInvoiceCreateScreen() {
   } | null>(null);
 
   useEffect(() => {
-    if (typeof params.sourceName === 'string' && params.sourceName.trim()) {
-      setSourceName(params.sourceName.trim());
+    if (lockedSourceName) {
+      setSourceName(lockedSourceName);
     }
     if (params.notice === 'created' && typeof params.salesInvoice === 'string' && params.salesInvoice.trim()) {
       showSuccess(`已生成销售发票：${params.salesInvoice.trim()}`);
@@ -70,7 +72,7 @@ export default function SalesInvoiceCreateScreen() {
           : null,
       );
     }
-  }, [params.notice, params.salesInvoice, params.sourceName, showSuccess]);
+  }, [lockedSourceName, params.notice, params.salesInvoice, showSuccess]);
 
   useEffect(() => {
     let isMounted = true;
@@ -140,23 +142,57 @@ export default function SalesInvoiceCreateScreen() {
     }
   }
 
+  function openPrintPreview() {
+    if (!detail?.name) {
+      showInfo('当前发票详情尚未加载完成。');
+      return;
+    }
+
+    router.push({
+      pathname: '/sales/invoice/preview',
+      params: { salesInvoice: detail.name },
+    });
+  }
+
   if (!params.salesInvoice) {
     return (
       <AppShell
         title="销售开票"
-        description="根据已存在的销售订单生成销售发票，适合作为后续结算与收款依据。">
+        description="根据已存在的销售订单生成销售发票，适合作为后续结算与收款依据。"
+        footer={
+          <View style={styles.footerRow}>
+            <Pressable
+              onPress={() => router.push('/(tabs)/sales')}
+              style={[styles.footerButton, styles.footerGhostButton]}>
+              <ThemedText style={styles.footerGhostText} type="defaultSemiBold">
+                返回销售
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={() => void handleSubmit()} style={[styles.footerButton, styles.primaryButton]}>
+              <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
+                {isSubmitting ? '开票中...' : '创建销售发票'}
+              </ThemedText>
+            </Pressable>
+          </View>
+        }>
         <PreferenceSummary title="当前销售模式" modeLabel={preferences.salesFlowMode === 'quick' ? '快捷结算' : '分步处理'} />
 
         <View style={styles.formCard}>
           <View style={styles.fieldBlock}>
             <ThemedText style={styles.label} type="defaultSemiBold">销售订单号</ThemedText>
             <TextInput
+              editable={!lockedSourceName}
               onChangeText={setSourceName}
               placeholder="例如 SAL-ORD-2026-00089"
               placeholderTextColor="#9CA3AF"
-              style={styles.input}
+              style={[styles.input, lockedSourceName ? styles.inputLocked : null]}
               value={sourceName}
             />
+            {lockedSourceName ? (
+              <ThemedText style={styles.helperText}>
+                当前开票来源已由上一页确定，如需更换来源，请先返回对应订单或从销售模块重新进入。
+              </ThemedText>
+            ) : null}
           </View>
 
           <View style={styles.fieldBlock}>
@@ -183,12 +219,6 @@ export default function SalesInvoiceCreateScreen() {
               value={remarks}
             />
           </View>
-
-          <Pressable onPress={() => void handleSubmit()} style={styles.primaryButton}>
-            <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
-              {isSubmitting ? '开票中...' : '创建销售发票'}
-            </ThemedText>
-          </Pressable>
         </View>
       </AppShell>
     );
@@ -197,7 +227,47 @@ export default function SalesInvoiceCreateScreen() {
   return (
     <AppShell
       title="销售发票详情"
-      description="查看销售发票的金额结算、来源订单、发货关联与最新收款结果。">
+      description="查看销售发票的金额结算、来源订单、发货关联与最新收款结果。"
+      footer={
+        detail ? (
+          <View style={styles.detailFooterWrap}>
+            <View style={styles.footerRow}>
+              <Pressable
+                onPress={openPrintPreview}
+                style={[styles.footerButton, styles.footerGhostButton]}>
+                <ThemedText style={styles.footerGhostText} type="defaultSemiBold">
+                  打印预览
+                </ThemedText>
+              </Pressable>
+
+              {(detail.outstandingAmount ?? 0) > 0 ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/payment/create',
+                      params: {
+                        salesInvoice: detail.name,
+                        amount: String(detail.outstandingAmount ?? ''),
+                        currency: detail.currency,
+                      },
+                    })
+                  }
+                  style={[styles.footerButton, styles.primaryButton]}>
+                  <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
+                    前往收款
+                  </ThemedText>
+                </Pressable>
+              ) : (
+                <Pressable onPress={openPrintPreview} style={[styles.footerButton, styles.primaryButton]}>
+                  <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
+                    预览并打印
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        ) : null
+      }>
       {isLoadingDetail ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color="#2563EB" />
@@ -205,42 +275,25 @@ export default function SalesInvoiceCreateScreen() {
         </View>
       ) : detail ? (
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-          <View style={styles.heroCard}>
-            <View style={styles.heroHeader}>
-              <View style={styles.heroMain}>
-                <ThemedText style={styles.heroTitle} type="title">
-                  {detail.customer || detail.name}
-                </ThemedText>
-                <ThemedText style={styles.heroSubtitle}>{detail.name}</ThemedText>
-              </View>
-              <View style={styles.badge}>
-                <ThemedText style={styles.badgeText} type="defaultSemiBold">
-                  {formatStatusLabel(detail.documentStatus)}
-                </ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.heroStats}>
-              <View style={styles.statCard}>
-                <ThemedText style={styles.statLabel}>发票金额</ThemedText>
-                <ThemedText style={styles.statValue} type="defaultSemiBold">
-                  {formatCurrency(detail.grandTotal, detail.currency)}
-                </ThemedText>
-              </View>
-              <View style={styles.statCard}>
-                <ThemedText style={styles.statLabel}>未收金额</ThemedText>
-                <ThemedText style={styles.statValue} type="defaultSemiBold">
-                  {formatCurrency(detail.outstandingAmount, detail.currency)}
-                </ThemedText>
-              </View>
-              <View style={styles.statCard}>
-                <ThemedText style={styles.statLabel}>到期日期</ThemedText>
-                <ThemedText style={styles.statValue} type="defaultSemiBold">
-                  {detail.dueDate || '—'}
-                </ThemedText>
-              </View>
+          <View style={styles.statusStrip}>
+            <ThemedText style={styles.statusStripLabel}>单据状态</ThemedText>
+            <View style={styles.badge}>
+              <ThemedText style={styles.badgeText} type="defaultSemiBold">
+                {formatStatusLabel(detail.documentStatus)}
+              </ThemedText>
             </View>
           </View>
+
+          <View style={styles.printHintCard}>
+            <ThemedText style={styles.printHintTitle} type="defaultSemiBold">
+              打印与交付
+            </ThemedText>
+            <ThemedText style={styles.printHintText}>
+              先核对客户、金额和开票商品，再使用打印预览确认版式；后续这里会承接打印、分享 PDF 和补打。
+            </ThemedText>
+          </View>
+
+          <SalesInvoiceSheet detail={detail} />
 
           {paymentNotice && ((paymentNotice.unallocatedAmount ?? 0) > 0 || (paymentNotice.writeoffAmount ?? 0) > 0) ? (
             <View style={styles.noticeCard}>
@@ -269,113 +322,60 @@ export default function SalesInvoiceCreateScreen() {
 
           <View style={styles.sectionCard}>
             <ThemedText style={styles.sectionTitle} type="subtitle">
-              单据概览
+              单据摘要
             </ThemedText>
             <View style={styles.row}>
               <ThemedText style={styles.rowLabel}>公司</ThemedText>
               <ThemedText style={styles.rowValue}>{detail.company || '未配置'}</ThemedText>
             </View>
             <View style={styles.row}>
-              <ThemedText style={styles.rowLabel}>单据状态</ThemedText>
-              <ThemedText style={styles.rowValue}>{formatStatusLabel(detail.documentStatus)}</ThemedText>
-            </View>
-            <View style={styles.row}>
-              <ThemedText style={styles.rowLabel}>开票日期</ThemedText>
-              <ThemedText style={styles.rowValue}>{detail.postingDate || '—'}</ThemedText>
-            </View>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <ThemedText style={styles.sectionTitle} type="subtitle">
-              关联单据
-            </ThemedText>
-            <View style={styles.row}>
-              <ThemedText style={styles.rowLabel}>来源订单</ThemedText>
-              <ThemedText style={styles.rowValue}>{detail.salesOrders.join('、') || '未关联'}</ThemedText>
-            </View>
-            <View style={styles.row}>
-              <ThemedText style={styles.rowLabel}>来源发货单</ThemedText>
-              <ThemedText style={styles.rowValue}>{detail.deliveryNotes.join('、') || '未关联'}</ThemedText>
-            </View>
-            <View style={styles.row}>
               <ThemedText style={styles.rowLabel}>最新收款单</ThemedText>
               <ThemedText style={styles.rowValue}>{detail.latestPaymentEntry || '暂未收款'}</ThemedText>
             </View>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <ThemedText style={styles.sectionTitle} type="subtitle">
-              后续操作
-            </ThemedText>
-            <View style={styles.actionRow}>
-              {detail.salesOrders[0] ? (
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/sales/order/[orderName]',
-                      params: { orderName: detail.salesOrders[0] },
-                    })
-                  }
-                  style={[styles.actionButton, styles.secondaryActionButton]}>
-                  <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
-                    返回订单
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-
-              {detail.deliveryNotes[0] ? (
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/sales/delivery/create',
-                      params: { deliveryNote: detail.deliveryNotes[0] },
-                    })
-                  }
-                  style={[styles.actionButton, styles.secondaryActionButton]}>
-                  <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
-                    查看发货单
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-
-              {(detail.outstandingAmount ?? 0) > 0 ? (
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/sales/payment/create',
-                      params: {
-                        salesInvoice: detail.name,
-                        amount: String(detail.outstandingAmount ?? ''),
-                        currency: detail.currency,
-                      },
-                    })
-                  }
-                  style={styles.actionButton}>
-                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
-                    前往收款
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-            </View>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <ThemedText style={styles.sectionTitle} type="subtitle">
-              收货与联系人
-            </ThemedText>
             <View style={styles.row}>
-              <ThemedText style={styles.rowLabel}>收货联系人</ThemedText>
-              <ThemedText style={styles.rowValue}>{detail.contactDisplay || '未配置'}</ThemedText>
-            </View>
-            <View style={styles.row}>
-              <ThemedText style={styles.rowLabel}>联系电话</ThemedText>
-              <ThemedText style={styles.rowValue}>{detail.contactPhone || '未配置'}</ThemedText>
-            </View>
-            <View style={styles.rowBlock}>
-              <ThemedText style={styles.rowLabel}>收货地址</ThemedText>
-              <ThemedText style={styles.rowValue}>{detail.addressDisplay || '未配置收货地址'}</ThemedText>
+              <ThemedText style={styles.rowLabel}>打印状态</ThemedText>
+              <ThemedText style={styles.rowValue}>待接入</ThemedText>
             </View>
           </View>
+
+          {(detail.salesOrders[0] || detail.deliveryNotes[0]) ? (
+            <View style={styles.sectionCard}>
+              <ThemedText style={styles.sectionTitle} type="subtitle">
+                单据跳转
+              </ThemedText>
+              <View style={styles.actionRow}>
+                {detail.salesOrders[0] ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/sales/order/[orderName]',
+                        params: { orderName: detail.salesOrders[0] },
+                      })
+                    }
+                    style={[styles.actionButton, styles.secondaryActionButton]}>
+                    <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                      返回订单
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+
+                {detail.deliveryNotes[0] ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/sales/delivery/create',
+                        params: { deliveryNote: detail.deliveryNotes[0] },
+                      })
+                    }
+                    style={[styles.actionButton, styles.secondaryActionButton]}>
+                    <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                      查看发货单
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.sectionCard}>
             <ThemedText style={styles.sectionTitle} type="subtitle">
@@ -415,38 +415,6 @@ export default function SalesInvoiceCreateScreen() {
             </View>
           </View>
 
-          <View style={styles.sectionCard}>
-            <ThemedText style={styles.sectionTitle} type="subtitle">
-              开票商品
-            </ThemedText>
-            {detail.items.map((item, index) => (
-              <View key={`${item.itemCode}-${index}`} style={[styles.itemRow, index > 0 ? styles.itemDivider : null]}>
-                <View style={styles.itemMain}>
-                  <ThemedText style={styles.itemTitle} type="defaultSemiBold">
-                    {item.itemName}
-                  </ThemedText>
-                  <ThemedText style={styles.itemMeta}>
-                    {item.warehouse || '未配置仓库'}
-                  </ThemedText>
-                  <ThemedText style={styles.itemFormula}>
-                    {formatCurrency(item.rate, detail.currency)} x {item.qty ?? '—'} {item.uom || ''}
-                  </ThemedText>
-                </View>
-                <ThemedText style={styles.itemAmount} type="defaultSemiBold">
-                  {formatCurrency(item.amount, detail.currency)}
-                </ThemedText>
-              </View>
-            ))}
-          </View>
-
-          {detail.remarks ? (
-            <View style={styles.sectionCard}>
-              <ThemedText style={styles.sectionTitle} type="subtitle">
-                发票备注
-              </ThemedText>
-              <ThemedText style={styles.noteText}>{detail.remarks}</ThemedText>
-            </View>
-          ) : null}
         </ScrollView>
       ) : (
         <View style={styles.emptyCard}>
@@ -471,31 +439,16 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 14,
   },
-  heroCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D7DEE7',
-    borderRadius: 22,
-    borderWidth: 1,
-    gap: 16,
-    padding: 18,
-  },
-  heroHeader: {
+  statusStrip: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
   },
-  heroMain: {
-    flex: 1,
-    gap: 6,
-  },
-  heroTitle: {
-    color: '#1E293B',
-    fontSize: 18,
-  },
-  heroSubtitle: {
+  statusStripLabel: {
     color: '#64748B',
-    fontSize: 14,
+    fontSize: 13,
+    marginTop: 8,
   },
   badge: {
     backgroundColor: '#DBEAFE',
@@ -506,26 +459,6 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#2563EB',
     fontSize: 13,
-  },
-  heroStats: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  statCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    flex: 1,
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-  },
-  statLabel: {
-    color: '#64748B',
-    fontSize: 12,
-  },
-  statValue: {
-    color: '#0F172A',
-    fontSize: 16,
   },
   noticeCard: {
     backgroundColor: '#EFF6FF',
@@ -547,6 +480,24 @@ const styles = StyleSheet.create({
   },
   noticeEmphasis: {
     color: '#1D4ED8',
+  },
+  printHintCard: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  printHintTitle: {
+    color: '#9A3412',
+    fontSize: 14,
+  },
+  printHintText: {
+    color: '#7C2D12',
+    fontSize: 13,
+    lineHeight: 20,
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',
@@ -592,9 +543,6 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: 'space-between',
   },
-  rowBlock: {
-    gap: 8,
-  },
   rowLabel: {
     color: '#64748B',
     fontSize: 14,
@@ -619,43 +567,6 @@ const styles = StyleSheet.create({
   },
   mutedValue: {
     color: '#64748B',
-  },
-  itemRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-    paddingTop: 4,
-  },
-  itemDivider: {
-    borderTopColor: '#E2E8F0',
-    borderTopWidth: 1,
-    paddingTop: 14,
-  },
-  itemMain: {
-    flex: 1,
-    gap: 6,
-  },
-  itemTitle: {
-    color: '#1E293B',
-    fontSize: 16,
-  },
-  itemMeta: {
-    color: '#64748B',
-    fontSize: 13,
-  },
-  itemFormula: {
-    color: '#B45309',
-    fontSize: 14,
-  },
-  itemAmount: {
-    color: '#B45309',
-    fontSize: 16,
-  },
-  noteText: {
-    color: '#334155',
-    fontSize: 15,
-    lineHeight: 24,
   },
   formCard: {
     gap: 16,
@@ -684,12 +595,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  inputLocked: {
+    backgroundColor: '#F8FAFC',
+    color: '#475569',
+  },
+  helperText: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
   primaryButton: {
     alignItems: 'center',
     backgroundColor: '#2563EB',
     borderRadius: 16,
     justifyContent: 'center',
     minHeight: 48,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  detailFooterWrap: {
+    gap: 8,
+  },
+  footerButton: {
+    flex: 1,
+  },
+  footerGhostButton: {
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  footerGhostText: {
+    color: '#1D4ED8',
   },
   primaryButtonText: {
     color: '#FFFFFF',

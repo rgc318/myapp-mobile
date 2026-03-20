@@ -1,11 +1,18 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
+import { normalizeAppError } from '@/lib/app-error';
 import { useFeedback } from '@/providers/feedback-provider';
-import { getDeliveryNoteDetailV2, type DeliveryNoteDetailV2 } from '@/services/sales';
+import {
+  getDeliveryNoteDetailV2,
+  getSalesOrderDetailV2,
+  submitSalesOrderDeliveryV2,
+  type DeliveryNoteDetailV2,
+  type SalesOrderDetailV2,
+} from '@/services/sales';
 
 function formatCurrency(value: number | null | undefined, currency = 'CNY') {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -32,33 +39,55 @@ function formatStatusLabel(status: string) {
   }
 }
 
+function buildDeliveryErrorMessage(message: string) {
+  if (!message.trim()) {
+    return '当前订单出货失败，请稍后重试。';
+  }
+
+  if (message.includes('可用库存不足')) {
+    return `${message} 请先补录库存、释放其他订单预留，或改用其他可发货仓库后再重试。`;
+  }
+
+  if (message.includes('没有可发货的商品明细')) {
+    return '当前订单已经没有可继续发货的商品明细。请先刷新订单状态；如果系统已经生成发货单，请直接查看已有发货单。';
+  }
+
+  return message;
+}
+
 export default function SalesDeliveryCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ orderName?: string; deliveryNote?: string; notice?: string }>();
-  const { showSuccess, showError } = useFeedback();
+  const orderName = typeof params.orderName === 'string' ? params.orderName.trim() : '';
+  const deliveryNote = typeof params.deliveryNote === 'string' ? params.deliveryNote.trim() : '';
+  const { showSuccess, showError, showInfo } = useFeedback();
   const [detail, setDetail] = useState<DeliveryNoteDetailV2 | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [orderDetail, setOrderDetail] = useState<SalesOrderDetailV2 | null>(null);
+  const [isLoadingOrder, setIsLoadingOrder] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [canForceDelivery, setCanForceDelivery] = useState(false);
+  const [submitHint, setSubmitHint] = useState('');
+  const [showRiskDialog, setShowRiskDialog] = useState(false);
 
   useEffect(() => {
-    if (params.notice === 'created' && typeof params.deliveryNote === 'string' && params.deliveryNote.trim()) {
-      showSuccess(`已生成发货单：${params.deliveryNote.trim()}`);
+    if (params.notice === 'created' && deliveryNote) {
+      showSuccess(`已生成发货单：${deliveryNote}`);
     }
-  }, [params.deliveryNote, params.notice, showSuccess]);
+  }, [deliveryNote, params.notice, showSuccess]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function load() {
-      const deliveryNoteName =
-        typeof params.deliveryNote === 'string' ? params.deliveryNote.trim() : '';
-      if (!deliveryNoteName) {
+      if (!deliveryNote) {
         setDetail(null);
         return;
       }
 
       try {
         setIsLoading(true);
-        const nextDetail = await getDeliveryNoteDetailV2(deliveryNoteName);
+        const nextDetail = await getDeliveryNoteDetailV2(deliveryNote);
         if (isMounted) {
           setDetail(nextDetail);
         }
@@ -78,19 +107,289 @@ export default function SalesDeliveryCreateScreen() {
     return () => {
       isMounted = false;
     };
-  }, [params.deliveryNote, showError]);
+  }, [deliveryNote, showError]);
 
-  if (!params.deliveryNote) {
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadOrderDetail() {
+      if (deliveryNote || !orderName) {
+        setOrderDetail(null);
+        setSubmitHint('');
+        setCanForceDelivery(false);
+        return;
+      }
+
+      try {
+        setIsLoadingOrder(true);
+        const nextOrderDetail = await getSalesOrderDetailV2(orderName);
+        if (isMounted) {
+          setOrderDetail(nextOrderDetail);
+          setSubmitHint('');
+          setCanForceDelivery(false);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setOrderDetail(null);
+        }
+        showError(error instanceof Error ? error.message : '订单详情加载失败。');
+      } finally {
+        if (isMounted) {
+          setIsLoadingOrder(false);
+        }
+      }
+    }
+
+    void loadOrderDetail();
+    return () => {
+      isMounted = false;
+    };
+  }, [deliveryNote, orderName, showError]);
+
+  async function handleSubmit(forceDelivery = false) {
+    if (!orderName) {
+      showError('缺少销售订单号。');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const result = await submitSalesOrderDeliveryV2(orderName, { forceDelivery });
+      setCanForceDelivery(false);
+      setSubmitHint('');
+      showSuccess(
+        result.deliveryNote
+          ? `${result.forceDelivery ? '已强制出货' : '发货成功'}，已创建发货单 ${result.deliveryNote}。`
+          : result.forceDelivery
+            ? '已强制出货。'
+            : '发货成功。',
+      );
+
+      if (result.deliveryNote) {
+        router.replace({
+          pathname: '/sales/delivery/create',
+          params: {
+            orderName,
+            deliveryNote: result.deliveryNote,
+            notice: 'created',
+          },
+        });
+        return;
+      }
+
+      const refreshedOrder = await getSalesOrderDetailV2(orderName);
+      setOrderDetail(refreshedOrder);
+    } catch (error) {
+      const appError = normalizeAppError(error, '发货失败。');
+      const deliveryMessage = buildDeliveryErrorMessage(appError.message);
+      let refreshedOrder: SalesOrderDetailV2 | null = null;
+
+      try {
+        refreshedOrder = await getSalesOrderDetailV2(orderName);
+        setOrderDetail(refreshedOrder);
+      } catch {}
+
+      if (refreshedOrder?.latestDeliveryNote) {
+        showInfo(`订单已存在发货单 ${refreshedOrder.latestDeliveryNote}。`);
+        router.replace({
+          pathname: '/sales/delivery/create',
+          params: {
+            orderName,
+            deliveryNote: refreshedOrder.latestDeliveryNote,
+          },
+        });
+        return;
+      }
+
+      if (!forceDelivery && appError.message.includes('可用库存不足')) {
+        setCanForceDelivery(true);
+        setSubmitHint(`${deliveryMessage} 如仓库实物已确认出货，可使用强制出货。`);
+        setShowRiskDialog(true);
+        return;
+      }
+
+      setCanForceDelivery(false);
+      setSubmitHint(deliveryMessage);
+      setShowRiskDialog(false);
+      showError(deliveryMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  if (!deliveryNote) {
     return (
-      <AppShell title="销售发货" description="当前已支持从订单页直接发货，发货成功后会带着生成的发货单号跳转到这里。">
-        <View style={styles.emptyCard}>
-          <ThemedText style={styles.label} type="defaultSemiBold">
-            来源订单
-          </ThemedText>
-          <ThemedText style={styles.value}>{params.orderName || '未传入'}</ThemedText>
-          <ThemedText style={styles.hint}>当前未检测到发货单号，请从订单详情页发起出货或查看已有发货单。</ThemedText>
-        </View>
-      </AppShell>
+      <>
+        <AppShell
+          title="销售发货"
+          description="先确认订单状态与发货信息，再由本页执行正式出货。"
+          footer={
+            orderDetail ? (
+              <View style={styles.footerWrap}>
+                {submitHint ? (
+                  <View style={[styles.noticeCard, styles.footerNoticeCard]}>
+                    <ThemedText style={styles.noticeText}>{submitHint}</ThemedText>
+                  </View>
+                ) : null}
+
+                <View style={styles.footerActionRow}>
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/sales/order/[orderName]',
+                        params: { orderName },
+                      })
+                    }
+                    style={[styles.footerActionButton, styles.actionButton, styles.secondaryActionButton]}>
+                    <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                      返回订单
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    disabled={isSubmitting || (!orderDetail.canSubmitDelivery && !canForceDelivery)}
+                    onPress={() => void handleSubmit(canForceDelivery)}
+                    style={[
+                      styles.footerActionButton,
+                      styles.actionButton,
+                      canForceDelivery ? styles.dangerActionButton : null,
+                      (isSubmitting || (!orderDetail.canSubmitDelivery && !canForceDelivery)) &&
+                        styles.disabledActionButton,
+                    ]}>
+                    <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                      {isSubmitting
+                        ? '提交中...'
+                        : canForceDelivery
+                          ? '强制出货'
+                          : '确认出货'}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null
+          }>
+          {isLoadingOrder ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator color="#2563EB" />
+              <ThemedText style={styles.loadingText}>正在加载订单信息...</ThemedText>
+            </View>
+          ) : orderDetail ? (
+            <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+              <View style={styles.heroCard}>
+                <View style={styles.heroHeader}>
+                  <View style={styles.heroMain}>
+                    <ThemedText style={styles.heroTitle} type="title">
+                      {orderDetail.customer || orderDetail.name}
+                    </ThemedText>
+                    <ThemedText style={styles.heroSubtitle}>{orderDetail.name}</ThemedText>
+                  </View>
+                  <View style={styles.badge}>
+                    <ThemedText style={styles.badgeText} type="defaultSemiBold">
+                      待发货确认
+                    </ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.heroStats}>
+                  <View style={styles.statCard}>
+                    <ThemedText style={styles.statLabel}>订单金额</ThemedText>
+                    <ThemedText style={styles.statValue} type="defaultSemiBold">
+                      {formatCurrency(orderDetail.grandTotal, orderDetail.currency)}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.statCard}>
+                    <ThemedText style={styles.statLabel}>履约状态</ThemedText>
+                    <ThemedText style={styles.statValue} type="defaultSemiBold">
+                      {orderDetail.fulfillmentStatus || '未确认'}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.statCard}>
+                    <ThemedText style={styles.statLabel}>交货日期</ThemedText>
+                    <ThemedText style={styles.statValue} type="defaultSemiBold">
+                      {orderDetail.deliveryDate || '未设置'}
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.sectionCard}>
+                <ThemedText style={styles.sectionTitle} type="subtitle">
+                  发货前确认
+                </ThemedText>
+                <View style={styles.row}>
+                  <ThemedText style={styles.rowLabel}>来源订单</ThemedText>
+                  <ThemedText style={styles.rowValue}>{orderDetail.name}</ThemedText>
+                </View>
+                <View style={styles.row}>
+                  <ThemedText style={styles.rowLabel}>客户</ThemedText>
+                  <ThemedText style={styles.rowValue}>{orderDetail.customer || '未配置'}</ThemedText>
+                </View>
+                <View style={styles.row}>
+                  <ThemedText style={styles.rowLabel}>公司</ThemedText>
+                  <ThemedText style={styles.rowValue}>{orderDetail.company || '未配置'}</ThemedText>
+                </View>
+                <View style={styles.row}>
+                  <ThemedText style={styles.rowLabel}>收货联系人</ThemedText>
+                  <ThemedText style={styles.rowValue}>{orderDetail.contactDisplay || '未配置'}</ThemedText>
+                </View>
+                <View style={styles.rowBlock}>
+                  <ThemedText style={styles.rowLabel}>收货地址</ThemedText>
+                  <ThemedText style={styles.rowValue}>{orderDetail.addressDisplay || '未配置收货地址'}</ThemedText>
+                </View>
+              </View>
+
+              <View style={styles.sectionCard}>
+                <ThemedText style={styles.sectionTitle} type="subtitle">
+                  待发货商品
+                </ThemedText>
+                {orderDetail.items.map((item, index) => (
+                  <View key={`${item.itemCode}-${index}`} style={[styles.itemRow, index > 0 ? styles.itemDivider : null]}>
+                    <View style={styles.itemMain}>
+                      <ThemedText style={styles.itemTitle} type="defaultSemiBold">
+                        {item.itemName}
+                      </ThemedText>
+                      <ThemedText style={styles.itemMeta}>{item.warehouse || '未配置仓库'}</ThemedText>
+                      <ThemedText style={styles.itemFormula}>
+                        {formatCurrency(item.rate, orderDetail.currency)} x {item.qty ?? '—'} {item.uom || ''}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={styles.itemAmount} type="defaultSemiBold">
+                      {formatCurrency(item.amount, orderDetail.currency)}
+                    </ThemedText>
+                  </View>
+                ))}
+              </View>
+
+              {!orderDetail.canSubmitDelivery ? (
+                <ThemedText style={styles.actionHint}>
+                  当前订单暂无可继续发货的明细；如果系统已生成发货单，请返回订单后查看已有单据。
+                </ThemedText>
+              ) : null}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptyCard}>
+              <ThemedText style={styles.label} type="defaultSemiBold">
+                来源订单
+              </ThemedText>
+              <ThemedText style={styles.value}>{orderName || '未传入'}</ThemedText>
+              <ThemedText style={styles.hint}>当前未能加载订单信息，请返回订单页后重试。</ThemedText>
+            </View>
+          )}
+        </AppShell>
+
+        <RiskDialog
+          visible={showRiskDialog}
+          message={submitHint}
+          onClose={() => setShowRiskDialog(false)}
+          onCheckOrder={() => {
+            setShowRiskDialog(false);
+            router.push({
+              pathname: '/sales/order/[orderName]',
+              params: { orderName },
+            });
+          }}
+        />
+      </>
     );
   }
 
@@ -291,6 +590,43 @@ export default function SalesDeliveryCreateScreen() {
   );
 }
 
+function RiskDialog({
+  visible,
+  message,
+  onClose,
+  onCheckOrder,
+}: {
+  visible: boolean;
+  message: string;
+  onClose: () => void;
+  onCheckOrder: () => void;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.dialogBackdrop}>
+        <View style={styles.dialogCard}>
+          <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+            库存不足，是否改为强制出货？
+          </ThemedText>
+          <ThemedText style={styles.dialogMessage}>{message}</ThemedText>
+          <View style={styles.dialogActions}>
+            <Pressable onPress={onCheckOrder} style={[styles.dialogButton, styles.dialogGhostButton]}>
+              <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                返回订单核对
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={onClose} style={[styles.dialogButton, styles.dialogPrimaryButton]}>
+              <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                留在本页
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     gap: 16,
@@ -386,6 +722,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
+  footerWrap: {
+    gap: 10,
+  },
+  footerActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  footerActionButton: {
+    flex: 1,
+  },
+  disabledActionButton: {
+    backgroundColor: '#93C5FD',
+  },
+  dangerActionButton: {
+    backgroundColor: '#DC2626',
+  },
   secondaryActionButton: {
     backgroundColor: '#EFF6FF',
     borderColor: '#BFDBFE',
@@ -403,6 +755,78 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     lineHeight: 20,
+  },
+  noticeCard: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+  },
+  footerNoticeCard: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  noticeText: {
+    color: '#9A3412',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.22)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  dialogCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FED7AA',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    maxWidth: 420,
+    padding: 20,
+    width: '100%',
+  },
+  dialogTitle: {
+    color: '#9A3412',
+    fontSize: 18,
+  },
+  dialogMessage: {
+    color: '#7C2D12',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  dialogButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dialogGhostButton: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+    borderWidth: 1,
+  },
+  dialogPrimaryButton: {
+    backgroundColor: '#2563EB',
+  },
+  dialogGhostText: {
+    color: '#9A3412',
+    fontSize: 14,
+  },
+  dialogPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
   },
   row: {
     alignItems: 'center',

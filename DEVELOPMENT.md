@@ -1703,3 +1703,110 @@ Notification and safety decisions added in this round:
   - just viewing an existing delivery note / invoice
   - landing on the page immediately after creating one
   only the creation path should show the `已生成...` success toast
+
+## Workflow Confirmation And Invoice Preview Update (2026-03-20)
+
+This round focused on reducing accidental downstream document creation, improving deep-page escape routes, and making the sales-invoice page look more like the actual printable document.
+
+### Completed
+
+- sales-order detail actions no longer create downstream documents immediately
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+  - `出货` now routes to the delivery confirmation page
+  - `开票` now routes to the sales-invoice page
+  - this replaces the older “tap action -> directly execute API -> jump to result page” behavior
+
+- sales delivery page now supports a true confirmation flow
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+  - when there is no `deliveryNote`:
+    - the page loads source order detail
+    - renders a delivery confirmation view
+    - uses a fixed bottom action bar for the final action
+  - when there is a `deliveryNote`:
+    - the page remains a delivery-note detail page
+
+- stock-shortage handling on delivery now uses a centered warning surface plus a single fixed final action
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+  - current interaction:
+    - insufficient stock opens a centered risk dialog
+    - the page stays on the current document for checking
+    - the fixed bottom primary action switches from normal delivery to force delivery
+  - this removes the earlier split where explanation and dangerous action were scattered across different parts of the page
+
+- deep workflow pages now expose lightweight cross-module escape routes
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/workflow-quick-nav.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/app-shell.tsx`
+  - users can now jump directly to:
+    - home
+    - sales
+    - purchase
+    - docs
+  - this was added to reduce the “must press back several times” problem when inside order / delivery / invoice workflows
+
+- duplicated back arrows were removed from key custom sales pages
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/_layout.tsx`
+  - the stack header is now hidden for:
+    - `/sales/order/create`
+    - `/sales/order/[orderName]`
+  - this keeps navigation responsibility in the page itself and avoids the earlier double-back problem
+
+- invoice source locking was added when entering invoice creation from an upstream document
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+  - if the invoice page is opened with `sourceName`:
+    - the sales-order field becomes read-only
+    - helper text explains that the source was determined by the previous page
+  - manual source entry is still allowed when users enter invoice creation directly from the sales module
+
+- sales-invoice page is now moving toward a preview-first document page
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-invoice-sheet.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/preview.tsx`
+  - a reusable invoice-sheet component was added
+  - the invoice detail page now renders that invoice sheet directly in the main body
+  - this intentionally reduces the visual similarity between:
+    - delivery detail pages
+    - invoice detail pages
+  - invoice pages should increasingly feel like actual printable documents rather than generic workflow cards
+
+- invoice preview route now exists as a transitional print surface
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/preview.tsx`
+  - current state:
+    - preview route is navigable
+    - it reuses the same invoice-sheet layout
+    - it provides fixed bottom actions for:
+      - return to invoice
+      - print trigger
+  - current limitation:
+    - actual system printing / PDF export is not connected yet
+    - print action still serves as a placeholder entry point
+
+### Current Design Decisions From This Round
+
+- invoice pages and delivery pages should not look like the same type of screen
+  - delivery remains an operational confirmation/detail page
+  - invoice should increasingly behave like a document-display and print-entry page
+
+- downstream document creation should always pass through a dedicated confirmation page
+  - especially for:
+    - delivery
+    - invoice
+  - order-detail shortcut actions should route into those pages instead of directly executing write APIs
+
+- dangerous actions should use:
+  - a centered explanation surface
+  - a single fixed final action area
+  - no duplicate dangerous execution buttons inside the scroll body
+
+### Current Known Boundary After This Round
+
+- invoice preview is now structurally present, but not yet a real print/export implementation
+- the invoice detail page now already shows the printable-looking sheet, so the final long-term decision may be to simplify or reduce the separate preview page later
+- purchase-side pages have not yet been upgraded to the same “confirmation page + fixed bottom action + preview-first document page” standard

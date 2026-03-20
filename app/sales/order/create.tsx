@@ -6,6 +6,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, TextInput,
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
@@ -660,6 +661,10 @@ export default function SalesOrderCreateScreen() {
           </Pressable>
         </View>
 
+        <View style={styles.quickNavWrap}>
+          <WorkflowQuickNav compact />
+        </View>
+
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.heroHeader}>
             <View>
@@ -1020,6 +1025,9 @@ const styles = StyleSheet.create({
   aiTrigger: {
     alignItems: 'flex-end',
     minWidth: 56,
+  },
+  quickNavWrap: {
+    marginBottom: 2,
   },
   heroCard: {
     borderRadius: 22,

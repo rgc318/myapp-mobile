@@ -58,6 +58,8 @@ function RootNavigation() {
         <Stack.Screen name="account-info" options={{ title: '账号信息', headerShadowVisible: false }} />
         <Stack.Screen name="settings" options={{ title: '设置', headerShadowVisible: false }} />
         <Stack.Screen name="system-info" options={{ title: '系统信息', headerShadowVisible: false }} />
+        <Stack.Screen name="sales/order/create" options={{ headerShown: false }} />
+        <Stack.Screen name="sales/order/[orderName]" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>

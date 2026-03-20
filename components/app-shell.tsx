@@ -1,10 +1,11 @@
-import { Link } from 'expo-router';
+import { Link, useSegments } from 'expo-router';
 import type { Href } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 type ActionLink = {
@@ -20,6 +21,7 @@ type AppShellProps = {
   actions?: ActionLink[];
   contentCard?: boolean;
   compactHeader?: boolean;
+  footer?: ReactNode;
 };
 
 export function AppShell({
@@ -29,58 +31,64 @@ export function AppShell({
   actions = [],
   contentCard = true,
   compactHeader = false,
+  footer,
 }: AppShellProps) {
+  const segments = useSegments();
+  const showWorkflowQuickNav = segments[0] !== '(tabs)';
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      style={{ backgroundColor: useThemeColor({}, 'background') }}>
-      <ThemedView
-        lightColor={surfaceMuted}
-        darkColor={surfaceMuted}
-        style={[compactHeader ? styles.headerCompact : styles.header, { borderColor }]}>
-        <ThemedText style={[styles.eyebrow, { color: tintColor }]}>RGC WHOLESALE FLOW</ThemedText>
-        <ThemedText type="title">{title}</ThemedText>
-        <ThemedText style={styles.description}>{description}</ThemedText>
-      </ThemedView>
-
-      {actions.length ? (
-        <View style={styles.actions}>
-          {actions.map((action) => (
-            <Link
-              key={action.label}
-              href={action.href}
-              style={[styles.linkCard, { backgroundColor: surface, borderColor }]}>
-              <ThemedText type="defaultSemiBold">{action.label}</ThemedText>
-              {action.description ? <ThemedText>{action.description}</ThemedText> : null}
-            </Link>
-          ))}
-        </View>
-      ) : null}
-
-      {children && contentCard ? (
+    <View style={[styles.screen, { backgroundColor: useThemeColor({}, 'background') }]}>
+      <ScrollView contentContainerStyle={styles.container}>
         <ThemedView
-          lightColor={surface}
-          darkColor={surface}
-          style={[styles.section, { borderColor }]}>
-          {children}
+          lightColor={surfaceMuted}
+          darkColor={surfaceMuted}
+          style={[compactHeader ? styles.headerCompact : styles.header, { borderColor }]}>
+          <ThemedText style={[styles.eyebrow, { color: tintColor }]}>RGC WHOLESALE FLOW</ThemedText>
+          <ThemedText type="title">{title}</ThemedText>
+          <ThemedText style={styles.description}>{description}</ThemedText>
         </ThemedView>
-      ) : null}
 
-      {children && !contentCard ? (
-        <View style={styles.contentPlain}>
-          {children}
-        </View>
-      ) : null}
-    </ScrollView>
+        {showWorkflowQuickNav ? <WorkflowQuickNav /> : null}
+
+        {actions.length ? (
+          <View style={styles.actions}>
+            {actions.map((action) => (
+              <Link
+                key={action.label}
+                href={action.href}
+                style={[styles.linkCard, { backgroundColor: surface, borderColor }]}>
+                <ThemedText type="defaultSemiBold">{action.label}</ThemedText>
+                {action.description ? <ThemedText>{action.description}</ThemedText> : null}
+              </Link>
+            ))}
+          </View>
+        ) : null}
+
+        {children && contentCard ? (
+          <ThemedView
+            lightColor={surface}
+            darkColor={surface}
+            style={[styles.section, { borderColor }]}>
+            {children}
+          </ThemedView>
+        ) : null}
+
+        {children && !contentCard ? <View style={styles.contentPlain}>{children}</View> : null}
+      </ScrollView>
+
+      {footer ? <View style={[styles.footer, { borderTopColor: borderColor }]}>{footer}</View> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     gap: 18,
     padding: 18,
@@ -125,5 +133,11 @@ const styles = StyleSheet.create({
   },
   contentPlain: {
     gap: 12,
+  },
+  footer: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
 });
