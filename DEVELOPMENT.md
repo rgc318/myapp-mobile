@@ -2589,6 +2589,34 @@ Completed:
   - UOM follows the default wholesale / retail profile when the operator switches sales mode
   - this keeps the order flow aligned with the current product data model and avoids exposing temporary-unit behavior before a dedicated packaging / conversion design exists
 
+- item-row pricing references were visually promoted
+  - the old tiny wholesale / retail pills under the mode switch were removed
+  - the shared item editor now renders:
+    - `批发` reference directly under the wholesale side
+    - `零售` reference directly under the retail side
+  - the active mode side is highlighted
+  - this makes price comparison visible even on smaller mobile screens and reduces operator misreads during line-price edits
+
+- item-row quantity / uom / price layout was rebalanced
+  - `当前单位` was moved next to `数量`
+  - UOM is now shown as a more visible standalone text block instead of a muted input-like box
+  - the right-top line amount also uses a stronger highlight color
+  - together these changes reduce vertical noise while making the current selling unit easier to verify
+
+- create-order bottom bar was refined back toward the simpler sales-entry pattern
+  - the weak helper sentence below the bottom amount was removed
+  - the left side now keeps a compact:
+    - `订单金额`
+    - `共 X 项，合计 Y 件`
+  - the right side keeps the existing action buttons
+  - this preserves the clearer old rhythm while still surfacing order-scale information
+
+- order-detail bottom bar intentionally does not fully mirror create-order
+  - create-order remains a single integrated info-and-submit bar
+  - order-detail keeps its original action-led footer
+  - a summary strip was added above the action buttons instead of merging everything into one row
+  - this better fits edit / rollback scenarios where the operator’s primary task is still action selection
+
 - order-detail item editing now fills missing product pricing metadata before use
   - if the loaded order line does not contain `priceSummary / wholesaleDefaultUom / retailDefaultUom`
   - edit mode fetches product detail and patches the editable line once

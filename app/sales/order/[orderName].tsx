@@ -535,6 +535,10 @@ export default function SalesOrderDetailScreen() {
     () => editableItems.reduce((sum, item) => sum + (item.rate ?? 0) * item.qty, 0),
     [editableItems],
   );
+  const totalLineCount = useMemo(
+    () => (isEditingItems ? editableItems.length : detail?.items?.length ?? 0),
+    [detail?.items, editableItems, isEditingItems],
+  );
   const isSavingCurrentSection = isEditingAllSections
     ? isSavingContact || isSavingItems || isSavingRemarks
     : isEditingItems
@@ -1868,53 +1872,72 @@ export default function SalesOrderDetailScreen() {
       </ScrollView>
 
       <View style={[styles.bottomBar, { backgroundColor: background, borderTopColor: borderColor }]}>
-        {isEditingAnySection ? (
-          <>
-            <Pressable
-              accessibilityRole="button"
-              disabled={isSavingCurrentSection}
-              onPress={currentCancelHandler}
-              style={[styles.bottomButton, styles.bottomGhostButton, { borderColor }]}
-            >
-              <ThemedText style={styles.bottomGhostText}>取消修改</ThemedText>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={isSavingCurrentSection}
-              onPress={currentSaveHandler}
-              style={[styles.bottomButton, styles.bottomPrimaryButton]}
-            >
-              <ThemedText style={styles.bottomPrimaryText}>{currentSaveLabel}</ThemedText>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <Pressable
-              accessibilityRole="button"
-              disabled={isCancelling}
-              onPress={confirmCancelOrder}
-              style={[styles.bottomButton, styles.bottomDangerButton]}
-            >
-              <ThemedText style={styles.bottomDangerText}>
-                {isCancelling ? '作废中...' : detail?.documentStatus === 'cancelled' ? '已作废' : '作废订单'}
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={isCancelling || isQuickRollingBack}
-              onPress={startEditingAll}
-              style={[styles.bottomButton, styles.bottomPrimaryButton]}
-            >
-              <ThemedText style={styles.bottomPrimaryText}>
-                {isQuickRollingBack
-                  ? '回退中...'
-                  : getQuickRollbackPlan()
-                    ? '回退并修改'
-                    : '编辑订单'}
-              </ThemedText>
-            </Pressable>
-          </>
-        )}
+        <View style={styles.bottomSummaryStrip}>
+          <View style={styles.bottomAmountRow}>
+            <ThemedText style={styles.bottomSummaryAmountLabel} type="defaultSemiBold">
+              {isEditingAnySection ? '修改后金额：' : '订单金额：'}
+            </ThemedText>
+            <ThemedText style={styles.bottomSummaryAmount} type="defaultSemiBold">
+              {formatCurrencyValue(
+                isEditingItems ? editingGrandTotal : detail?.grandTotal ?? null,
+                detail?.currency || 'CNY',
+              )}
+            </ThemedText>
+          </View>
+          <ThemedText style={styles.bottomSummaryPrimary} type="defaultSemiBold">
+            {`共 ${totalLineCount} 项，合计 ${totalQuantity} 件`}
+          </ThemedText>
+        </View>
+
+        <View style={styles.bottomActionsRow}>
+          {isEditingAnySection ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isSavingCurrentSection}
+                onPress={currentCancelHandler}
+                style={[styles.bottomButton, styles.bottomGhostButton, { borderColor }]}
+              >
+                <ThemedText style={styles.bottomGhostText}>取消修改</ThemedText>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isSavingCurrentSection}
+                onPress={currentSaveHandler}
+                style={[styles.bottomButton, styles.bottomPrimaryButton]}
+              >
+                <ThemedText style={styles.bottomPrimaryText}>{currentSaveLabel}</ThemedText>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isCancelling}
+                onPress={confirmCancelOrder}
+                style={[styles.bottomButton, styles.bottomDangerButton]}
+              >
+                <ThemedText style={styles.bottomDangerText}>
+                  {isCancelling ? '作废中...' : detail?.documentStatus === 'cancelled' ? '已作废' : '作废订单'}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isCancelling || isQuickRollingBack}
+                onPress={startEditingAll}
+                style={[styles.bottomButton, styles.bottomPrimaryButton]}
+              >
+                <ThemedText style={styles.bottomPrimaryText}>
+                  {isQuickRollingBack
+                    ? '回退中...'
+                    : getQuickRollbackPlan()
+                      ? '回退并修改'
+                      : '编辑订单'}
+                </ThemedText>
+              </Pressable>
+            </>
+          )}
+        </View>
       </View>
 
       <Modal animationType="fade" onRequestClose={() => setCenterDialog(null)} transparent visible={Boolean(centerDialog)}>
@@ -2620,14 +2643,39 @@ const styles = StyleSheet.create({
   bottomBar: {
     borderTopWidth: 1,
     bottom: 0,
-    flexDirection: 'row',
-    gap: 12,
     left: 0,
     paddingBottom: 20,
     paddingHorizontal: 16,
     paddingTop: 12,
     position: 'absolute',
     right: 0,
+  },
+  bottomSummaryStrip: {
+    marginBottom: 10,
+  },
+  bottomAmountRow: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  bottomSummaryPrimary: {
+    color: '#0F172A',
+    fontSize: 15,
+    marginTop: 2,
+  },
+  bottomSummaryAmountLabel: {
+    color: '#9A3412',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  bottomSummaryAmount: {
+    color: '#C97A1E',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  bottomActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
   bottomButton: {
     alignItems: 'center',

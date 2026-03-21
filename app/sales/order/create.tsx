@@ -588,6 +588,7 @@ export default function SalesOrderCreateScreen() {
     () => draftItems.reduce((sum, item) => sum + item.qty, 0),
     [draftItems],
   );
+  const totalLineCount = draftItems.length;
 
   const goodsAmount = useMemo(
     () => draftItems.reduce((sum, item) => sum + (item.price ?? 0) * item.qty, 0),
@@ -1215,15 +1216,19 @@ export default function SalesOrderCreateScreen() {
       </ScrollView>
 
       <View style={[styles.bottomBar, { backgroundColor: surface, borderTopColor: borderColor }]}>
-        <View>
-          <ThemedText style={styles.bottomPrimaryAmount} type="defaultSemiBold">
-            应收: ¥ {formatMoney(receivableAmount)}
-          </ThemedText>
-          <ThemedText style={styles.bottomSecondaryAmount}>
-            快速开单会自动生成发货单和销售发票
+        <View style={styles.bottomInfoBlock}>
+          <View style={styles.bottomAmountRow}>
+            <ThemedText style={styles.bottomAmountLabel} type="defaultSemiBold">
+              订单金额:
+            </ThemedText>
+            <ThemedText style={styles.bottomPrimaryAmount} type="defaultSemiBold">
+              ¥ {formatMoney(receivableAmount)} 元
+            </ThemedText>
+          </View>
+          <ThemedText style={styles.bottomSummaryPrimary} type="defaultSemiBold">
+            {`共 ${totalLineCount} 项，合计 ${totalQty} 件`}
           </ThemedText>
         </View>
-
         <View style={styles.bottomActions}>
           <Pressable
             disabled={isSubmitting}
@@ -1761,7 +1766,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   bottomSpacer: {
-    height: 92,
+    height: 124,
   },
   bottomBar: {
     alignItems: 'center',
@@ -1771,18 +1776,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
+  bottomInfoBlock: {
+    flex: 1,
+    marginRight: 12,
+  },
+  bottomAmountRow: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+  },
+  bottomSummaryPrimary: {
+    color: '#0F172A',
+    fontSize: 15,
+    marginTop: 2,
+  },
+  bottomAmountLabel: {
+    color: '#9A3412',
+    fontSize: 15,
+    fontWeight: '700',
+    marginRight: 6,
+  },
   bottomPrimaryAmount: {
     color: '#C97A1E',
     fontSize: 22,
-  },
-  bottomSecondaryAmount: {
-    color: '#6B7280',
-    fontSize: 14,
-    marginTop: 4,
+    fontWeight: '700',
   },
   bottomActions: {
     flexDirection: 'row',
     gap: 10,
+    marginLeft: 'auto',
   },
   dialogBackdrop: {
     alignItems: 'center',

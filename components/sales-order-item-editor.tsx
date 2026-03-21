@@ -83,6 +83,7 @@ export function SalesOrderItemEditor({
   const borderColor = useThemeColor({}, 'border');
   const dangerColor = useThemeColor({}, 'danger');
   const tintColor = useThemeColor({}, 'tint');
+  const warningColor = useThemeColor({}, 'warning');
 
   return (
     <View style={[styles.itemRow, { backgroundColor: surface, borderColor }]}>
@@ -105,7 +106,7 @@ export function SalesOrderItemEditor({
           </View>
 
           <View style={styles.itemHeaderAside}>
-            <ThemedText style={styles.itemAmountInline} type="defaultSemiBold">
+            <ThemedText style={[styles.itemAmountInline, { color: warningColor }]} type="defaultSemiBold">
               {lineAmountLabel}
             </ThemedText>
             <Pressable onPress={onRemove} style={[styles.removeButton, { borderColor }]}>
@@ -118,17 +119,34 @@ export function SalesOrderItemEditor({
           <View style={styles.itemEditBlockMode}>
             <View style={styles.itemModeHeader}>
               <ThemedText style={styles.itemEditLabel}>{'销售模式'}</ThemedText>
-              <ThemedText style={styles.itemModeHint}>{'当前单位 '} {uom || '未设置'}</ThemedText>
             </View>
             <SalesModeSwitch onChange={onChangeSalesMode} value={salesMode} />
             <View style={styles.itemModeReferences}>
-              <View style={styles.itemModeReferencePill}>
-                <ThemedText style={styles.itemModeReferenceText}>
+              <View
+                style={[
+                  styles.itemModeReferenceBlock,
+                  salesMode === 'wholesale' && styles.itemModeReferenceBlockActive,
+                ]}>
+                <ThemedText
+                  style={[
+                    styles.itemModeReferenceText,
+                    salesMode === 'wholesale' && styles.itemModeReferenceTextActive,
+                  ]}
+                  type="defaultSemiBold">
                   {wholesaleReferenceLabel}
                 </ThemedText>
               </View>
-              <View style={styles.itemModeReferencePill}>
-                <ThemedText style={styles.itemModeReferenceText}>
+              <View
+                style={[
+                  styles.itemModeReferenceBlock,
+                  salesMode === 'retail' && styles.itemModeReferenceBlockActive,
+                ]}>
+                <ThemedText
+                  style={[
+                    styles.itemModeReferenceText,
+                    salesMode === 'retail' && styles.itemModeReferenceTextActive,
+                  ]}
+                  type="defaultSemiBold">
                   {retailReferenceLabel}
                 </ThemedText>
               </View>
@@ -159,6 +177,15 @@ export function SalesOrderItemEditor({
                   +
                 </ThemedText>
               </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.itemEditBlockUom}>
+            <ThemedText style={styles.itemEditLabel}>{'单位'}</ThemedText>
+            <View style={styles.uomDisplayWrap}>
+              <ThemedText style={styles.uomDisplayText} type="defaultSemiBold">
+                {uom || '未设置'}
+              </ThemedText>
             </View>
           </View>
 
@@ -264,31 +291,41 @@ const styles = StyleSheet.create({
   itemModeHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  itemModeHint: {
-    color: '#6B7280',
-    fontSize: 12,
   },
   itemModeReferences: {
+    alignItems: 'stretch',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+    gap: 10,
   },
-  itemModeReferencePill: {
-    backgroundColor: 'rgba(241,245,249,0.9)',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  itemModeReferenceBlock: {
+    borderRadius: 10,
+    flex: 1,
+    minHeight: 34,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  itemModeReferenceBlockActive: {
+    backgroundColor: 'rgba(59,130,246,0.08)',
   },
   itemModeReferenceText: {
     color: '#475569',
-    fontSize: 11,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  itemModeReferenceTextActive: {
+    color: '#2563EB',
   },
   itemEditBlockCompact: {
     flexShrink: 0,
     gap: 4,
     width: 110,
+  },
+  itemEditBlockUom: {
+    flexShrink: 0,
+    gap: 4,
+    minWidth: 64,
   },
   itemEditBlockPrice: {
     flex: 1,
@@ -328,6 +365,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     textAlign: 'center',
     width: 42,
+  },
+  uomDisplayWrap: {
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingRight: 2,
+  },
+  uomDisplayText: {
+    color: '#1D4ED8',
+    fontSize: 15,
   },
   priceInputWrap: {
     alignItems: 'center',
