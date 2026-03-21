@@ -2562,13 +2562,27 @@ Completed:
   - the create-order page fetches product detail once and enriches the draft item
   - hydration is one-shot per product code in the active draft, to avoid repeated request loops
 
-- draft key normalization was tightened
-  - the draft key is now always rebuilt from:
+- sales item editing is now shared by create-order and order-detail
+  - both pages now use the same extracted item editor component
+  - shared behaviors now include:
+    - sales-mode switch
+    - controlled UOM selection
+    - wholesale / retail reference price display
+    - quantity editing
+    - line price editing
+    - delete action
+  - page-level state is still separate
+    - create-order continues to work on local draft state
+    - order-detail edit mode continues to work on persisted order state
+
+- draft identity was simplified
+  - a draft line is now identified by:
     - `itemCode`
     - `warehouse`
-    - `uom`
-  - reading old draft data will also normalize stale keys
-  - this prevents search-page selection state from drifting after mode or UOM changes
+  - `uom` is no longer part of the line identity
+  - switching sales mode or switching UOM now updates the same line instead of creating a second line
+  - reading old draft data will also normalize stale keys into this new identity rule
+  - this prevents product-search from falsely showing the same SKU as “未加入订单” after line mode or UOM changes
 
 Current product-search UI rule:
 
@@ -2580,6 +2594,7 @@ Current product-search UI rule:
 Current order-page UI rule:
 
 - keep the mode switch for action
+- keep controlled UOM selection on every line
 - keep the price references for comparison
 - the visible reference prices are guidance only
   - final transaction values still come from the editable line `uom / price / qty`
@@ -2604,6 +2619,7 @@ Current recommended rule:
 - operators may change line UOM only within the product's configured UOM set
 - the allowed list should come from ERPNext item UOM definitions and conversion rules
 - ad-hoc free-text unit names such as manually typing a new `袋` / `只` / `个` should be avoided
+- create-order and order-detail should follow the same UOM editing rule and presentation
 
 Rationale:
 
