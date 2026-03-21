@@ -2422,6 +2422,137 @@ Frontend display rule:
 - valuation rate should be shown only as a cost reference
   - not as the same concept as editable buying quotation price
 
+### Mixed sales mode and UOM rule
+
+Frontend should not model wholesale / retail as a hard order-wide lock.
+
+Current recommended interaction model:
+
+- order header may keep a lightweight `default_sales_mode`
+  - for example:
+    - `wholesale`
+    - `retail`
+- this header value only acts as the default mode when new items are added
+- the real business result should still be controlled at the order-line level
+
+Each sales line should eventually support its own:
+
+- `sales_mode`
+- `uom`
+- `rate`
+
+This is important because one order may legitimately mix:
+
+- wholesale-oriented goods
+- retail-oriented goods
+
+and the default UOM under the same selling mode may differ by item:
+
+- milk:
+  - wholesale default `箱`
+  - retail default `瓶`
+- ham:
+  - wholesale default `箱`
+  - retail default `根`
+- sunflower seeds:
+  - wholesale default `包`
+  - retail default `袋`
+
+Recommended frontend behavior:
+
+- when the order default mode is `wholesale`
+  - newly added lines should prefer each product's wholesale default UOM and wholesale price
+- when the order default mode is `retail`
+  - newly added lines should prefer each product's retail default UOM and retail price
+- operators may still change a specific line manually
+  - for example:
+    - switch sales mode
+    - switch UOM
+    - override rate
+
+Current product-search and order-edit UX should therefore evolve toward:
+
+- order header controls:
+  - keep a lightweight `defaultSalesMode`
+  - it only affects newly added lines
+- order lines:
+  - should gradually carry `salesMode`
+  - and keep using final `uom / price / qty` as the actual transaction values
+- delivery note and invoice pages:
+  - do not need to display or maintain a separate wholesale / retail mode
+  - they only need the final `uom / rate / qty`
+
+### Order sales mode backend alignment (2026-03-21)
+
+Backend order model has now been extended and verified with real document flow:
+
+- `Sales Order` header stores `default_sales_mode`
+- `Sales Order Item` stores line-level `sales_mode`
+- `Sales Order` detail API returns:
+  - `meta.default_sales_mode`
+  - per-line `sales_mode / uom / rate`
+- downstream documents intentionally do **not** add mode semantics:
+  - `Delivery Note`
+  - `Sales Invoice`
+  only keep final transaction values such as `uom / rate / qty`
+
+Real validation already confirmed:
+
+- mixed-mode order lines can coexist in one order
+  - example: one `wholesale` line and one `retail` line
+- line-level final `uom / rate` are preserved into:
+  - Sales Order
+  - Delivery Note
+  - Sales Invoice
+- delivery note and invoice do not carry `sales_mode`
+
+This means frontend next-step work is an incremental adaptation, not a page rewrite:
+
+- create / edit order pages need to add:
+  - header `defaultSalesMode`
+  - line `salesMode`
+- product add-to-order flow should later auto-fill defaults from product sales profiles
+- delivery and invoice pages do not need structural changes for sales mode
+  - default mode only
+- line item controls:
+  - actual mode / UOM / price
+
+### UOM editing boundary
+
+The UI should not treat UOM as free text.
+
+Current recommended rule:
+
+- operators may change line UOM only within the product's configured UOM set
+- the allowed list should come from ERPNext item UOM definitions and conversion rules
+- ad-hoc free-text unit names such as manually typing a new `袋` / `只` / `个` should be avoided
+
+Rationale:
+
+- stock conversion
+- invoice quantity
+- delivery quantity
+- purchase quantity
+- profitability
+
+all depend on controlled UOM conversion instead of arbitrary text.
+
+### Manual override rule
+
+The system should keep defaults and final edits separate.
+
+Current rule target:
+
+- item master data provides:
+  - default wholesale mode behavior
+  - default retail mode behavior
+- order lines may manually override:
+  - mode
+  - UOM
+  - rate
+- once a line has been manually adjusted, later header mode switches should not silently overwrite that line
+- if the business later wants to restore defaults, that should be an explicit action instead of an automatic reset
+
 ### Customer module target
 
 The customer module should first focus on practical master-data maintenance instead of advanced CRM workflow.
