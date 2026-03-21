@@ -174,6 +174,82 @@ This round focused on aligning the mobile frontend with the completed sales v2 b
 3. continue aligning delivery/invoice/payment pages to the sales v2 contract
 4. finish product detail/edit paths on top of the new product service split
 
+## Product Module Summary (2026-03-21)
+
+This round turned the mobile product flow from "search-only helper pages" into a first usable product workbench.
+
+### Completed
+
+- formal product workbench page was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/products.tsx`
+  - supports:
+    - product search
+    - enabled / disabled filter
+    - stock summary
+    - price summary
+    - first-level warehouse stock distribution preview
+
+- formal product create page was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+  - supports:
+    - item name / code / nickname / description / image
+    - stock UOM
+    - wholesale default UOM
+    - retail default UOM
+    - standard selling / wholesale / retail / buying prices
+
+- product detail page was rebuilt into a real management page
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+  - supports:
+    - product overview
+    - price-system display
+    - warehouse stock breakdown
+    - current warehouse stock editing
+    - basic info edit
+    - enable / disable action
+
+- product service layer was expanded
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/products.ts`
+  - now supports:
+    - `fetchProducts()`
+    - `fetchProductDetail()`
+    - `createProduct()`
+    - `saveProductBasicInfo()`
+    - `toggleProductDisabled()`
+    - `setProductDisabled()` alias
+    - `createProductAndStock()`
+  - product mapping now also carries:
+    - `totalQty`
+    - `warehouseStockDetails`
+    - `priceSummary`
+    - `salesProfiles`
+    - default wholesale / retail UOM
+
+- home/product entry points were updated
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+  - `商品` shortcut now goes to the formal product workbench
+  - homepage keyword search now also routes into the product workbench
+
+### Current Product Module Boundaries
+
+- "delete" is still handled as enable / disable, not physical removal
+- warehouse stock is currently shown as:
+  - total stock
+  - current warehouse
+  - top warehouse breakdown preview
+- product detail edit can now adjust current warehouse stock directly
+  - frontend edits a single numeric target value for the currently selected warehouse
+  - backend computes the quantity delta and writes a formal stock adjustment entry
+  - this is not a direct `Bin` table overwrite
+- order-side "select product and warehouse together" interaction is still a later phase
+- product-search page still remains the fast lookup / add-to-order tool
+- product workbench is now the management entry, not a replacement for sales-order product search
+
 ## Frontend Alignment Summary (2026-03-18)
 
 This round completed the main frontend migration for product detail and sales-order detail editing on top of the new backend v2 interfaces.

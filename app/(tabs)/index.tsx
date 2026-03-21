@@ -63,7 +63,7 @@ export default function HomeScreen() {
 
   const shortcuts: Shortcut[] = [
     ...(canUseSales ? [{ href: '/sales/order/create' as Href, label: '销售', icon: 'cart.fill' as const }] : []),
-    { href: '/common/product-search', label: '商品', icon: 'magnifyingglass' },
+    { href: '/common/products', label: '商品', icon: 'magnifyingglass' },
     { href: '/settings', label: '设置', icon: 'gearshape.fill' },
     ...(canUsePurchase ? [{ href: '/purchase/order/create' as Href, label: '进货', icon: 'shippingbox.fill' as const }] : []),
     { href: '/(tabs)/docs', label: '对账', icon: 'doc.text.fill' },
@@ -72,7 +72,7 @@ export default function HomeScreen() {
 
   const handleSearch = () => {
     const query = searchText.trim();
-    router.push(query ? ({ pathname: '/common/product-search', params: { query, mode: 'lookup' } } as Href) : '/common/product-search?mode=lookup');
+    router.push(query ? ({ pathname: '/common/products', params: { query } } as Href) : '/common/products');
   };
 
   return (
@@ -110,8 +110,8 @@ export default function HomeScreen() {
               <ThemedText style={styles.primaryCardText}>销售开单</ThemedText>
             </Link>
           ) : null}
-          <Link href="/common/product-search?mode=lookup" style={[styles.primaryCard, styles.primaryCardSoft]}>
-            <ThemedText style={styles.primaryCardText}>商品查价</ThemedText>
+          <Link href="/common/products" style={[styles.primaryCard, styles.primaryCardSoft]}>
+            <ThemedText style={styles.primaryCardText}>商品管理</ThemedText>
           </Link>
         </View>
 

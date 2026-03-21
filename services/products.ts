@@ -2,6 +2,12 @@ import { callGatewayMethod } from '@/lib/api-client';
 import { searchProducts, type ProductSearchItem } from '@/services/gateway';
 import type { PriceSummary, SalesProfile } from '@/lib/sales-mode';
 
+type WarehouseStockDetail = {
+  warehouse: string;
+  company: string | null;
+  qty: number;
+};
+
 export type ProductDetail = {
   itemCode: string;
   itemName: string;
@@ -13,6 +19,8 @@ export type ProductDetail = {
   nickname: string;
   barcode: string;
   stockQty: number | null;
+  totalQty: number | null;
+  warehouseStockDetails: WarehouseStockDetail[];
   price: number | null;
   warehouse: string;
   allUoms: string[];
@@ -20,6 +28,44 @@ export type ProductDetail = {
   retailDefaultUom?: string | null;
   salesProfiles?: SalesProfile[];
   priceSummary?: PriceSummary | null;
+};
+
+export type ProductListItem = ProductDetail & {
+  creation?: string | null;
+  modified?: string | null;
+};
+
+export type CreateProductPayload = {
+  itemName: string;
+  itemCode?: string;
+  itemGroup?: string;
+  stockUom?: string;
+  nickname?: string;
+  description?: string;
+  imageUrl?: string;
+  standardRate?: number | null;
+  wholesaleRate?: number | null;
+  retailRate?: number | null;
+  standardBuyingRate?: number | null;
+  wholesaleDefaultUom?: string | null;
+  retailDefaultUom?: string | null;
+};
+
+export type SaveProductPayload = {
+  itemCode: string;
+  itemName?: string;
+  description?: string;
+  nickname?: string;
+  imageUrl?: string;
+  standardRate?: number | null;
+  wholesaleRate?: number | null;
+  retailRate?: number | null;
+  standardBuyingRate?: number | null;
+  wholesaleDefaultUom?: string | null;
+  retailDefaultUom?: string | null;
+  disabled?: boolean;
+  warehouse?: string;
+  warehouseStockQty?: number | null;
 };
 
 export type { ProductSearchItem };
@@ -48,6 +94,185 @@ function toOptionalNumber(value: unknown) {
   return null;
 }
 
+function mapUomNames(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  return value
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return entry.trim();
+      }
+      if (entry && typeof entry === 'object') {
+        const row = entry as Record<string, unknown>;
+        return typeof row.uom === 'string' ? row.uom.trim() : '';
+      }
+      return '';
+    })
+    .filter(Boolean);
+}
+
+function mapPriceSummary(value: unknown): PriceSummary | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const row = value as Record<string, unknown>;
+  return {
+    currentPriceList: typeof row.current_price_list === 'string' ? row.current_price_list : null,
+    currentRate: toOptionalNumber(row.current_rate),
+    standardSellingRate: toOptionalNumber(row.standard_selling_rate),
+    wholesaleRate: toOptionalNumber(row.wholesale_rate),
+    retailRate: toOptionalNumber(row.retail_rate),
+    standardBuyingRate: toOptionalNumber(row.standard_buying_rate),
+    valuationRate: toOptionalNumber(row.valuation_rate),
+  };
+}
+
+function mapSalesProfiles(value: unknown): SalesProfile[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+      const row = entry as Record<string, unknown>;
+      const modeCode = row.mode_code === 'retail' ? 'retail' : row.mode_code === 'wholesale' ? 'wholesale' : null;
+      if (!modeCode) {
+        return null;
+      }
+      return {
+        modeCode,
+        priceList: typeof row.price_list === 'string' ? row.price_list : null,
+        defaultUom: typeof row.default_uom === 'string' ? row.default_uom : null,
+      } satisfies SalesProfile;
+    })
+    .filter((entry): entry is SalesProfile => Boolean(entry));
+}
+
+function mapWarehouseStockDetails(value: unknown): WarehouseStockDetail[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+      const row = entry as Record<string, unknown>;
+      const warehouse = typeof row.warehouse === 'string' ? row.warehouse : '';
+      if (!warehouse) {
+        return null;
+      }
+      return {
+        warehouse,
+        company: typeof row.company === 'string' ? row.company : null,
+        qty: toOptionalNumber(row.qty) ?? 0,
+      } satisfies WarehouseStockDetail;
+    })
+    .filter((entry): entry is WarehouseStockDetail => Boolean(entry));
+}
+
+function mapProductRow(
+  data: Record<string, unknown>,
+  options?: {
+    warehouse?: string;
+  },
+): ProductListItem {
+  const warehouseStockDetails = mapWarehouseStockDetails(data.warehouse_stock_details);
+  const warehouse =
+    (typeof data.warehouse === 'string' && data.warehouse.trim()) ||
+    options?.warehouse?.trim() ||
+    warehouseStockDetails[0]?.warehouse ||
+    '';
+
+  return {
+    itemCode: String(data.item_code ?? data.itemCode ?? ''),
+    itemName: String(data.item_name ?? data.itemName ?? data.item_code ?? ''),
+    itemGroup: typeof data.item_group === 'string' ? data.item_group : '',
+    stockUom: typeof data.stock_uom === 'string' ? data.stock_uom : typeof data.uom === 'string' ? data.uom : '',
+    description: typeof data.description === 'string' ? data.description : '',
+    imageUrl:
+      typeof data.image === 'string'
+        ? data.image
+        : typeof data.image_url === 'string'
+          ? data.image_url
+          : '',
+    disabled: Boolean(data.disabled),
+    nickname: typeof data.nickname === 'string' ? data.nickname : '',
+    barcode: typeof data.barcode === 'string' ? data.barcode : '',
+    stockQty: toOptionalNumber(data.qty) ?? toOptionalNumber(data.stock_qty),
+    totalQty: toOptionalNumber(data.total_qty),
+    warehouseStockDetails,
+    price: toOptionalNumber(data.price),
+    warehouse,
+    allUoms: mapUomNames(data.all_uoms),
+    wholesaleDefaultUom:
+      typeof data.wholesale_default_uom === 'string' ? data.wholesale_default_uom : null,
+    retailDefaultUom:
+      typeof data.retail_default_uom === 'string' ? data.retail_default_uom : null,
+    salesProfiles: mapSalesProfiles(data.sales_profiles),
+    priceSummary: mapPriceSummary(data.price_summary),
+    creation: typeof data.creation === 'string' ? data.creation : null,
+    modified: typeof data.modified === 'string' ? data.modified : null,
+  };
+}
+
+async function postGateway<T>(method: string, payload: Record<string, unknown>) {
+  return callGatewayMethod<T>(method, payload);
+}
+
+function buildPriceEntries(payload: {
+  wholesaleRate?: number | null;
+  retailRate?: number | null;
+  standardBuyingRate?: number | null;
+}) {
+  const sellingPrices = [
+    payload.wholesaleRate != null ? { price_list: 'Wholesale', rate: payload.wholesaleRate, currency: 'CNY' } : null,
+    payload.retailRate != null ? { price_list: 'Retail', rate: payload.retailRate, currency: 'CNY' } : null,
+  ].filter(Boolean);
+
+  const buyingPrices = [
+    payload.standardBuyingRate != null
+      ? { price_list: 'Standard Buying', rate: payload.standardBuyingRate, currency: 'CNY' }
+      : null,
+  ].filter(Boolean);
+
+  return {
+    sellingPrices,
+    buyingPrices,
+  };
+}
+
+export async function fetchProducts(options?: {
+  searchKey?: string;
+  warehouse?: string;
+  company?: string;
+  disabled?: number | null;
+  limit?: number;
+}) {
+  const data = await postGateway<Record<string, unknown>[]>(
+    'myapp.api.gateway.list_products_v2',
+    {
+      search_key: options?.searchKey,
+      warehouse: options?.warehouse,
+      company: options?.company,
+      disabled: options?.disabled,
+      limit: options?.limit ?? 40,
+      selling_price_lists: ['Standard Selling', 'Wholesale', 'Retail'],
+      buying_price_lists: ['Standard Buying'],
+    },
+  );
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => mapProductRow(row, { warehouse: options?.warehouse }));
+}
+
 export async function fetchProductDetail(
   itemCode: string,
   options?: {
@@ -72,83 +297,12 @@ export async function fetchProductDetail(
     return null;
   }
 
-  return {
-    itemCode: String(data.item_code ?? itemCode),
-    itemName: String(data.item_name ?? data.item_code ?? itemCode),
-    itemGroup: String(data.item_group ?? ''),
-    stockUom: String(data.stock_uom ?? data.uom ?? ''),
-    description: String(data.description ?? ''),
-    imageUrl: String(data.image ?? data.image_url ?? ''),
-    disabled: Boolean(data.disabled),
-    nickname: String(data.nickname ?? ''),
-    barcode: String(data.barcode ?? ''),
-    stockQty: toOptionalNumber(data.qty),
-    price: toOptionalNumber(data.price),
-    warehouse: String(data.warehouse ?? ''),
-    allUoms: Array.isArray(data.all_uoms)
-      ? data.all_uoms
-          .map((value) => {
-            if (typeof value === 'string') {
-              return value;
-            }
-            if (value && typeof value === 'object' && typeof (value as Record<string, unknown>).uom === 'string') {
-              return String((value as Record<string, unknown>).uom);
-            }
-            return '';
-          })
-          .filter(Boolean)
-      : [],
-    wholesaleDefaultUom:
-      typeof data.wholesale_default_uom === 'string' ? data.wholesale_default_uom : null,
-    retailDefaultUom:
-      typeof data.retail_default_uom === 'string' ? data.retail_default_uom : null,
-    salesProfiles: Array.isArray(data.sales_profiles)
-      ? data.sales_profiles
-          .map((value) => {
-            if (!value || typeof value !== 'object') {
-              return null;
-            }
-            const row = value as Record<string, unknown>;
-            const modeCode =
-              row.mode_code === 'retail' ? 'retail' : row.mode_code === 'wholesale' ? 'wholesale' : null;
-            if (!modeCode) {
-              return null;
-            }
-            return {
-              modeCode,
-              priceList: typeof row.price_list === 'string' ? row.price_list : null,
-              defaultUom: typeof row.default_uom === 'string' ? row.default_uom : null,
-            } satisfies SalesProfile;
-          })
-          .filter((entry): entry is SalesProfile => Boolean(entry))
-      : [],
-    priceSummary:
-      data.price_summary && typeof data.price_summary === 'object'
-        ? {
-            currentPriceList:
-              typeof (data.price_summary as Record<string, unknown>).current_price_list === 'string'
-                ? String((data.price_summary as Record<string, unknown>).current_price_list)
-                : null,
-            currentRate: toOptionalNumber((data.price_summary as Record<string, unknown>).current_rate),
-            standardSellingRate: toOptionalNumber((data.price_summary as Record<string, unknown>).standard_selling_rate),
-            wholesaleRate: toOptionalNumber((data.price_summary as Record<string, unknown>).wholesale_rate),
-            retailRate: toOptionalNumber((data.price_summary as Record<string, unknown>).retail_rate),
-            standardBuyingRate: toOptionalNumber((data.price_summary as Record<string, unknown>).standard_buying_rate),
-            valuationRate: toOptionalNumber((data.price_summary as Record<string, unknown>).valuation_rate),
-          }
-        : null,
-  };
+  return mapProductRow(data, { warehouse: options?.warehouse });
 }
 
-export async function saveProductBasicInfo(payload: {
-  itemCode: string;
-  itemName: string;
-  description: string;
-  nickname?: string;
-  imageUrl?: string;
-  standardRate?: number | null;
-  warehouse?: string;
-}) {
+export async function saveProductBasicInfo(payload: SaveProductPayload) {
+  const { sellingPrices, buyingPrices } = buildPriceEntries(payload);
+
   const data = await callGatewayMethod<Record<string, unknown>>(
     'myapp.api.gateway.update_product_v2',
     {
@@ -158,7 +312,13 @@ export async function saveProductBasicInfo(payload: {
       nickname: payload.nickname,
       image: payload.imageUrl,
       standard_rate: payload.standardRate,
+      selling_prices: sellingPrices,
+      buying_prices: buyingPrices,
+      wholesale_default_uom: payload.wholesaleDefaultUom,
+      retail_default_uom: payload.retailDefaultUom,
+      disabled: typeof payload.disabled === 'boolean' ? (payload.disabled ? 1 : 0) : undefined,
       warehouse: payload.warehouse,
+      warehouse_stock_qty: payload.warehouseStockQty,
     },
   );
 
@@ -166,22 +326,54 @@ export async function saveProductBasicInfo(payload: {
     return null;
   }
 
-  return {
-    itemCode: String(data.item_code ?? payload.itemCode),
-    itemName: String(data.item_name ?? payload.itemCode),
-    itemGroup: '',
-    stockUom: String(data.uom ?? ''),
-    description: String(data.description ?? ''),
-    imageUrl: String(data.image ?? ''),
-    disabled: Boolean(data.disabled),
-    nickname: String(data.nickname ?? ''),
-    barcode: '',
-    stockQty: toOptionalNumber(data.qty),
-    price: toOptionalNumber(data.price),
-    warehouse: String(data.warehouse ?? payload.warehouse ?? ''),
-    allUoms: [],
-  } satisfies ProductDetail;
+  return mapProductRow(data, { warehouse: payload.warehouse });
 }
+
+export async function createProduct(payload: CreateProductPayload) {
+  const { sellingPrices, buyingPrices } = buildPriceEntries(payload);
+
+  const data = await callGatewayMethod<Record<string, unknown>>(
+    'myapp.api.gateway.create_product_v2',
+    {
+      item_name: payload.itemName,
+      item_code: payload.itemCode,
+      item_group: payload.itemGroup,
+      stock_uom: payload.stockUom,
+      nickname: payload.nickname,
+      description: payload.description,
+      image: payload.imageUrl,
+      standard_rate: payload.standardRate,
+      selling_prices: sellingPrices,
+      buying_prices: buyingPrices,
+      wholesale_default_uom: payload.wholesaleDefaultUom,
+      retail_default_uom: payload.retailDefaultUom,
+    },
+  );
+
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  return mapProductRow(data);
+}
+
+export async function toggleProductDisabled(itemCode: string, disabled: boolean) {
+  const data = await callGatewayMethod<Record<string, unknown>>(
+    'myapp.api.gateway.disable_product_v2',
+    {
+      item_code: itemCode,
+      disabled: disabled ? 1 : 0,
+    },
+  );
+
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  return mapProductRow(data);
+}
+
+export const setProductDisabled = toggleProductDisabled;
 
 export async function createProductAndStock(payload: {
   itemName: string;
@@ -210,9 +402,17 @@ export async function createProductAndStock(payload: {
     price:
       typeof data?.price === 'number' ? data.price : data?.price ? Number(data.price) || null : null,
     uom: typeof data?.uom === 'string' ? data.uom : null,
+    stockUom: typeof data?.uom === 'string' ? data.uom : null,
+    allUoms: typeof data?.uom === 'string' ? [data.uom] : [],
     warehouse: typeof data?.warehouse === 'string' ? data.warehouse : null,
     imageUrl: typeof data?.image === 'string' ? data.image : null,
     description: typeof payload.description === 'string' ? payload.description : null,
     nickname: typeof data?.nickname === 'string' ? data.nickname : null,
+    disabled: false,
+    barcode: '',
+    wholesaleDefaultUom: null,
+    retailDefaultUom: null,
+    salesProfiles: [],
+    priceSummary: null,
   } satisfies ProductSearchItem;
 }
