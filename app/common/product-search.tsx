@@ -11,7 +11,7 @@ import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { normalizeText, toOptionalText } from '@/lib/form-utils';
-import { buildModeDefaults, normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
+import { normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
 import {
   addItemToSalesOrderDraft,
   getSalesOrderDraft,
@@ -24,24 +24,7 @@ import { useFeedback } from '@/providers/feedback-provider';
 import { createProductAndStock, searchCatalogProducts, type ProductSearchItem } from '@/services/products';
 
 function getProductResultKey(item: ProductSearchItem, defaultSalesMode?: SalesMode) {
-  const defaults =
-    defaultSalesMode
-      ? buildModeDefaults(
-          {
-            salesProfiles: item.salesProfiles,
-            wholesaleDefaultUom: item.wholesaleDefaultUom,
-            retailDefaultUom: item.retailDefaultUom,
-            allUoms: item.allUoms,
-            stockUom: item.stockUom,
-            uom: item.uom,
-            priceSummary: item.priceSummary,
-            price: item.price,
-          },
-          defaultSalesMode,
-        )
-      : null;
-
-  return [item.itemCode, item.warehouse ?? '', defaults?.uom || item.uom || ''].join('::');
+  return [item.itemCode, item.warehouse ?? ''].join('::');
 }
 
 function getDraftItem(item: ProductSearchItem, draftItems: SalesOrderDraftItem[], defaultSalesMode?: SalesMode) {
@@ -100,40 +83,44 @@ function ResultRow({
           </View>
         </View>
 
-        <ThemedText style={styles.resultMeta}>{'编码：'} {item.itemCode}</ThemedText>
-
-        <View style={styles.resultStats}>
-          <ThemedText style={styles.statText}>{'库存：'} {item.stockQty ?? '-'}</ThemedText>
-        </View>
-
-        <View style={styles.modePriceStack}>
-          <ThemedText style={styles.modePriceText}>
-            {formatModePriceReference('批发', item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
+        <View style={styles.resultMetaRow}>
+          <ThemedText numberOfLines={1} style={styles.resultMeta}>
+            编码 {item.itemCode}
           </ThemedText>
-          <ThemedText style={styles.modePriceText}>
-            {formatModePriceReference('零售', item.priceSummary?.retailRate, item.retailDefaultUom)}
+          <ThemedText numberOfLines={1} style={styles.resultMeta}>
+            库存 {item.stockQty ?? '-'}
           </ThemedText>
         </View>
 
-        <ThemedText style={styles.resultMeta}>{item.warehouse || '未指定仓库'}</ThemedText>
-
-        {!isOrderMode ? (
-          <ThemedText style={styles.detailHint}>{'点击查看商品详情'}</ThemedText>
-        ) : null}
-
-        {isOrderMode ? (
-          <View style={styles.selectedRow}>
-            {selectedQty > 0 ? (
-              <View style={[styles.selectedPill, { backgroundColor: successSoft }]}>
-                <ThemedText style={[styles.selectedPillText, { color: tintColor }]} type="defaultSemiBold">
-                  {'已加入 '} {selectedQty} {' 件'}
-                </ThemedText>
-              </View>
-            ) : (
-              <ThemedText style={styles.selectedHint}>{'还未加入订单'}</ThemedText>
-            )}
+        <View style={styles.modePriceInlineRow}>
+          <View style={[styles.modePricePill, { backgroundColor: surfaceMuted }]}>
+            <ThemedText style={styles.modePricePillText}>
+              {formatModePriceReference('批发', item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
+            </ThemedText>
           </View>
-        ) : null}
+          <View style={[styles.modePricePill, { backgroundColor: surfaceMuted }]}>
+            <ThemedText style={styles.modePricePillText}>
+              {formatModePriceReference('零售', item.priceSummary?.retailRate, item.retailDefaultUom)}
+            </ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.resultFooterRow}>
+          <ThemedText numberOfLines={1} style={styles.resultMeta}>
+            {item.warehouse || '未指定仓库'}
+          </ThemedText>
+          {!isOrderMode ? (
+            <ThemedText style={styles.detailHint}>{'查看详情'}</ThemedText>
+          ) : selectedQty > 0 ? (
+            <View style={[styles.selectedPill, { backgroundColor: successSoft }]}>
+              <ThemedText style={[styles.selectedPillText, { color: tintColor }]} type="defaultSemiBold">
+                {'已加入 '} {selectedQty} {' 件'}
+              </ThemedText>
+            </View>
+          ) : (
+            <ThemedText style={styles.selectedHint}>{'还未加入订单'}</ThemedText>
+          )}
+        </View>
       </View>
 
       {isOrderMode ? (
@@ -190,24 +177,34 @@ function DraftItemRow({
       </View>
 
       <View style={styles.draftItemMain}>
-        <ThemedText numberOfLines={1} style={styles.draftItemTitle} type="defaultSemiBold">
-          {item.itemName || item.itemCode}
-        </ThemedText>
-        <ThemedText style={styles.draftItemPrice} type="defaultSemiBold">
-          {item.price == null ? '--' : `¥ ${item.price}`}
-        </ThemedText>
-        <ThemedText style={styles.draftItemMeta}>
-          编码 {item.itemCode}
-        </ThemedText>
-        <ThemedText style={styles.draftItemMeta}>
-          {formatModePriceReference('批发', item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
-        </ThemedText>
-        <ThemedText style={styles.draftItemMeta}>
-          {formatModePriceReference('零售', item.priceSummary?.retailRate, item.retailDefaultUom)}
-        </ThemedText>
-        <ThemedText style={styles.draftItemMeta}>
-          {item.warehouse || '未指定仓库'}
-        </ThemedText>
+        <View style={styles.draftItemTitleRow}>
+          <ThemedText numberOfLines={1} style={styles.draftItemTitle} type="defaultSemiBold">
+            {item.itemName || item.itemCode}
+          </ThemedText>
+          <ThemedText style={styles.draftItemPrice} type="defaultSemiBold">
+            {item.price == null ? '--' : `¥ ${item.price}`}
+          </ThemedText>
+        </View>
+        <View style={styles.draftItemMetaRow}>
+          <ThemedText numberOfLines={1} style={styles.draftItemMeta}>
+            编码 {item.itemCode}
+          </ThemedText>
+          <ThemedText numberOfLines={1} style={styles.draftItemMeta}>
+            {item.warehouse || '未指定仓库'}
+          </ThemedText>
+        </View>
+        <View style={styles.draftItemReferenceRow}>
+          <View style={styles.draftReferencePill}>
+            <ThemedText numberOfLines={1} style={styles.draftReferenceText}>
+              {formatModePriceReference('批发', item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
+            </ThemedText>
+          </View>
+          <View style={styles.draftReferencePill}>
+            <ThemedText numberOfLines={1} style={styles.draftReferenceText}>
+              {formatModePriceReference('零售', item.priceSummary?.retailRate, item.retailDefaultUom)}
+            </ThemedText>
+          </View>
+        </View>
       </View>
 
       <View style={styles.draftItemAside}>
@@ -529,7 +526,7 @@ export default function ProductSearchScreen() {
           <ResultRow
             isOrderMode={isOrderMode}
             item={item}
-            key={getProductResultKey(item)}
+            key={getProductResultKey(item, defaultSalesMode)}
             onAdd={handleAdd}
             onDecrease={handleDecrease}
             onOpenDetail={handleOpenDetail}
@@ -758,20 +755,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   resultRow: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 12,
-    padding: 14,
+    padding: 12,
   },
   thumbWrap: {
     alignItems: 'center',
-    borderRadius: 18,
-    height: 72,
+    borderRadius: 16,
+    height: 60,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 72,
+    width: 60,
   },
   thumbImage: {
     height: '100%',
@@ -779,7 +776,8 @@ const styles = StyleSheet.create({
   },
   resultMain: {
     flex: 1,
-    gap: 6,
+    gap: 4,
+    minWidth: 0,
   },
   resultTitleRow: {
     alignItems: 'center',
@@ -788,6 +786,7 @@ const styles = StyleSheet.create({
   },
   resultTitle: {
     flex: 1,
+    fontSize: 16,
   },
   badge: {
     borderRadius: 999,
@@ -800,41 +799,50 @@ const styles = StyleSheet.create({
   },
   resultMeta: {
     opacity: 0.68,
-  },
-  resultStats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  statText: {
-    opacity: 0.8,
-  },
-  modePriceStack: {
-    gap: 2,
-  },
-  modePriceText: {
-    color: '#475569',
     fontSize: 12,
   },
-  selectedRow: {
+  resultMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  modePriceInlineRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  modePricePill: {
+    borderRadius: 999,
+    maxWidth: '100%',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  modePricePillText: {
+    color: '#475569',
+    fontSize: 11,
+  },
+  resultFooterRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
     marginTop: 2,
   },
   selectedPill: {
-    alignSelf: 'flex-start',
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   selectedPillText: {
-    fontSize: 12,
+    fontSize: 11,
   },
   selectedHint: {
+    fontSize: 12,
     opacity: 0.6,
   },
   detailHint: {
     color: '#2563EB',
     fontSize: 12,
-    marginTop: 2,
   },
   addButton: {
     alignItems: 'center',
@@ -943,7 +951,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   draftItemRow: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
   },
@@ -961,23 +969,52 @@ const styles = StyleSheet.create({
   },
   draftItemMain: {
     flex: 1,
-    gap: 4,
+    gap: 3,
+    minWidth: 0,
+  },
+  draftItemTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
   },
   draftItemTitle: {
     color: '#0F172A',
+    flex: 1,
+    fontSize: 15,
   },
   draftItemPrice: {
     color: '#A86518',
-    fontSize: 14,
+    fontSize: 13,
+  },
+  draftItemMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   draftItemMeta: {
     color: '#64748B',
     fontSize: 12,
   },
+  draftItemReferenceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  draftReferencePill: {
+    backgroundColor: 'rgba(241,245,249,0.9)',
+    borderRadius: 999,
+    maxWidth: '100%',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  draftReferenceText: {
+    color: '#475569',
+    fontSize: 11,
+  },
   draftItemAside: {
     alignItems: 'flex-end',
     minWidth: 112,
-    paddingRight: 6,
   },
   sheetFooter: {
     alignItems: 'center',

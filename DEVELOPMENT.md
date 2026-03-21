@@ -2566,7 +2566,6 @@ Completed:
   - both pages now use the same extracted item editor component
   - shared behaviors now include:
     - sales-mode switch
-    - controlled UOM selection
     - wholesale / retail reference price display
     - quantity editing
     - line price editing
@@ -2580,9 +2579,28 @@ Completed:
     - `itemCode`
     - `warehouse`
   - `uom` is no longer part of the line identity
-  - switching sales mode or switching UOM now updates the same line instead of creating a second line
+  - switching sales mode now updates the same line instead of creating a second line
   - reading old draft data will also normalize stale keys into this new identity rule
-  - this prevents product-search from falsely showing the same SKU as “未加入订单” after line mode or UOM changes
+  - this prevents product-search from falsely showing the same SKU as “未加入订单” after line mode changes
+
+- current UOM editing rule is intentionally conservative
+  - the item editor currently only shows `当前单位`
+  - front-end no longer exposes direct line-level UOM switching
+  - UOM follows the default wholesale / retail profile when the operator switches sales mode
+  - this keeps the order flow aligned with the current product data model and avoids exposing temporary-unit behavior before a dedicated packaging / conversion design exists
+
+- order-detail item editing now fills missing product pricing metadata before use
+  - if the loaded order line does not contain `priceSummary / wholesaleDefaultUom / retailDefaultUom`
+  - edit mode fetches product detail and patches the editable line once
+  - reference labels therefore remain visible during order editing, even for older orders
+  - switching `批发 / 零售` in edit mode now updates both:
+    - the displayed mode
+    - the editable line `rate`
+
+- create-order draft hydration was tightened
+  - draft enrichment now only marks a product as hydrated after a successful detail fetch
+  - mode switching on create-order keeps the current line price when no default mode price is available
+  - this avoids draft lines being marked as complete too early and avoids accidental price clearing during mode changes
 
 Current product-search UI rule:
 

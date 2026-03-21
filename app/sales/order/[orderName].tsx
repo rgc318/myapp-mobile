@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
+import { SalesOrderItemEditor } from '@/components/sales-order-item-editor';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
@@ -11,7 +12,7 @@ import { normalizeAppError } from '@/lib/app-error';
 import { formatCurrencyValue } from '@/lib/display-currency';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { getPaymentResultHandoff, type PaymentResultHandoff } from '@/lib/payment-result-handoff';
-import { buildModeDefaults, getSalesModeLabel, normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
+import { buildModeDefaults, normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -99,40 +100,6 @@ function HighlightedDialogMessage({
   );
 }
 
-function SalesModeSwitch({
-  value,
-  onChange,
-}: {
-  value: SalesMode;
-  onChange: (mode: SalesMode) => void;
-}) {
-  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
-  const tintColor = useThemeColor({}, 'tint');
-
-  return (
-    <View style={[styles.salesModeSwitch, { backgroundColor: surfaceMuted }]}>
-      {(['wholesale', 'retail'] as SalesMode[]).map((mode) => {
-        const active = mode === value;
-        return (
-          <Pressable
-            key={mode}
-            onPress={() => onChange(mode)}
-            style={[
-              styles.salesModeSwitchOption,
-              active && { backgroundColor: '#FFFFFF', borderColor: tintColor },
-            ]}>
-            <ThemedText
-              style={[styles.salesModeSwitchText, active && { color: tintColor }]}
-              type="defaultSemiBold">
-              {getSalesModeLabel(mode)}
-            </ThemedText>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 function formatModeReference(
   label: string,
   rate: number | null | undefined,
@@ -140,152 +107,6 @@ function formatModeReference(
   currency: string,
 ) {
   return `${label} ${formatCurrencyValue(rate ?? null, currency)} / ${uom ? formatDisplayUom(uom) : '未设置单位'}`;
-}
-
-function EditableSalesItemRow({
-  item,
-  currency,
-  surface,
-  surfaceMuted,
-  tintColor,
-  onChangeSalesMode,
-  onChangePrice,
-  onChangeQty,
-  onDecreaseQty,
-  onIncreaseQty,
-  onCycleUom,
-  availableUoms,
-  onRemove,
-}: {
-  item: EditableOrderItem;
-  currency: string;
-  surface: string;
-  surfaceMuted: string;
-  tintColor: string;
-  onChangeSalesMode: (value: SalesMode) => void;
-  onChangePrice: (value: string) => void;
-  onChangeQty: (value: string) => void;
-  onDecreaseQty: () => void;
-  onIncreaseQty: () => void;
-  onCycleUom: () => void;
-  availableUoms: string[];
-  onRemove: () => void;
-}) {
-  const lineAmount = (item.rate ?? 0) * item.qty;
-
-  return (
-    <View style={[styles.editItemCard, { backgroundColor: surface, borderColor: 'rgba(148,163,184,0.18)' }]}>
-      <View style={styles.editItemRow}>
-      {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.goodsImage} />
-      ) : (
-        <View style={[styles.goodsImage, styles.imageFallback, { backgroundColor: surfaceMuted }]}>
-          <IconSymbol color="#28B7D7" name="shippingbox.fill" size={20} />
-        </View>
-      )}
-
-      <View style={styles.editItemMain}>
-        <View style={styles.editItemHeader}>
-          <View style={styles.editItemHeaderCopy}>
-            <ThemedText numberOfLines={1} style={styles.goodsName} type="defaultSemiBold">
-              {item.itemName || item.itemCode}
-            </ThemedText>
-            <ThemedText style={styles.goodsSubMeta}>编码 {item.itemCode}</ThemedText>
-            <ThemedText style={styles.goodsSubMeta}>仓库 {item.warehouse || '未指定仓库'}</ThemedText>
-          </View>
-
-          <View style={styles.editItemHeaderAside}>
-            <ThemedText style={styles.goodsAmount} type="defaultSemiBold">
-              {formatCurrencyValue(lineAmount, currency)}
-            </ThemedText>
-            <Pressable onPress={onRemove} style={styles.removeInlineButton}>
-              <ThemedText style={styles.removeInlineText} type="defaultSemiBold">
-                删除
-              </ThemedText>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.editItemControls}>
-          <View style={styles.editItemModeBlock}>
-            <ThemedText style={styles.inlineFieldLabel}>销售模式</ThemedText>
-            <SalesModeSwitch onChange={onChangeSalesMode} value={item.salesMode} />
-            <View style={styles.editItemModeReferences}>
-              <ThemedText style={styles.editItemModeReferenceText}>
-                {formatModeReference(
-                  '批发',
-                  item.priceSummary?.wholesaleRate ?? null,
-                  item.wholesaleDefaultUom,
-                  currency,
-                )}
-              </ThemedText>
-              <ThemedText style={styles.editItemModeReferenceText}>
-                {formatModeReference(
-                  '零售',
-                  item.priceSummary?.retailRate ?? null,
-                  item.retailDefaultUom,
-                  currency,
-                )}
-              </ThemedText>
-            </View>
-          </View>
-          <View style={styles.editItemControlRow}>
-            <View style={[styles.inlineField, styles.qtyField, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.inlineFieldLabel}>数量</ThemedText>
-              <View style={styles.qtyStepper}>
-                <Pressable onPress={onDecreaseQty} style={styles.qtyStepperButton}>
-                  <ThemedText style={[styles.qtyStepperButtonText, { color: tintColor }]} type="defaultSemiBold">
-                    -
-                  </ThemedText>
-                </Pressable>
-                <TextInput
-                  keyboardType="number-pad"
-                  onChangeText={onChangeQty}
-                  style={styles.qtyStepperInput}
-                  value={String(item.qty)}
-                />
-                <Pressable onPress={onIncreaseQty} style={styles.qtyStepperButton}>
-                  <ThemedText style={[styles.qtyStepperButtonText, { color: tintColor }]} type="defaultSemiBold">
-                    +
-                  </ThemedText>
-                </Pressable>
-              </View>
-            </View>
-            <View style={[styles.inlineField, styles.uomField, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.inlineFieldLabel}>单位</ThemedText>
-              <Pressable
-                disabled={availableUoms.length <= 1}
-                onPress={onCycleUom}
-                style={[styles.uomSwitcher, availableUoms.length <= 1 && styles.uomSwitcherDisabled]}
-              >
-                <ThemedText style={styles.inlineStaticValue} type="defaultSemiBold">
-                  {formatDisplayUom(item.uom)}
-                </ThemedText>
-                {availableUoms.length > 1 ? (
-                  <ThemedText style={[styles.uomHint, { color: tintColor }]}>切换</ThemedText>
-                ) : null}
-              </Pressable>
-            </View>
-            <View style={[styles.priceChipField, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.inlineFieldLabel}>单价</ThemedText>
-              <View style={styles.priceChipContent}>
-                <ThemedText style={styles.pricePrefix} type="defaultSemiBold">
-                  {currency === 'CNY' ? '¥' : currency}
-                </ThemedText>
-                <TextInput
-                  keyboardType="decimal-pad"
-                  onChangeText={onChangePrice}
-                  style={styles.priceChipInput}
-                  value={item.rate == null ? '' : String(item.rate)}
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-      </View>
-      </View>
-    </View>
-  );
 }
 
 function getBusinessStatusLabel(detail: SalesOrderDetailV2 | null) {
@@ -604,7 +425,13 @@ export default function SalesOrderDetailScreen() {
       new Set(
         editableItems
           .map((item) => item.itemCode)
-          .filter((itemCode) => itemCode && !(itemCode in itemUomOptions)),
+          .filter(
+            (itemCode) =>
+              itemCode &&
+              (!(itemCode in itemUomOptions) ||
+                !(itemCode in itemModeDefaults) ||
+                !itemModeDefaults[itemCode]?.priceSummary),
+          ),
       ),
     );
 
@@ -670,12 +497,30 @@ export default function SalesOrderDetailScreen() {
         }
         return next;
       });
+      setEditableItems((current) =>
+        current.map((item) => {
+          const config = entries.find(([itemCode]) => itemCode === item.itemCode)?.[1];
+          if (!config) {
+            return item;
+          }
+
+          return {
+            ...item,
+            allUoms: item.allUoms?.length ? item.allUoms : config.allUoms,
+            stockUom: item.stockUom ?? config.stockUom ?? null,
+            wholesaleDefaultUom: item.wholesaleDefaultUom ?? config.wholesaleDefaultUom ?? null,
+            retailDefaultUom: item.retailDefaultUom ?? config.retailDefaultUom ?? null,
+            salesProfiles: item.salesProfiles?.length ? item.salesProfiles : config.salesProfiles ?? [],
+            priceSummary: item.priceSummary ?? config.priceSummary ?? null,
+          };
+        }),
+      );
     });
 
     return () => {
       cancelled = true;
     };
-  }, [detail?.company, editableItems, isEditingItems, itemUomOptions]);
+  }, [detail?.company, editableItems, isEditingItems, itemModeDefaults, itemUomOptions]);
 
   const statusTone = getStatusTone(detail);
   const businessStatus = getBusinessStatusLabel(detail);
@@ -936,8 +781,10 @@ export default function SalesOrderDetailScreen() {
 
         return {
           ...item,
-          ...defaults,
-          amount: (defaults.rate ?? item.rate ?? 0) * item.qty,
+          salesMode: defaults.salesMode,
+          uom: defaults.uom,
+          rate: defaults.price ?? item.rate ?? 0,
+          amount: (defaults.price ?? item.rate ?? 0) * item.qty,
         };
       }),
     );
@@ -950,7 +797,7 @@ export default function SalesOrderDetailScreen() {
   function syncScopedDraft(nextItems: EditableOrderItem[]) {
     replaceSalesOrderDraft(
       nextItems.map((item) => ({
-        draftKey: [item.itemCode, item.warehouse ?? '', item.uom ?? ''].join('::'),
+        draftKey: [item.itemCode, item.warehouse ?? ''].join('::'),
         itemCode: item.itemCode,
         itemName: item.itemName,
         imageUrl: item.imageUrl,
@@ -1559,29 +1406,6 @@ export default function SalesOrderDetailScreen() {
     );
   }
 
-  function cycleEditableItemUom(index: number) {
-    setEditableItems((current) =>
-      current.map((item, itemIndex) => {
-        if (itemIndex !== index) {
-          return item;
-        }
-
-        const availableUoms = itemUomOptions[item.itemCode] ?? [];
-        if (availableUoms.length <= 1) {
-          return item;
-        }
-
-        const currentIndex = Math.max(availableUoms.indexOf(item.uom), 0);
-        const nextUom = availableUoms[(currentIndex + 1) % availableUoms.length] ?? item.uom;
-
-        return {
-          ...item,
-          uom: nextUom,
-        };
-      }),
-    );
-  }
-
   return (
     <View style={[styles.screen, { backgroundColor: background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -1870,11 +1694,25 @@ export default function SalesOrderDetailScreen() {
             {detail?.items?.length ? (
               (isEditingItems ? editableItems : detail.items).map((item, index) =>
                 isEditingItems ? (
-                  <EditableSalesItemRow
-                    currency={detail?.currency || 'CNY'}
-                    item={item as EditableOrderItem}
+                  (() => {
+                    const editableItem = item as EditableOrderItem;
+                    const itemDefaults = itemModeDefaults[editableItem.itemCode] ?? {};
+                    const effectivePriceSummary = editableItem.priceSummary ?? itemDefaults.priceSummary ?? null;
+                    const effectiveWholesaleDefaultUom =
+                      editableItem.wholesaleDefaultUom ?? itemDefaults.wholesaleDefaultUom ?? null;
+                    const effectiveRetailDefaultUom =
+                      editableItem.retailDefaultUom ?? itemDefaults.retailDefaultUom ?? null;
+
+                    return (
+                  <SalesOrderItemEditor
+                    imageUrl={editableItem.imageUrl}
+                    itemCode={editableItem.itemCode}
+                    itemName={editableItem.itemName}
                     key={`${item.itemCode}-${index}`}
-                    surface={surface}
+                    lineAmountLabel={formatCurrencyValue(
+                      ((editableItem.rate ?? 0) * editableItem.qty),
+                      detail?.currency || 'CNY',
+                    )}
                     onChangePrice={(value) =>
                       updateEditableItem(index, {
                         rate: value.trim() ? Number(value) || 0 : null,
@@ -1888,12 +1726,27 @@ export default function SalesOrderDetailScreen() {
                     onChangeSalesMode={(nextMode) => applyEditableItemSalesMode(index, nextMode)}
                     onDecreaseQty={() => stepEditableItemQty(index, -1)}
                     onIncreaseQty={() => stepEditableItemQty(index, 1)}
-                    onCycleUom={() => cycleEditableItemUom(index)}
-                    availableUoms={itemUomOptions[(item as EditableOrderItem).itemCode] ?? []}
                     onRemove={() => removeEditableItem(index)}
-                    surfaceMuted={surfaceMuted}
-                    tintColor={tintColor}
+                    priceText={editableItem.rate == null ? '' : String(editableItem.rate)}
+                    qty={editableItem.qty}
+                    retailReferenceLabel={formatModeReference(
+                      '零售',
+                      effectivePriceSummary?.retailRate ?? null,
+                      effectiveRetailDefaultUom,
+                      detail?.currency || 'CNY',
+                    )}
+                    salesMode={editableItem.salesMode}
+                    uom={editableItem.uom}
+                    warehouse={editableItem.warehouse}
+                    wholesaleReferenceLabel={formatModeReference(
+                      '批发',
+                      effectivePriceSummary?.wholesaleRate ?? null,
+                      effectiveWholesaleDefaultUom,
+                      detail?.currency || 'CNY',
+                    )}
                   />
+                    );
+                  })()
                 ) : (
                   <View key={`${item.itemCode}-${index}`} style={styles.goodsListItem}>
                     <View style={styles.goodsRow}>

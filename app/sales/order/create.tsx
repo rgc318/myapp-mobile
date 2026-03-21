@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { LinkOptionInput } from '@/components/link-option-input';
+import { SalesOrderItemEditor } from '@/components/sales-order-item-editor';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
@@ -214,177 +215,6 @@ function SummaryRow({
   );
 }
 
-function SalesItemRow({
-  itemCode,
-  itemName,
-  imageUrl,
-  price,
-  qty,
-  salesMode,
-  uom,
-  wholesaleDefaultUom,
-  retailDefaultUom,
-  wholesaleRate,
-  retailRate,
-  warehouse,
-  onChangeSalesMode,
-  onChangePrice,
-  onChangeQty,
-  onRemove,
-}: {
-  itemCode: string;
-  itemName: string;
-  imageUrl?: string | null;
-  price: number | null;
-  qty: number;
-  salesMode: SalesMode;
-  uom: string | null;
-  wholesaleDefaultUom?: string | null;
-  retailDefaultUom?: string | null;
-  wholesaleRate?: number | null;
-  retailRate?: number | null;
-  warehouse?: string | null;
-  onChangeSalesMode: (value: SalesMode) => void;
-  onChangePrice: (value: string) => void;
-  onChangeQty: (value: string) => void;
-  onRemove: () => void;
-}) {
-  const [qtyText, setQtyText] = useState(String(qty));
-  const surface = useThemeColor({}, 'surface');
-  const borderColor = useThemeColor({}, 'border');
-  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
-  const dangerColor = useThemeColor({}, 'danger');
-  const tintColor = useThemeColor({}, 'tint');
-  const lineAmount = (price ?? 0) * qty;
-
-  useEffect(() => {
-    setQtyText(String(qty));
-  }, [qty]);
-
-  const commitQty = (rawValue: string) => {
-    const normalized = rawValue.replace(/[^0-9]/g, '');
-
-    if (!normalized) {
-      setQtyText(String(qty));
-      return;
-    }
-
-    const nextQty = Math.max(1, Number(normalized) || qty);
-    setQtyText(String(nextQty));
-    onChangeQty(String(nextQty));
-  };
-
-  const handleDecrease = () => {
-    if (qty <= 1) {
-      setQtyText('1');
-      return;
-    }
-
-    const nextQty = Math.max(1, qty - 1);
-    setQtyText(String(nextQty));
-    onChangeQty(String(nextQty));
-  };
-
-  const handleIncrease = () => {
-    const nextQty = qty + 1;
-    setQtyText(String(nextQty));
-    onChangeQty(String(nextQty));
-  };
-
-  return (
-    <View style={[styles.itemRow, { backgroundColor: surface, borderColor }]}>
-      {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.itemThumbImage} />
-      ) : (
-        <View style={[styles.itemThumb, { backgroundColor: surfaceMuted }]}>
-          <IconSymbol color="#28B7D7" name="shippingbox.fill" size={20} />
-        </View>
-      )}
-
-      <View style={styles.itemMain}>
-        <View style={styles.itemHeaderRow}>
-          <View style={styles.itemHeaderCopy}>
-            <ThemedText numberOfLines={1} style={styles.itemTitle} type="defaultSemiBold">
-              {itemName || itemCode}
-            </ThemedText>
-            <ThemedText style={styles.itemSubline}>{'\u7f16\u7801 '} {itemCode}</ThemedText>
-            <ThemedText style={styles.itemSubline}>{'\u4ed3\u5e93 '} {warehouse || '\u672a\u6307\u5b9a\u4ed3\u5e93'}</ThemedText>
-          </View>
-
-          <View style={styles.itemHeaderAside}>
-            <ThemedText style={styles.itemAmountInline} type="defaultSemiBold">
-              {'\u00A5'} {formatMoney(lineAmount)}
-            </ThemedText>
-            <Pressable onPress={onRemove} style={[styles.removeButton, { borderColor }]}> 
-              <ThemedText style={[styles.textAction, { color: dangerColor }]}>{'\u5220\u9664'}</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.itemEditRow}>
-          <View style={styles.itemEditBlockMode}>
-            <ThemedText style={styles.itemEditLabel}>{'销售模式'}</ThemedText>
-            <SalesModeSwitch onChange={onChangeSalesMode} value={salesMode} />
-            <ThemedText style={styles.itemModeHint}>{'当前单位 '} {uom || '未设置'}</ThemedText>
-            <View style={styles.itemModeReferences}>
-              <ThemedText style={styles.itemModeReferenceText}>
-                {formatModeReference('批发', wholesaleRate, wholesaleDefaultUom)}
-              </ThemedText>
-              <ThemedText style={styles.itemModeReferenceText}>
-                {formatModeReference('零售', retailRate, retailDefaultUom)}
-              </ThemedText>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.itemEditRow}>
-          <View style={styles.itemEditBlockCompact}>
-            <ThemedText style={styles.itemEditLabel}>{'\u6570\u91cf'}</ThemedText>
-            <View style={[styles.qtyStepper, { backgroundColor: surfaceMuted, borderColor }]}> 
-              <Pressable
-                disabled={qty <= 1}
-                onPress={handleDecrease}
-                style={[styles.qtyActionButton, qty <= 1 && styles.qtyActionButtonDisabled]}>
-                <ThemedText style={[styles.qtyActionText, { color: tintColor }]} type="defaultSemiBold">
-                  -
-                </ThemedText>
-              </Pressable>
-              <TextInput
-                keyboardType="number-pad"
-                onBlur={() => commitQty(qtyText)}
-                onChangeText={(value) => setQtyText(value.replace(/[^0-9]/g, ''))}
-                onSubmitEditing={() => commitQty(qtyText)}
-                returnKeyType="done"
-                selectTextOnFocus
-                style={styles.qtyInput}
-                value={qtyText}
-              />
-              <Pressable onPress={handleIncrease} style={styles.qtyActionButton}>
-                <ThemedText style={[styles.qtyActionText, { color: tintColor }]} type="defaultSemiBold">
-                  +
-                </ThemedText>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.itemEditBlockPrice}>
-            <ThemedText style={styles.itemEditLabel}>{'\u5355\u4ef7'}</ThemedText>
-            <View style={[styles.priceInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
-              <ThemedText style={styles.pricePrefix}>{'\u00A5'}</ThemedText>
-              <TextInput
-                keyboardType="numeric"
-                onChangeText={onChangePrice}
-                style={styles.priceInput}
-                value={price === null ? '' : String(price)}
-              />
-            </View>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-}
-
 export default function SalesOrderCreateScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -568,10 +398,11 @@ export default function SalesOrderCreateScreen() {
     void Promise.all(
       itemsNeedingRefresh.map(async (item) => {
         const detail = await fetchProductDetail(item.itemCode);
-        hydratedDraftItemCodesRef.current[item.itemCode] = true;
         if (!active || !detail) {
           return;
         }
+
+        hydratedDraftItemCodesRef.current[item.itemCode] = true;
 
         const effectiveMode = normalizeSalesMode(item.salesMode ?? defaultSalesMode);
         const defaults = buildModeDefaults(
@@ -581,7 +412,7 @@ export default function SalesOrderCreateScreen() {
             retailDefaultUom: detail.retailDefaultUom,
             allUoms: detail.allUoms,
             stockUom: detail.stockUom,
-            uom: detail.uom,
+            uom: detail.stockUom,
             priceSummary: detail.priceSummary,
             price: detail.price,
           },
@@ -592,7 +423,7 @@ export default function SalesOrderCreateScreen() {
           ...item,
           imageUrl: item.imageUrl || detail.imageUrl,
           salesMode: effectiveMode,
-          uom: item.uom || defaults.uom || detail.uom,
+          uom: item.uom || defaults.uom || detail.stockUom,
           price: item.price ?? defaults.price ?? detail.price ?? null,
           allUoms: detail.allUoms,
           stockUom: detail.stockUom,
@@ -1166,24 +997,30 @@ export default function SalesOrderCreateScreen() {
 
               <View style={styles.itemList}>
                 {draftItems.map((item) => (
-                  <SalesItemRow
+                  <SalesOrderItemEditor
                     itemCode={item.itemCode}
                     itemName={item.itemName}
                     imageUrl={item.imageUrl}
                     key={item.draftKey}
                     salesMode={normalizeSalesMode(item.salesMode)}
                     uom={item.uom}
-                    wholesaleDefaultUom={item.wholesaleDefaultUom}
-                    retailDefaultUom={item.retailDefaultUom}
-                    wholesaleRate={item.priceSummary?.wholesaleRate ?? null}
-                    retailRate={item.priceSummary?.retailRate ?? null}
+                    wholesaleReferenceLabel={formatModeReference(
+                      '批发',
+                      item.priceSummary?.wholesaleRate ?? null,
+                      item.wholesaleDefaultUom,
+                    )}
+                    retailReferenceLabel={formatModeReference(
+                      '零售',
+                      item.priceSummary?.retailRate ?? null,
+                      item.retailDefaultUom,
+                    )}
                     onChangeSalesMode={(nextMode) => {
                       const defaults = buildModeDefaults(item, nextMode);
                       restoreSalesOrderDraftItem({
                         ...item,
                         salesMode: defaults.salesMode,
                         uom: defaults.uom || item.uom,
-                        price: defaults.price,
+                        price: defaults.price ?? item.price ?? null,
                       });
                       syncDraft();
                     }}
@@ -1202,9 +1039,19 @@ export default function SalesOrderCreateScreen() {
                     onRemove={() => {
                       handleRemoveItem(item);
                     }}
-                    price={item.price}
+                    lineAmountLabel={`¥ ${formatMoney((item.price ?? 0) * item.qty)}`}
+                    priceText={item.price === null ? '' : String(item.price)}
                     qty={item.qty}
                     warehouse={item.warehouse || preferences.defaultWarehouse}
+                    onDecreaseQty={() => {
+                      const nextQty = Math.max(1, item.qty - 1);
+                      updateSalesOrderDraftQty(item.draftKey, nextQty);
+                      syncDraft();
+                    }}
+                    onIncreaseQty={() => {
+                      updateSalesOrderDraftQty(item.draftKey, item.qty + 1);
+                      syncDraft();
+                    }}
                   />
                 ))}
               </View>
@@ -1795,151 +1642,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   itemList: {
-    gap: 12,
-  },
-  itemRow: {
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 14,
-    padding: 14,
-  },
-  itemThumb: {
-    alignItems: 'center',
-    borderRadius: 18,
-    height: 60,
-    justifyContent: 'center',
-    width: 60,
-  },
-  itemThumbImage: {
-    borderRadius: 18,
-    height: 60,
-    width: 60,
-  },
-  itemMain: {
-    flex: 1,
-    gap: 6,
-  },
-  itemHeaderRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-    minHeight: 60,
-  },
-  itemHeaderCopy: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-  },
-  itemHeaderAside: {
-    alignItems: 'flex-end',
     gap: 10,
-  },
-  itemTitle: {
-    flex: 1,
-    fontSize: 16,
-    marginRight: 12,
-  },
-  itemAmountInline: {
-    color: '#2D3748',
-    fontSize: 18,
-  },
-  itemSubline: {
-    color: '#6B7280',
-    fontSize: 12,
-  },
-  itemEditRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 10,
-  },
-  itemEditBlockMode: {
-    gap: 6,
-    width: '100%',
-  },
-  itemModeHint: {
-    color: '#6B7280',
-    fontSize: 12,
-  },
-  itemModeReferences: {
-    gap: 2,
-  },
-  itemModeReferenceText: {
-    color: '#475569',
-    fontSize: 12,
-  },
-  itemEditBlockCompact: {
-    flexShrink: 0,
-    gap: 4,
-    width: 110,
-  },
-  itemEditBlockPrice: {
-    flex: 1,
-    gap: 4,
-  },
-  itemEditLabel: {
-    color: '#6B7280',
-    fontSize: 11,
-  },
-  qtyStepper: {
-    alignItems: 'center',
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: 'row',
-    height: 36,
-    overflow: 'hidden',
-  },
-  qtyActionButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 36,
-    width: 30,
-  },
-  qtyActionButtonDisabled: {
-    opacity: 0.35,
-  },
-  qtyActionText: {
-    fontSize: 18,
-    lineHeight: 18,
-  },
-  qtyInput: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '600',
-    height: 36,
-    minWidth: 34,
-    paddingHorizontal: 2,
-    textAlign: 'center',
-    width: 42,
-  },
-  priceInputWrap: {
-    alignItems: 'center',
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    height: 36,
-    paddingHorizontal: 10,
-  },
-  pricePrefix: {
-    color: '#6B7280',
-    fontSize: 13,
-  },
-  priceInput: {
-    color: '#111827',
-    flex: 1,
-    fontSize: 15,
-    height: 36,
-    paddingVertical: 0,
-  },
-  removeButton: {
-    alignItems: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 30,
-    paddingHorizontal: 10,
   },
   sectionFooter: {
     alignItems: 'center',

@@ -42,16 +42,15 @@ let memoryDraftFormByScope: Record<string, SalesOrderDraftForm> = {};
 function buildDraftKey(item: {
   itemCode: string;
   warehouse: string | null;
-  uom: string | null;
 }) {
-  return [item.itemCode, item.warehouse ?? '', item.uom ?? ''].join('::');
+  return [item.itemCode, item.warehouse ?? ''].join('::');
 }
 
 function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
   const itemCode = typeof item.itemCode === 'string' ? item.itemCode : '';
   const warehouse = typeof item.warehouse === 'string' ? item.warehouse : null;
   const uom = typeof item.uom === 'string' ? item.uom : null;
-  const canonicalDraftKey = buildDraftKey({ itemCode, warehouse, uom });
+  const canonicalDraftKey = buildDraftKey({ itemCode, warehouse });
 
   return {
     draftKey: canonicalDraftKey,
@@ -221,7 +220,6 @@ export function addItemToSalesOrderDraft(
   const draftKey = buildDraftKey({
     itemCode: item.itemCode,
     warehouse: item.warehouse,
-    uom: defaults.uom || item.uom,
   });
   const existing = current.find((entry) => entry.draftKey === draftKey);
 
