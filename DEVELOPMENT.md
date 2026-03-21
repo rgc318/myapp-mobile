@@ -2693,6 +2693,57 @@ Current rule target:
 - once a line has been manually adjusted, later header mode switches should not silently overwrite that line
 - if the business later wants to restore defaults, that should be an explicit action instead of an automatic reset
 
+### Multi-warehouse search and order-line rule
+
+Current recommended direction for the next product-search iteration:
+
+- product search should remain product-first instead of forcing a single warehouse as the only search scope
+- warehouse is still an important execution dimension, but it should be selected at the product-result level instead of only at the page-global level
+- search cards may show:
+  - total stock
+  - current recommended warehouse stock
+  - an action such as `view stock detail`
+
+Recommended UX path:
+
+- operators search by product
+- each product can open a warehouse stock detail panel
+- the panel lists warehouse-level stock such as:
+  - warehouse A
+  - warehouse B
+  - warehouse C
+- operators add the selected warehouse quantity into the order from that panel
+
+Order-line rule:
+
+- the internal order model should keep `item + warehouse` as separate lines
+- the same product from two warehouses should therefore appear as two order lines
+- quantity and rate editing should always apply to the current `item + warehouse` line only
+
+This rule is intentionally preferred over “one order line with multiple warehouses inside it” because it is:
+
+- clearer for operators
+- easier for draft identity and editing
+- closer to delivery execution
+- safer for rollback, stock checks, and later tracing
+
+Current recommendation for future document behavior:
+
+- sales order:
+  - keep split `item + warehouse` lines
+- delivery note:
+  - keep warehouse-split execution lines
+- sales invoice:
+  - do not rush to merge backend rows
+  - if needed later, provide display-only aggregation when item, UOM, rate, tax, and discount are identical
+
+Warehouse recommendation rule:
+
+- the system may show a recommended warehouse
+- but should not automatically allocate quantities by a hard product-level “priority warehouse” strategy
+- real business often needs manual balancing for reserve stock, backup warehouses, activity warehouses, or partial fulfillment
+- therefore recommendation is acceptable, hard automatic warehouse allocation should not be the main behavior
+
 ### Customer module target
 
 The customer module should first focus on practical master-data maintenance instead of advanced CRM workflow.
