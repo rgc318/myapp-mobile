@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useFeedback } from '@/providers/feedback-provider';
+import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
 import { createProduct } from '@/services/products';
 
 function toNumberOrNull(value: string) {
@@ -56,9 +57,15 @@ export default function ProductCreateScreen() {
   const router = useRouter();
   const { showError, showSuccess } = useFeedback();
   const tintColor = useThemeColor({}, 'tint');
+  const surface = useThemeColor({}, 'surface');
+  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const borderColor = useThemeColor({}, 'border');
 
   const [itemName, setItemName] = useState('');
   const [itemCode, setItemCode] = useState('');
+  const [itemGroup, setItemGroup] = useState('');
+  const [brand, setBrand] = useState('');
+  const [barcode, setBarcode] = useState('');
   const [nickname, setNickname] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -70,6 +77,42 @@ export default function ProductCreateScreen() {
   const [retailRate, setRetailRate] = useState('');
   const [standardBuyingRate, setStandardBuyingRate] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [masterPickerVisible, setMasterPickerVisible] = useState(false);
+  const [masterPickerTarget, setMasterPickerTarget] = useState<'itemGroup' | 'brand' | null>(null);
+  const [masterPickerQuery, setMasterPickerQuery] = useState('');
+  const [masterPickerOptions, setMasterPickerOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!masterPickerVisible || !masterPickerTarget) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadOptions() {
+      try {
+        const doctype = masterPickerTarget === 'itemGroup' ? 'Item Group' : 'Brand';
+        const options = await searchLinkOptions(doctype, masterPickerQuery);
+        if (!cancelled) {
+          setMasterPickerOptions(
+            options
+              .map((option) => option.value.trim())
+              .filter(Boolean),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setMasterPickerOptions([]);
+        }
+      }
+    }
+
+    void loadOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [masterPickerQuery, masterPickerTarget, masterPickerVisible]);
 
   const handleCreate = async () => {
     if (!itemName.trim()) {
@@ -77,11 +120,33 @@ export default function ProductCreateScreen() {
       return;
     }
 
+    const trimmedItemGroup = itemGroup.trim();
+    const trimmedBrand = brand.trim();
+
+    if (trimmedItemGroup) {
+      const itemGroupExists = await checkLinkOptionExists('Item Group', trimmedItemGroup);
+      if (!itemGroupExists) {
+        showError('商品分类不存在，请从候选项中选择。');
+        return;
+      }
+    }
+
+    if (trimmedBrand) {
+      const brandExists = await checkLinkOptionExists('Brand', trimmedBrand);
+      if (!brandExists) {
+        showError('品牌不存在，请从候选项中选择。');
+        return;
+      }
+    }
+
     try {
       setIsSaving(true);
       const created = await createProduct({
         itemName: itemName.trim(),
         itemCode: itemCode.trim() || undefined,
+        itemGroup: trimmedItemGroup || undefined,
+        brand: trimmedBrand || undefined,
+        barcode: barcode.trim() || undefined,
         nickname: nickname.trim() || undefined,
         description: description.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
@@ -108,6 +173,26 @@ export default function ProductCreateScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleOpenMasterPicker = (target: 'itemGroup' | 'brand') => {
+    setMasterPickerTarget(target);
+    setMasterPickerQuery('');
+    setMasterPickerVisible(true);
+  };
+
+  const handleSelectMasterOption = (value: string) => {
+    if (masterPickerTarget === 'itemGroup') {
+      setItemGroup(value);
+    }
+
+    if (masterPickerTarget === 'brand') {
+      setBrand(value);
+    }
+
+    setMasterPickerVisible(false);
+    setMasterPickerTarget(null);
+    setMasterPickerQuery('');
   };
 
   return (
@@ -139,6 +224,43 @@ export default function ProductCreateScreen() {
           </ThemedText>
           <ProductField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" value={itemName} />
           <ProductField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />
+          <View style={styles.rowFields}>
+            <View style={styles.rowField}>
+              <View style={styles.fieldBlock}>
+                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                  商品分类
+                </ThemedText>
+                <Pressable
+                  onPress={() => handleOpenMasterPicker('itemGroup')}
+                  style={[styles.selectorField, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText numberOfLines={1} style={styles.selectorFieldValue} type="defaultSemiBold">
+                    {itemGroup || '请选择'}
+                  </ThemedText>
+                  <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                    选择
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.rowField}>
+              <View style={styles.fieldBlock}>
+                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                  品牌
+                </ThemedText>
+                <Pressable
+                  onPress={() => handleOpenMasterPicker('brand')}
+                  style={[styles.selectorField, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText numberOfLines={1} style={styles.selectorFieldValue} type="defaultSemiBold">
+                    {brand || '请选择'}
+                  </ThemedText>
+                  <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                    选择
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+          <ProductField label="主条码" onChangeText={setBarcode} placeholder="输入商品主条码" value={barcode} />
           <ProductField label="商品昵称" onChangeText={setNickname} placeholder="如常用简称或别名" value={nickname} />
           <ProductField label="图片地址" onChangeText={setImageUrl} placeholder="输入商品图片 URL" value={imageUrl} />
           <ProductField label="描述" multiline onChangeText={setDescription} placeholder="补充规格、备注或说明" value={description} />
@@ -175,6 +297,74 @@ export default function ProductCreateScreen() {
           <ProductField label="采购价" onChangeText={setStandardBuyingRate} placeholder="例如 55" value={standardBuyingRate} />
         </View>
       </ScrollView>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => {
+          setMasterPickerVisible(false);
+          setMasterPickerTarget(null);
+          setMasterPickerQuery('');
+        }}
+        transparent
+        visible={masterPickerVisible}>
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            onPress={() => {
+              setMasterPickerVisible(false);
+              setMasterPickerTarget(null);
+              setMasterPickerQuery('');
+            }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={[styles.modalSheet, { backgroundColor: surface }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle} type="title">
+                {masterPickerTarget === 'brand' ? '选择品牌' : '选择商品分类'}
+              </ThemedText>
+              <ThemedText style={styles.modalHint}>通过搜索选择系统中已有主数据。</ThemedText>
+            </View>
+            <View style={[styles.modalSearchWrap, { backgroundColor: surfaceMuted, borderColor }]}>
+              <TextInput
+                onChangeText={setMasterPickerQuery}
+                placeholder={masterPickerTarget === 'brand' ? '搜索品牌名称' : '搜索分类名称'}
+                placeholderTextColor="rgba(31,42,55,0.38)"
+                style={styles.modalSearchInput}
+                value={masterPickerQuery}
+              />
+            </View>
+            <ScrollView contentContainerStyle={styles.modalList} showsVerticalScrollIndicator={false}>
+              {masterPickerOptions.length ? (
+                masterPickerOptions.map((value) => {
+                  const active =
+                    (masterPickerTarget === 'itemGroup' && value === itemGroup) ||
+                    (masterPickerTarget === 'brand' && value === brand);
+                  return (
+                    <Pressable
+                      key={value}
+                      onPress={() => handleSelectMasterOption(value)}
+                      style={[
+                        styles.modalOption,
+                        { backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted, borderColor },
+                      ]}>
+                      <ThemedText numberOfLines={1} style={styles.modalOptionValue} type="defaultSemiBold">
+                        {value}
+                      </ThemedText>
+                      <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                        {active ? '当前' : '选择'}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })
+              ) : (
+                <View style={[styles.emptyState, { backgroundColor: surfaceMuted }]}>
+                  <ThemedText type="defaultSemiBold">没有找到匹配主数据</ThemedText>
+                  <ThemedText style={styles.modalHint}>换个关键词试试。</ThemedText>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </AppShell>
   );
 }
@@ -211,6 +401,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  selectorField: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 50,
+    paddingHorizontal: 14,
+  },
+  selectorFieldValue: {
+    flex: 1,
+    paddingRight: 12,
+  },
   rowFields: {
     flexDirection: 'row',
     gap: 12,
@@ -240,5 +443,68 @@ const styles = StyleSheet.create({
   },
   footerPrimaryText: {
     color: '#FFFFFF',
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(15,23,42,0.28)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    gap: 14,
+    maxHeight: '78%',
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+    paddingTop: 10,
+  },
+  modalHandle: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(148,163,184,0.9)',
+    borderRadius: 999,
+    height: 4,
+    width: 56,
+  },
+  modalHeader: {
+    gap: 4,
+  },
+  modalTitle: {
+    fontSize: 24,
+  },
+  modalHint: {
+    opacity: 0.72,
+  },
+  modalSearchWrap: {
+    borderRadius: 18,
+    borderWidth: 1,
+    minHeight: 52,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  modalSearchInput: {
+    fontSize: 15,
+    minHeight: 40,
+  },
+  modalList: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  modalOption: {
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 58,
+    paddingHorizontal: 14,
+  },
+  modalOptionValue: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  emptyState: {
+    borderRadius: 18,
+    gap: 6,
+    padding: 16,
   },
 });

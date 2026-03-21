@@ -17,6 +17,7 @@ export type ProductDetail = {
   itemCode: string;
   itemName: string;
   itemGroup: string;
+  brand: string;
   stockUom: string;
   description: string;
   imageUrl: string;
@@ -45,6 +46,8 @@ export type CreateProductPayload = {
   itemName: string;
   itemCode?: string;
   itemGroup?: string;
+  brand?: string;
+  barcode?: string;
   stockUom?: string;
   nickname?: string;
   description?: string;
@@ -60,6 +63,9 @@ export type CreateProductPayload = {
 export type SaveProductPayload = {
   itemCode: string;
   itemName?: string;
+  itemGroup?: string;
+  brand?: string;
+  barcode?: string;
   description?: string;
   nickname?: string;
   imageUrl?: string;
@@ -231,6 +237,7 @@ function mapProductRow(
     itemCode: String(data.item_code ?? data.itemCode ?? ''),
     itemName: String(data.item_name ?? data.itemName ?? data.item_code ?? ''),
     itemGroup: typeof data.item_group === 'string' ? data.item_group : '',
+    brand: typeof data.brand === 'string' ? data.brand : '',
     stockUom: typeof data.stock_uom === 'string' ? data.stock_uom : typeof data.uom === 'string' ? data.uom : '',
     description: typeof data.description === 'string' ? data.description : '',
     imageUrl:
@@ -345,6 +352,9 @@ export async function saveProductBasicInfo(payload: SaveProductPayload) {
     {
       item_code: payload.itemCode,
       item_name: payload.itemName,
+      item_group: payload.itemGroup,
+      brand: payload.brand,
+      barcode: payload.barcode,
       description: payload.description,
       nickname: payload.nickname,
       image: payload.imageUrl,
@@ -375,6 +385,8 @@ export async function createProduct(payload: CreateProductPayload) {
       item_name: payload.itemName,
       item_code: payload.itemCode,
       item_group: payload.itemGroup,
+      brand: payload.brand,
+      barcode: payload.barcode,
       stock_uom: payload.stockUom,
       nickname: payload.nickname,
       description: payload.description,

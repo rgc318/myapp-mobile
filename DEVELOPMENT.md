@@ -286,6 +286,14 @@ This round focused on turning the product detail page from a basic CRUD form int
   - UOM choices prefer the product's own `all_uoms`
   - global `UOM` options are still used as supplemental candidates
 
+- core product master data editing was expanded
+  - product detail and product create now support:
+    - item group selection
+    - brand selection
+    - primary barcode editing
+  - item group / brand now use searchable master-data pickers instead of free typing
+  - barcode remains a direct text field because it is business input rather than a shared link master
+
 - existing UOM display mapping was reused instead of duplicating new logic
   - file:
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/display-uom.ts`
@@ -320,18 +328,16 @@ This round focused on turning the product detail page from a basic CRUD form int
 
 - product detail can display UOM conversion information, but cannot yet edit conversion factors
 - product detail still does not support editing `stock_uom`
-- product create page still uses an older unit-input experience and is now behind the updated detail page
-- category / brand / barcode / variant / batch-expiry / reorder controls are still not fully integrated into the mobile product workbench
+- product create page still uses an older UOM-input experience and is now behind the updated detail page in unit handling
+- category / brand / barcode are now available in both product detail and product create
+- variant / batch-expiry / reorder controls are still not fully integrated into the mobile product workbench
 
 ### Recommended Next Steps
 
 1. align the product create page with the current detail-page UOM picker experience
-2. add structured product metadata editing for:
-   - item group
-   - brand
-   - barcode
-3. design a formal `单位与换算` module instead of only showing conversion hints
-4. evaluate product-spec / variant support for size-capacity scenarios such as `500ml / 750ml / 1L`
+2. design a formal `单位与换算` module instead of only showing conversion hints
+3. evaluate product-spec / variant support for size-capacity scenarios such as `500ml / 750ml / 1L`
+4. continue integrating ERPNext item master capabilities such as reorder, batch, and expiry controls
 
 ## Frontend Alignment Summary (2026-03-18)
 
