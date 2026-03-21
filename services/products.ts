@@ -8,6 +8,11 @@ type WarehouseStockDetail = {
   qty: number;
 };
 
+export type ProductUomConversion = {
+  uom: string;
+  conversionFactor: number | null;
+};
+
 export type ProductDetail = {
   itemCode: string;
   itemName: string;
@@ -24,6 +29,7 @@ export type ProductDetail = {
   price: number | null;
   warehouse: string;
   allUoms: string[];
+  uomConversions: ProductUomConversion[];
   wholesaleDefaultUom?: string | null;
   retailDefaultUom?: string | null;
   salesProfiles?: SalesProfile[];
@@ -111,6 +117,36 @@ function mapUomNames(value: unknown) {
       return '';
     })
     .filter(Boolean);
+}
+
+function mapUomConversions(value: unknown): ProductUomConversion[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        const uom = entry.trim();
+        return uom ? ({ uom, conversionFactor: null } satisfies ProductUomConversion) : null;
+      }
+
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const row = entry as Record<string, unknown>;
+      const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
+      if (!uom) {
+        return null;
+      }
+
+      return {
+        uom,
+        conversionFactor: toOptionalNumber(row.conversion_factor),
+      } satisfies ProductUomConversion;
+    })
+    .filter((entry): entry is ProductUomConversion => Boolean(entry));
 }
 
 function mapPriceSummary(value: unknown): PriceSummary | null {
@@ -212,6 +248,7 @@ function mapProductRow(
     price: toOptionalNumber(data.price),
     warehouse,
     allUoms: mapUomNames(data.all_uoms),
+    uomConversions: mapUomConversions(data.all_uoms),
     wholesaleDefaultUom:
       typeof data.wholesale_default_uom === 'string' ? data.wholesale_default_uom : null,
     retailDefaultUom:

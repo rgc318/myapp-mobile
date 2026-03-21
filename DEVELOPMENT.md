@@ -250,6 +250,89 @@ This round turned the mobile product flow from "search-only helper pages" into a
 - product-search page still remains the fast lookup / add-to-order tool
 - product workbench is now the management entry, not a replacement for sales-order product search
 
+## Product Detail Refinement (2026-03-22)
+
+This round focused on turning the product detail page from a basic CRUD form into a more practical mobile management page, while keeping the current backend contract unchanged.
+
+### Completed
+
+- inventory area was rebuilt around a single current-warehouse context
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+  - current page behavior now prefers:
+    - one selected warehouse
+    - one target stock input
+    - one delta preview
+  - this avoids the earlier confusion where users could see multiple warehouses and misread which warehouse the input was editing
+
+- warehouse switching was changed from inline dropdown/chip sprawl to a dedicated picker flow
+  - warehouse switching now uses a bottom-sheet style modal with:
+    - search
+    - scrollable list
+    - separation between stocked warehouses and other selectable warehouses
+  - invalid warehouse choices such as `All Warehouses` style group nodes are filtered out on the frontend
+
+- product detail inventory information was consolidated
+  - the old top-level stock summary cards were removed
+  - stock-related information is now concentrated in the `库存` module
+  - total stock, current warehouse stock, stock unit, and warehouse switching all live in one area
+
+- dangerous actions were moved away from the main edit flow
+  - enable / disable is no longer placed near common edit actions
+  - the product disable action now lives in a dedicated danger area near the bottom of the page
+
+- wholesale / retail UOM editing was upgraded from free-text input to controlled selection
+  - product detail now opens a dedicated UOM picker instead of relying on free typing
+  - UOM choices prefer the product's own `all_uoms`
+  - global `UOM` options are still used as supplemental candidates
+
+- existing UOM display mapping was reused instead of duplicating new logic
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/display-uom.ts`
+  - product detail now uses the same display mapping as the order pages
+  - examples:
+    - `Box -> 箱`
+    - `Nos -> 件`
+
+- UOM conversion data already returned by backend is now surfaced on the page
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/products.ts`
+  - product service now preserves `conversion_factor` from `all_uoms`
+  - product detail can now show business-readable conversion hints such as:
+    - `1 箱 = 12 件`
+    - `库存按 件 记账`
+
+### Clarified Product-Page Rules
+
+- product detail inventory editing remains single-warehouse adjustment
+  - one save only updates one warehouse target stock
+  - this matches the current backend `warehouse + warehouse_stock_qty` contract
+
+- stock/base UOM is not treated as the same thing as wholesale / retail default UOM
+  - stock/base UOM is the inventory bookkeeping unit
+  - wholesale / retail UOM are business-facing default transaction units
+
+- the current page intentionally weakens stock/base UOM in the visual hierarchy
+  - the field still matters for inventory reasoning
+  - but it should not dominate the business-facing product management flow
+
+### Current Boundaries After This Round
+
+- product detail can display UOM conversion information, but cannot yet edit conversion factors
+- product detail still does not support editing `stock_uom`
+- product create page still uses an older unit-input experience and is now behind the updated detail page
+- category / brand / barcode / variant / batch-expiry / reorder controls are still not fully integrated into the mobile product workbench
+
+### Recommended Next Steps
+
+1. align the product create page with the current detail-page UOM picker experience
+2. add structured product metadata editing for:
+   - item group
+   - brand
+   - barcode
+3. design a formal `单位与换算` module instead of only showing conversion hints
+4. evaluate product-spec / variant support for size-capacity scenarios such as `500ml / 750ml / 1L`
+
 ## Frontend Alignment Summary (2026-03-18)
 
 This round completed the main frontend migration for product detail and sales-order detail editing on top of the new backend v2 interfaces.

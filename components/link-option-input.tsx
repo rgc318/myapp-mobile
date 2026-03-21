@@ -29,6 +29,7 @@ export function LinkOptionInput({
   const [options, setOptions] = useState<LinkOption[]>([]);
   const [focused, setFocused] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hasTypedSinceFocus, setHasTypedSinceFocus] = useState(false);
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const dangerColor = useThemeColor({}, 'danger');
@@ -40,10 +41,11 @@ export function LinkOptionInput({
       return;
     }
 
+    const query = !hasTypedSinceFocus && value.trim() ? '' : value;
     let cancelled = false;
     const timer = setTimeout(async () => {
       setLoading(true);
-      const nextOptions = await loadOptions(value);
+      const nextOptions = await loadOptions(query);
       if (!cancelled) {
         setOptions(nextOptions);
         setLoading(false);
@@ -54,7 +56,7 @@ export function LinkOptionInput({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [focused, loadOptions, value]);
+  }, [focused, hasTypedSinceFocus, loadOptions, value]);
 
   const handleSelect = (nextValue: string) => {
     onChangeText(nextValue);
@@ -69,8 +71,14 @@ export function LinkOptionInput({
       <View style={[styles.inputWrap, focused ? styles.inputWrapActive : null]}>
         <TextInput
           autoCorrect={false}
-          onChangeText={onChangeText}
-          onFocus={() => setFocused(true)}
+          onChangeText={(nextValue) => {
+            setHasTypedSinceFocus(true);
+            onChangeText(nextValue);
+          }}
+          onFocus={() => {
+            setFocused(true);
+            setHasTypedSinceFocus(false);
+          }}
           onBlur={() => {
             setTimeout(() => setFocused(false), 120);
           }}
