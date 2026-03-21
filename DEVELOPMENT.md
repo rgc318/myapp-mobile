@@ -2820,6 +2820,44 @@ Warehouse recommendation rule:
 - real business often needs manual balancing for reserve stock, backup warehouses, activity warehouses, or partial fulfillment
 - therefore recommendation is acceptable, hard automatic warehouse allocation should not be the main behavior
 
+### Product module vs order module responsibility
+
+The product module and the order module should not use the same warehouse model.
+
+Recommended product-module responsibility:
+
+- the product module stays product-centric
+- product detail should primarily show:
+  - total stock
+  - warehouse stock distribution
+  - standard / wholesale / retail / buying price systems
+- warehouse is mainly a detail dimension inside product detail, not the primary identity of the page
+- stock operations in the product module should also stay warehouse-specific:
+  - adjust one warehouse
+  - transfer stock between warehouses
+  - add stock into a new warehouse
+
+Recommended order-module responsibility:
+
+- the order module should use `item + warehouse` split lines for execution clarity
+- the same item from warehouse A and warehouse B should be shown as two order lines
+- quantity and final rate changes always apply to the current warehouse line only
+- this model is preferred because it keeps fulfillment, rollback, and stock reasoning clear without forcing a heavy “one line with multi-warehouse allocation” editor
+
+### Warehouse price boundary
+
+Current recommendation:
+
+- warehouse-specific default selling price is not a first-class product-module feature for now
+- product prices should still primarily follow price systems:
+  - standard selling
+  - wholesale
+  - retail
+  - buying
+- if the same item later appears in two different warehouse order lines with different final prices, that difference should be handled at the order-line level instead of requiring warehouse-level default price master data
+
+This keeps the product module simpler while still allowing real transaction flexibility in the order flow.
+
 ### Customer module target
 
 The customer module should first focus on practical master-data maintenance instead of advanced CRM workflow.
