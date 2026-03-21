@@ -2,6 +2,7 @@ import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { formatDisplayUom } from '@/lib/display-uom';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getSalesModeLabel, type SalesMode } from '@/lib/sales-mode';
 
@@ -184,7 +185,7 @@ export function SalesOrderItemEditor({
             <ThemedText style={styles.itemEditLabel}>{'单位'}</ThemedText>
             <View style={styles.uomDisplayWrap}>
               <ThemedText style={styles.uomDisplayText} type="defaultSemiBold">
-                {uom || '未设置'}
+                {uom ? formatDisplayUom(uom) : '未设置'}
               </ThemedText>
             </View>
           </View>

@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { formatDisplayUom } from '@/lib/display-uom';
 import type { SalesInvoiceDetailV2 } from '@/services/sales';
 
 function formatCurrency(value: number | null | undefined, currency = 'CNY') {
@@ -100,7 +101,7 @@ export function SalesInvoiceSheet({ detail }: { detail: SalesInvoiceDetailV2 }) 
             </ThemedText>
             <ThemedText style={styles.itemMeta}>{item.itemCode}</ThemedText>
           </View>
-          <ThemedText style={styles.tableCell}>{`${item.qty ?? '—'} ${item.uom || ''}`}</ThemedText>
+          <ThemedText style={styles.tableCell}>{`${item.qty ?? '—'} ${item.uom ? formatDisplayUom(item.uom) : ''}`}</ThemedText>
           <ThemedText style={styles.tableCell}>{formatCurrency(item.rate, detail.currency)}</ThemedText>
           <ThemedText style={[styles.tableCell, styles.tableCellAmount]}>
             {formatCurrency(item.amount, detail.currency)}

@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } fro
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { normalizeAppError } from '@/lib/app-error';
+import { formatDisplayUom } from '@/lib/display-uom';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
   cancelDeliveryNoteV2,
@@ -378,7 +379,7 @@ export default function SalesDeliveryCreateScreen() {
                       </ThemedText>
                       <ThemedText style={styles.itemMeta}>{item.warehouse || '未配置仓库'}</ThemedText>
                       <ThemedText style={styles.itemFormula}>
-                        {formatCurrency(item.rate, orderDetail.currency)} x {item.qty ?? '—'} {item.uom || ''}
+                        {formatCurrency(item.rate, orderDetail.currency)} x {item.qty ?? '—'} {item.uom ? formatDisplayUom(item.uom) : ''}
                       </ThemedText>
                     </View>
                     <ThemedText style={styles.itemAmount} type="defaultSemiBold">
@@ -597,7 +598,7 @@ export default function SalesDeliveryCreateScreen() {
                     {item.warehouse || '未配置仓库'}
                   </ThemedText>
                   <ThemedText style={styles.itemFormula}>
-                    {formatCurrency(item.rate, detail.currency)} x {item.qty ?? '—'} {item.uom || ''}
+                    {formatCurrency(item.rate, detail.currency)} x {item.qty ?? '—'} {item.uom ? formatDisplayUom(item.uom) : ''}
                   </ThemedText>
                 </View>
                 <ThemedText style={styles.itemAmount} type="defaultSemiBold">
