@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '@/lib/api-client';
 import { compactAddressText } from '@/lib/form-utils';
+import type { PriceSummary, SalesMode, SalesProfile } from '@/lib/sales-mode';
 import {
   createSalesOrderV2,
   quickCreateSalesOrderV2,
@@ -11,6 +12,7 @@ export type CreateSalesOrderPayload = {
   customer: string;
   company: string;
   items: SalesOrderItemInput[];
+  defaultSalesMode?: SalesMode;
   force_delivery?: boolean;
   transaction_date?: string;
   remarks?: string;
@@ -42,6 +44,7 @@ export type SalesOrderDetailV2 = {
   paymentStatus: string;
   completionStatus: string;
   deliveryDate: string;
+  defaultSalesMode: SalesMode;
   remarks: string;
   contactPerson: string;
   contactDisplay: string;
@@ -72,6 +75,13 @@ export type SalesOrderDetailV2 = {
     amount: number | null;
     warehouse: string;
     uom: string;
+    salesMode: SalesMode;
+    allUoms?: string[];
+    stockUom?: string | null;
+    wholesaleDefaultUom?: string | null;
+    retailDefaultUom?: string | null;
+    salesProfiles?: SalesProfile[];
+    priceSummary?: PriceSummary | null;
     imageUrl: string;
   }[];
 };
@@ -159,6 +169,7 @@ export type SalesInvoiceDetailV2 = {
 
 export type UpdateSalesOrderPayload = {
   orderName: string;
+  defaultSalesMode?: SalesMode;
   deliveryDate?: string;
   remarks?: string;
   contactPerson?: string;
@@ -177,6 +188,7 @@ export type UpdateSalesOrderItemsPayload = {
     price?: number | null;
     warehouse?: string;
     uom?: string;
+    salesMode?: SalesMode;
   }[];
 };
 
@@ -226,11 +238,17 @@ export function companyExists(company: string) {
 }
 
 export function submitSalesOrderV2(payload: CreateSalesOrderPayload) {
-  return createSalesOrderV2(payload);
+  return createSalesOrderV2({
+    ...payload,
+    default_sales_mode: payload.defaultSalesMode,
+  });
 }
 
 export function submitQuickSalesOrderV2(payload: CreateSalesOrderPayload) {
-  return quickCreateSalesOrderV2(payload);
+  return quickCreateSalesOrderV2({
+    ...payload,
+    default_sales_mode: payload.defaultSalesMode,
+  });
 }
 
 function normalizeShippingText(value: unknown) {
@@ -361,6 +379,7 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
     paymentStatus: String(payment.status ?? ''),
     completionStatus: String(data.completion?.status ?? ''),
     deliveryDate: String(meta.delivery_date ?? ''),
+    defaultSalesMode: meta.default_sales_mode === 'retail' ? 'retail' : 'wholesale',
     remarks: String(meta.remarks ?? ''),
     contactPerson: shippingSnapshot.contactPerson,
     contactDisplay: shippingSnapshot.contactDisplay,
@@ -402,6 +421,66 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
             : null,
       warehouse: String(item.warehouse ?? ''),
       uom: String(item.uom ?? ''),
+      salesMode: item.sales_mode === 'retail' ? 'retail' : 'wholesale',
+      allUoms: Array.isArray(item.all_uoms)
+        ? item.all_uoms
+            .map((value: unknown) => {
+              if (typeof value === 'string') {
+                return value;
+              }
+              if (value && typeof value === 'object') {
+                return typeof (value as Record<string, unknown>).uom === 'string'
+                  ? String((value as Record<string, unknown>).uom)
+                  : '';
+              }
+              return '';
+            })
+            .filter(Boolean)
+        : [],
+      stockUom: typeof item.stock_uom === 'string' ? item.stock_uom : null,
+      wholesaleDefaultUom:
+        typeof item.wholesale_default_uom === 'string' ? item.wholesale_default_uom : null,
+      retailDefaultUom:
+        typeof item.retail_default_uom === 'string' ? item.retail_default_uom : null,
+      salesProfiles: Array.isArray(item.sales_profiles)
+        ? item.sales_profiles
+            .map((value: unknown) => {
+              if (!value || typeof value !== 'object') {
+                return null;
+              }
+              const row = value as Record<string, unknown>;
+              const modeCode =
+                row.mode_code === 'retail'
+                  ? 'retail'
+                  : row.mode_code === 'wholesale'
+                    ? 'wholesale'
+                    : null;
+              if (!modeCode) {
+                return null;
+              }
+              return {
+                modeCode,
+                priceList: typeof row.price_list === 'string' ? row.price_list : null,
+                defaultUom: typeof row.default_uom === 'string' ? row.default_uom : null,
+              } satisfies SalesProfile;
+            })
+            .filter((entry: SalesProfile | null): entry is SalesProfile => Boolean(entry))
+        : [],
+      priceSummary:
+        item.price_summary && typeof item.price_summary === 'object'
+          ? {
+              currentPriceList:
+                typeof (item.price_summary as Record<string, unknown>).current_price_list === 'string'
+                  ? String((item.price_summary as Record<string, unknown>).current_price_list)
+                  : null,
+              currentRate: toOptionalNumber((item.price_summary as Record<string, unknown>).current_rate),
+              standardSellingRate: toOptionalNumber((item.price_summary as Record<string, unknown>).standard_selling_rate),
+              wholesaleRate: toOptionalNumber((item.price_summary as Record<string, unknown>).wholesale_rate),
+              retailRate: toOptionalNumber((item.price_summary as Record<string, unknown>).retail_rate),
+              standardBuyingRate: toOptionalNumber((item.price_summary as Record<string, unknown>).standard_buying_rate),
+              valuationRate: toOptionalNumber((item.price_summary as Record<string, unknown>).valuation_rate),
+            }
+          : null,
       imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
     })),
   };
@@ -412,6 +491,7 @@ export async function updateSalesOrderV2(
 ): Promise<SalesOrderDetailV2 | null> {
   await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.update_order_v2', {
     order_name: payload.orderName,
+    default_sales_mode: payload.defaultSalesMode,
     delivery_date: payload.deliveryDate,
     remarks: payload.remarks,
     customer_info: {
@@ -440,6 +520,7 @@ export async function updateSalesOrderItemsV2(payload: UpdateSalesOrderItemsPayl
       price: item.price,
       warehouse: item.warehouse,
       uom: item.uom,
+      sales_mode: item.salesMode,
     })),
   });
 

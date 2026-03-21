@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '@/lib/api-client';
 import { compactAddressText } from '@/lib/form-utils';
+import type { PriceSummary, SalesMode, SalesProfile } from '@/lib/sales-mode';
 
 export type ProductSearchItem = {
   itemCode: string;
@@ -7,6 +8,12 @@ export type ProductSearchItem = {
   stockQty: number | null;
   price: number | null;
   uom: string | null;
+  stockUom?: string | null;
+  allUoms?: string[];
+  wholesaleDefaultUom?: string | null;
+  retailDefaultUom?: string | null;
+  salesProfiles?: SalesProfile[];
+  priceSummary?: PriceSummary | null;
   warehouse: string | null;
   imageUrl?: string | null;
   description?: string | null;
@@ -19,6 +26,7 @@ export type SalesOrderItemInput = {
   price?: number;
   warehouse?: string;
   uom?: string;
+  sales_mode?: SalesMode;
 };
 
 export type CustomerSalesContext = {
@@ -63,6 +71,7 @@ export type SalesOrderV2Input = {
   items: SalesOrderItemInput[];
   immediate?: boolean;
   force_delivery?: boolean;
+  default_sales_mode?: SalesMode;
   transaction_date?: string;
   remarks?: string;
   customer_info?: {
@@ -116,6 +125,66 @@ function toOptionalNumber(value: unknown) {
   return null;
 }
 
+function mapUomNames(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  return value
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return entry.trim();
+      }
+      if (entry && typeof entry === 'object') {
+        const row = entry as Record<string, unknown>;
+        return typeof row.uom === 'string' ? row.uom.trim() : '';
+      }
+      return '';
+    })
+    .filter(Boolean);
+}
+
+function mapPriceSummary(value: unknown): PriceSummary | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const row = value as Record<string, unknown>;
+  return {
+    currentPriceList: typeof row.current_price_list === 'string' ? row.current_price_list : null,
+    currentRate: toOptionalNumber(row.current_rate),
+    standardSellingRate: toOptionalNumber(row.standard_selling_rate),
+    wholesaleRate: toOptionalNumber(row.wholesale_rate),
+    retailRate: toOptionalNumber(row.retail_rate),
+    standardBuyingRate: toOptionalNumber(row.standard_buying_rate),
+    valuationRate: toOptionalNumber(row.valuation_rate),
+  };
+}
+
+function mapSalesProfiles(value: unknown): SalesProfile[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+      const row = entry as Record<string, unknown>;
+      const modeCode = row.mode_code === 'retail' ? 'retail' : row.mode_code === 'wholesale' ? 'wholesale' : null;
+      if (!modeCode) {
+        return null;
+      }
+      return {
+        modeCode,
+        priceList: typeof row.price_list === 'string' ? row.price_list : null,
+        defaultUom: typeof row.default_uom === 'string' ? row.default_uom : null,
+      } satisfies SalesProfile;
+    })
+    .filter((entry): entry is SalesProfile => Boolean(entry));
+}
+
 async function postGateway<T>(method: string, payload: Record<string, unknown>) {
   return callGatewayMethod<T>(method, payload);
 }
@@ -155,6 +224,14 @@ export async function searchProducts(
         null,
       price: toOptionalNumber(row.price) ?? toOptionalNumber(row.rate) ?? null,
       uom: typeof row.uom === 'string' ? row.uom : null,
+      stockUom: typeof row.stock_uom === 'string' ? row.stock_uom : null,
+      allUoms: mapUomNames(row.all_uoms),
+      wholesaleDefaultUom:
+        typeof row.wholesale_default_uom === 'string' ? row.wholesale_default_uom : null,
+      retailDefaultUom:
+        typeof row.retail_default_uom === 'string' ? row.retail_default_uom : null,
+      salesProfiles: mapSalesProfiles(row.sales_profiles),
+      priceSummary: mapPriceSummary(row.price_summary),
       warehouse:
         typeof row.warehouse === 'string' && row.warehouse.trim()
           ? row.warehouse
@@ -199,6 +276,7 @@ export async function createSalesOrderV2(payload: SalesOrderV2Input) {
     items: payload.items,
     immediate: payload.immediate ?? false,
     force_delivery: payload.force_delivery ? 1 : 0,
+    default_sales_mode: payload.default_sales_mode,
     transaction_date: payload.transaction_date,
     remarks: payload.remarks,
     customer_info: payload.customer_info,
@@ -213,6 +291,7 @@ export async function quickCreateSalesOrderV2(payload: SalesOrderV2Input) {
     company: payload.company,
     items: payload.items,
     force_delivery: payload.force_delivery ? 1 : 0,
+    default_sales_mode: payload.default_sales_mode,
     transaction_date: payload.transaction_date,
     remarks: payload.remarks,
     customer_info: payload.customer_info,

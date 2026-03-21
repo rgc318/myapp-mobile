@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 
+import type { PriceSummary, SalesMode, SalesProfile } from '@/lib/sales-mode';
+import { buildModeDefaults, normalizeSalesMode } from '@/lib/sales-mode';
 import type { ProductSearchItem } from '@/services/gateway';
 
 export type SalesOrderDraftItem = {
@@ -10,12 +12,20 @@ export type SalesOrderDraftItem = {
   qty: number;
   price: number | null;
   uom: string | null;
+  salesMode?: SalesMode;
+  allUoms?: string[];
+  stockUom?: string | null;
+  wholesaleDefaultUom?: string | null;
+  retailDefaultUom?: string | null;
+  salesProfiles?: SalesProfile[];
+  priceSummary?: PriceSummary | null;
   warehouse: string | null;
 };
 
 export type SalesOrderDraftForm = {
   customer: string;
   company: string;
+  defaultSalesMode: SalesMode;
   remarks: string;
   shippingAddress: string;
   shippingContact: string;
@@ -41,15 +51,30 @@ function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
   const itemCode = typeof item.itemCode === 'string' ? item.itemCode : '';
   const warehouse = typeof item.warehouse === 'string' ? item.warehouse : null;
   const uom = typeof item.uom === 'string' ? item.uom : null;
+  const canonicalDraftKey = buildDraftKey({ itemCode, warehouse, uom });
 
   return {
-    draftKey: typeof item.draftKey === 'string' && item.draftKey ? item.draftKey : buildDraftKey({ itemCode, warehouse, uom }),
+    draftKey: canonicalDraftKey,
     itemCode,
     itemName: typeof item.itemName === 'string' ? item.itemName : itemCode,
     imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
     qty: typeof item.qty === 'number' && Number.isFinite(item.qty) ? item.qty : 1,
     price: typeof item.price === 'number' && Number.isFinite(item.price) ? item.price : null,
     uom,
+    salesMode: normalizeSalesMode(item.salesMode),
+    allUoms: Array.isArray(item.allUoms)
+      ? item.allUoms.map((value) => (typeof value === 'string' ? value : '')).filter(Boolean)
+      : [],
+    stockUom: typeof item.stockUom === 'string' ? item.stockUom : null,
+    wholesaleDefaultUom:
+      typeof item.wholesaleDefaultUom === 'string' ? item.wholesaleDefaultUom : null,
+    retailDefaultUom:
+      typeof item.retailDefaultUom === 'string' ? item.retailDefaultUom : null,
+    salesProfiles: Array.isArray(item.salesProfiles) ? item.salesProfiles : [],
+    priceSummary:
+      item.priceSummary && typeof item.priceSummary === 'object'
+        ? (item.priceSummary as PriceSummary)
+        : null,
     warehouse,
   } satisfies SalesOrderDraftItem;
 }
@@ -74,6 +99,9 @@ export function getSalesOrderDraft(scope?: string) {
   const normalizedScope = getScope(scope);
 
   if (memoryDraftByScope[normalizedScope]?.length) {
+    memoryDraftByScope[normalizedScope] = memoryDraftByScope[normalizedScope]
+      .map((item) => normalizeDraftItem(item))
+      .filter((item) => item.itemCode);
     return memoryDraftByScope[normalizedScope];
   }
 
@@ -93,13 +121,18 @@ export function getSalesOrderDraft(scope?: string) {
     }
   }
 
-  return memoryDraftByScope[normalizedScope] ?? [];
+  memoryDraftByScope[normalizedScope] = (memoryDraftByScope[normalizedScope] ?? [])
+    .map((item) => normalizeDraftItem(item))
+    .filter((item) => item.itemCode);
+
+  return memoryDraftByScope[normalizedScope];
 }
 
 function normalizeDraftForm(value: Partial<SalesOrderDraftForm> | null | undefined): SalesOrderDraftForm {
   return {
     customer: typeof value?.customer === 'string' ? value.customer : '',
     company: typeof value?.company === 'string' ? value.company : '',
+    defaultSalesMode: normalizeSalesMode(value?.defaultSalesMode),
     remarks: typeof value?.remarks === 'string' ? value.remarks : '',
     shippingAddress: typeof value?.shippingAddress === 'string' ? value.shippingAddress : '',
     shippingContact: typeof value?.shippingContact === 'string' ? value.shippingContact : '',
@@ -165,12 +198,30 @@ export function updateSalesOrderDraftForm(
   return nextDraftForm;
 }
 
-export function addItemToSalesOrderDraft(item: ProductSearchItem, scope?: string) {
+export function addItemToSalesOrderDraft(
+  item: ProductSearchItem,
+  scope?: string,
+  options?: { defaultSalesMode?: SalesMode },
+) {
   const current = [...getSalesOrderDraft(scope)];
+  const defaultSalesMode = options?.defaultSalesMode ?? getSalesOrderDraftForm(scope).defaultSalesMode;
+  const defaults = buildModeDefaults(
+    {
+      salesProfiles: item.salesProfiles,
+      wholesaleDefaultUom: item.wholesaleDefaultUom,
+      retailDefaultUom: item.retailDefaultUom,
+      allUoms: item.allUoms,
+      stockUom: item.stockUom,
+      uom: item.uom,
+      priceSummary: item.priceSummary,
+      price: item.price,
+    },
+    defaultSalesMode,
+  );
   const draftKey = buildDraftKey({
     itemCode: item.itemCode,
     warehouse: item.warehouse,
-    uom: item.uom,
+    uom: defaults.uom || item.uom,
   });
   const existing = current.find((entry) => entry.draftKey === draftKey);
 
@@ -189,8 +240,15 @@ export function addItemToSalesOrderDraft(item: ProductSearchItem, scope?: string
     itemName: item.itemName,
     imageUrl: item.imageUrl ?? null,
     qty: 1,
-    price: item.price,
-    uom: item.uom,
+    price: defaults.price,
+    uom: defaults.uom || item.uom,
+    salesMode: defaults.salesMode,
+    allUoms: item.allUoms ?? [],
+    stockUom: item.stockUom ?? null,
+    wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
+    retailDefaultUom: item.retailDefaultUom ?? null,
+    salesProfiles: item.salesProfiles ?? [],
+    priceSummary: item.priceSummary ?? null,
     warehouse: item.warehouse,
   });
   persistDraft(current, scope);
@@ -205,7 +263,17 @@ export function restoreSalesOrderDraftItem(item: SalesOrderDraftItem, scope?: st
   if (existingIndex >= 0) {
     current[existingIndex] = normalized;
   } else {
-    current.push(normalized);
+    const legacyIndex = current.findIndex(
+      (entry) =>
+        entry.itemCode === normalized.itemCode &&
+        (entry.warehouse ?? '') === (normalized.warehouse ?? ''),
+    );
+
+    if (legacyIndex >= 0) {
+      current[legacyIndex] = normalized;
+    } else {
+      current.push(normalized);
+    }
   }
 
   persistDraft(current, scope);
@@ -232,10 +300,16 @@ export function updateSalesOrderDraftField(
     }
 
     if (field === 'price') {
-      return { ...item, price: typeof value === 'number' ? value : value === null ? null : Number(value) || 0 };
+      return normalizeDraftItem({
+        ...item,
+        price: typeof value === 'number' ? value : value === null ? null : Number(value) || 0,
+      });
     }
 
-    return { ...item, warehouse: typeof value === 'string' ? value : null };
+    return normalizeDraftItem({
+      ...item,
+      warehouse: typeof value === 'string' ? value : null,
+    });
   });
   persistDraft(current, scope);
   return current;

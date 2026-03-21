@@ -11,9 +11,11 @@ import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { normalizeText, toOptionalText } from '@/lib/form-utils';
+import { buildModeDefaults, normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
 import {
   addItemToSalesOrderDraft,
   getSalesOrderDraft,
+  getSalesOrderDraftForm,
   removeSalesOrderDraftItem,
   updateSalesOrderDraftQty,
   type SalesOrderDraftItem,
@@ -21,13 +23,40 @@ import {
 import { useFeedback } from '@/providers/feedback-provider';
 import { createProductAndStock, searchCatalogProducts, type ProductSearchItem } from '@/services/products';
 
-function getProductResultKey(item: ProductSearchItem) {
-  return [item.itemCode, item.warehouse ?? '', item.uom ?? ''].join('::');
+function getProductResultKey(item: ProductSearchItem, defaultSalesMode?: SalesMode) {
+  const defaults =
+    defaultSalesMode
+      ? buildModeDefaults(
+          {
+            salesProfiles: item.salesProfiles,
+            wholesaleDefaultUom: item.wholesaleDefaultUom,
+            retailDefaultUom: item.retailDefaultUom,
+            allUoms: item.allUoms,
+            stockUom: item.stockUom,
+            uom: item.uom,
+            priceSummary: item.priceSummary,
+            price: item.price,
+          },
+          defaultSalesMode,
+        )
+      : null;
+
+  return [item.itemCode, item.warehouse ?? '', defaults?.uom || item.uom || ''].join('::');
 }
 
-function getDraftItem(item: ProductSearchItem, draftItems: SalesOrderDraftItem[]) {
-  const key = getProductResultKey(item);
+function getDraftItem(item: ProductSearchItem, draftItems: SalesOrderDraftItem[], defaultSalesMode?: SalesMode) {
+  const key = getProductResultKey(item, defaultSalesMode);
   return draftItems.find((draftItem) => draftItem.draftKey === key) ?? null;
+}
+
+function formatModePriceReference(
+  label: string,
+  rate: number | null | undefined,
+  uom: string | null | undefined,
+) {
+  const priceText = typeof rate === 'number' ? `¥ ${rate}` : '未配置';
+  const uomText = uom ? formatDisplayUom(uom) : '未设置单位';
+  return `${label} ${priceText} / ${uomText}`;
 }
 
 function ResultRow({
@@ -75,7 +104,15 @@ function ResultRow({
 
         <View style={styles.resultStats}>
           <ThemedText style={styles.statText}>{'库存：'} {item.stockQty ?? '-'}</ThemedText>
-          <ThemedText style={styles.statText}>{'价格：'} {item.price ?? '-'}</ThemedText>
+        </View>
+
+        <View style={styles.modePriceStack}>
+          <ThemedText style={styles.modePriceText}>
+            {formatModePriceReference('批发', item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
+          </ThemedText>
+          <ThemedText style={styles.modePriceText}>
+            {formatModePriceReference('零售', item.priceSummary?.retailRate, item.retailDefaultUom)}
+          </ThemedText>
         </View>
 
         <ThemedText style={styles.resultMeta}>{item.warehouse || '未指定仓库'}</ThemedText>
@@ -163,6 +200,12 @@ function DraftItemRow({
           编码 {item.itemCode}
         </ThemedText>
         <ThemedText style={styles.draftItemMeta}>
+          {formatModePriceReference('批发', item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
+        </ThemedText>
+        <ThemedText style={styles.draftItemMeta}>
+          {formatModePriceReference('零售', item.priceSummary?.retailRate, item.retailDefaultUom)}
+        </ThemedText>
+        <ThemedText style={styles.draftItemMeta}>
           {item.warehouse || '未指定仓库'}
         </ThemedText>
       </View>
@@ -196,6 +239,7 @@ export default function ProductSearchScreen() {
     query?: string;
     draftScope?: string;
     returnOrderName?: string;
+    defaultSalesMode?: string;
   }>();
   const preferences = getAppPreferences();
   const { showError, showSuccess } = useFeedback();
@@ -210,6 +254,15 @@ export default function ProductSearchScreen() {
   const isOrderMode = mode === 'order';
   const draftScope = typeof params.draftScope === 'string' ? params.draftScope : undefined;
   const returnOrderName = typeof params.returnOrderName === 'string' ? params.returnOrderName : '';
+  const defaultSalesMode = useMemo<SalesMode>(
+    () =>
+      normalizeSalesMode(
+        typeof params.defaultSalesMode === 'string'
+          ? params.defaultSalesMode
+          : getSalesOrderDraftForm(draftScope).defaultSalesMode,
+      ),
+    [draftScope, params.defaultSalesMode],
+  );
   const [draftItems, setDraftItems] = useState(() => getSalesOrderDraft(draftScope));
   const [showDraftSheet, setShowDraftSheet] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -266,9 +319,9 @@ export default function ProductSearchScreen() {
   };
 
   const handleAdd = (item: ProductSearchItem) => {
-    addItemToSalesOrderDraft(item, draftScope);
+    addItemToSalesOrderDraft(item, draftScope, { defaultSalesMode });
     const nextDraft = getSalesOrderDraft(draftScope);
-    const nextQty = getDraftItem(item, nextDraft)?.qty ?? 0;
+    const nextQty = getDraftItem(item, nextDraft, defaultSalesMode)?.qty ?? 0;
     setDraftItems([...nextDraft]);
     setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u52a0\u5165\u8ba2\u5355\uff0c\u5f53\u524d\u5df2\u9009 ${nextQty} \u4ef6\u3002`);
     showSuccess(`已将 ${item.itemName || item.itemCode} 加入订单`);
@@ -337,7 +390,7 @@ export default function ProductSearchScreen() {
   };
 
   const handleDecrease = (item: ProductSearchItem) => {
-    const draftItem = getDraftItem(item, getSalesOrderDraft(draftScope));
+    const draftItem = getDraftItem(item, getSalesOrderDraft(draftScope), defaultSalesMode);
     if (!draftItem) {
       return;
     }
@@ -351,7 +404,7 @@ export default function ProductSearchScreen() {
 
     updateSalesOrderDraftQty(draftItem.draftKey, draftItem.qty - 1, draftScope);
     const nextDraft = getSalesOrderDraft(draftScope);
-    const nextQty = getDraftItem(item, nextDraft)?.qty ?? 0;
+    const nextQty = getDraftItem(item, nextDraft, defaultSalesMode)?.qty ?? 0;
     setDraftItems([...nextDraft]);
     setMessage(`\u5df2\u8c03\u6574 ${item.itemName || item.itemCode} \u6570\u91cf\uff0c\u5f53\u524d\u4e3a ${nextQty} \u4ef6\u3002`);
   };
@@ -480,7 +533,7 @@ export default function ProductSearchScreen() {
             onAdd={handleAdd}
             onDecrease={handleDecrease}
             onOpenDetail={handleOpenDetail}
-            selectedQty={getDraftItem(item, draftItems)?.qty ?? 0}
+            selectedQty={getDraftItem(item, draftItems, defaultSalesMode)?.qty ?? 0}
           />
         ))}
 
@@ -755,6 +808,13 @@ const styles = StyleSheet.create({
   },
   statText: {
     opacity: 0.8,
+  },
+  modePriceStack: {
+    gap: 2,
+  },
+  modePriceText: {
+    color: '#475569',
+    fontSize: 12,
   },
   selectedRow: {
     marginTop: 2,

@@ -11,6 +11,7 @@ import { normalizeAppError } from '@/lib/app-error';
 import { formatCurrencyValue } from '@/lib/display-currency';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { getPaymentResultHandoff, type PaymentResultHandoff } from '@/lib/payment-result-handoff';
+import { buildModeDefaults, getSalesModeLabel, normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -35,6 +36,20 @@ type EditableOrderItem = {
   amount: number | null;
   warehouse: string;
   uom: string;
+  salesMode: SalesMode;
+  stockUom?: string | null;
+  wholesaleDefaultUom?: string | null;
+  retailDefaultUom?: string | null;
+  salesProfiles?: { modeCode: SalesMode; priceList?: string | null; defaultUom?: string | null }[];
+  priceSummary?: {
+    currentPriceList?: string | null;
+    currentRate?: number | null;
+    standardSellingRate?: number | null;
+    wholesaleRate?: number | null;
+    retailRate?: number | null;
+    standardBuyingRate?: number | null;
+    valuationRate?: number | null;
+  } | null;
   imageUrl: string;
 };
 
@@ -84,12 +99,56 @@ function HighlightedDialogMessage({
   );
 }
 
+function SalesModeSwitch({
+  value,
+  onChange,
+}: {
+  value: SalesMode;
+  onChange: (mode: SalesMode) => void;
+}) {
+  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const tintColor = useThemeColor({}, 'tint');
+
+  return (
+    <View style={[styles.salesModeSwitch, { backgroundColor: surfaceMuted }]}>
+      {(['wholesale', 'retail'] as SalesMode[]).map((mode) => {
+        const active = mode === value;
+        return (
+          <Pressable
+            key={mode}
+            onPress={() => onChange(mode)}
+            style={[
+              styles.salesModeSwitchOption,
+              active && { backgroundColor: '#FFFFFF', borderColor: tintColor },
+            ]}>
+            <ThemedText
+              style={[styles.salesModeSwitchText, active && { color: tintColor }]}
+              type="defaultSemiBold">
+              {getSalesModeLabel(mode)}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function formatModeReference(
+  label: string,
+  rate: number | null | undefined,
+  uom: string | null | undefined,
+  currency: string,
+) {
+  return `${label} ${formatCurrencyValue(rate ?? null, currency)} / ${uom ? formatDisplayUom(uom) : '未设置单位'}`;
+}
+
 function EditableSalesItemRow({
   item,
   currency,
   surface,
   surfaceMuted,
   tintColor,
+  onChangeSalesMode,
   onChangePrice,
   onChangeQty,
   onDecreaseQty,
@@ -103,6 +162,7 @@ function EditableSalesItemRow({
   surface: string;
   surfaceMuted: string;
   tintColor: string;
+  onChangeSalesMode: (value: SalesMode) => void;
   onChangePrice: (value: string) => void;
   onChangeQty: (value: string) => void;
   onDecreaseQty: () => void;
@@ -147,6 +207,28 @@ function EditableSalesItemRow({
         </View>
 
         <View style={styles.editItemControls}>
+          <View style={styles.editItemModeBlock}>
+            <ThemedText style={styles.inlineFieldLabel}>销售模式</ThemedText>
+            <SalesModeSwitch onChange={onChangeSalesMode} value={item.salesMode} />
+            <View style={styles.editItemModeReferences}>
+              <ThemedText style={styles.editItemModeReferenceText}>
+                {formatModeReference(
+                  '批发',
+                  item.priceSummary?.wholesaleRate ?? null,
+                  item.wholesaleDefaultUom,
+                  currency,
+                )}
+              </ThemedText>
+              <ThemedText style={styles.editItemModeReferenceText}>
+                {formatModeReference(
+                  '零售',
+                  item.priceSummary?.retailRate ?? null,
+                  item.retailDefaultUom,
+                  currency,
+                )}
+              </ThemedText>
+            </View>
+          </View>
           <View style={styles.editItemControlRow}>
             <View style={[styles.inlineField, styles.qtyField, { backgroundColor: surfaceMuted }]}>
               <ThemedText style={styles.inlineFieldLabel}>数量</ThemedText>
@@ -390,6 +472,7 @@ export default function SalesOrderDetailScreen() {
   const [remarksInput, setRemarksInput] = useState('');
   const [editableItems, setEditableItems] = useState<EditableOrderItem[]>([]);
   const [itemUomOptions, setItemUomOptions] = useState<Record<string, string[]>>({});
+  const [itemModeDefaults, setItemModeDefaults] = useState<Record<string, Partial<EditableOrderItem>>>({});
   const [centerDialog, setCenterDialog] = useState<CenterDialogState>(null);
   const [recentPaymentNotice, setRecentPaymentNotice] = useState<PaymentResultHandoff | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -427,6 +510,12 @@ export default function SalesOrderDetailScreen() {
             amount: item.amount,
             warehouse: item.warehouse,
             uom: item.uom,
+            salesMode: normalizeSalesMode(item.salesMode),
+            stockUom: item.stockUom ?? null,
+            wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
+            retailDefaultUom: item.retailDefaultUom ?? null,
+            salesProfiles: item.salesProfiles ?? [],
+            priceSummary: item.priceSummary ?? null,
             imageUrl: item.imageUrl,
           })) ?? [];
         const nextEditableItems = scopedDraft.length
@@ -438,6 +527,12 @@ export default function SalesOrderDetailScreen() {
               amount: (item.price ?? 0) * item.qty,
               warehouse: item.warehouse ?? '',
               uom: item.uom ?? '',
+              salesMode: normalizeSalesMode(item.salesMode),
+              stockUom: item.stockUom ?? null,
+              wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
+              retailDefaultUom: item.retailDefaultUom ?? null,
+              salesProfiles: item.salesProfiles ?? [],
+              priceSummary: item.priceSummary ?? null,
               imageUrl: item.imageUrl ?? '',
             }))
           : detailItems;
@@ -489,6 +584,12 @@ export default function SalesOrderDetailScreen() {
         amount: (item.price ?? 0) * item.qty,
         warehouse: item.warehouse ?? '',
         uom: item.uom ?? '',
+        salesMode: normalizeSalesMode(item.salesMode),
+        stockUom: item.stockUom ?? null,
+        wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
+        retailDefaultUom: item.retailDefaultUom ?? null,
+        salesProfiles: item.salesProfiles ?? [],
+        priceSummary: item.priceSummary ?? null,
         imageUrl: item.imageUrl ?? '',
       })),
     );
@@ -529,9 +630,19 @@ export default function SalesOrderDetailScreen() {
               ? [productDetail.stockUom]
               : fallbackUoms;
 
-          return [itemCode, Array.from(new Set(allUoms.filter(Boolean)))] as const;
+          return [
+            itemCode,
+            {
+              allUoms: Array.from(new Set(allUoms.filter(Boolean))),
+              stockUom: productDetail?.stockUom ?? null,
+              wholesaleDefaultUom: productDetail?.wholesaleDefaultUom ?? null,
+              retailDefaultUom: productDetail?.retailDefaultUom ?? null,
+              salesProfiles: productDetail?.salesProfiles ?? [],
+              priceSummary: productDetail?.priceSummary ?? null,
+            },
+          ] as const;
         } catch {
-          return [itemCode, []] as const;
+          return [itemCode, { allUoms: [] }] as const;
         }
       }),
     ).then((entries) => {
@@ -541,8 +652,21 @@ export default function SalesOrderDetailScreen() {
 
       setItemUomOptions((current) => {
         const next = { ...current };
-        for (const [itemCode, allUoms] of entries) {
-          next[itemCode] = allUoms;
+        for (const [itemCode, config] of entries) {
+          next[itemCode] = config.allUoms;
+        }
+        return next;
+      });
+      setItemModeDefaults((current) => {
+        const next = { ...current };
+        for (const [itemCode, config] of entries) {
+          next[itemCode] = {
+            stockUom: config.stockUom ?? null,
+            wholesaleDefaultUom: config.wholesaleDefaultUom ?? null,
+            retailDefaultUom: config.retailDefaultUom ?? null,
+            salesProfiles: config.salesProfiles ?? [],
+            priceSummary: config.priceSummary ?? null,
+          };
         }
         return next;
       });
@@ -763,6 +887,13 @@ export default function SalesOrderDetailScreen() {
         warehouse: item.warehouse,
         uom: item.uom,
         imageUrl: item.imageUrl,
+        salesMode: normalizeSalesMode(item.salesMode),
+        allUoms: item.allUoms,
+        stockUom: item.stockUom,
+        wholesaleDefaultUom: item.wholesaleDefaultUom,
+        retailDefaultUom: item.retailDefaultUom,
+        salesProfiles: item.salesProfiles,
+        priceSummary: item.priceSummary,
       })) ?? [];
 
     setDeliveryDateInput(baseDetail?.deliveryDate ?? '');
@@ -788,6 +919,30 @@ export default function SalesOrderDetailScreen() {
     );
   }
 
+  function applyEditableItemSalesMode(index: number, nextMode: SalesMode) {
+    setEditableItems((current) =>
+      current.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+
+        const defaults = buildModeDefaults(
+          {
+            ...item,
+            ...(itemModeDefaults[item.itemCode] ?? {}),
+          },
+          nextMode,
+        );
+
+        return {
+          ...item,
+          ...defaults,
+          amount: (defaults.rate ?? item.rate ?? 0) * item.qty,
+        };
+      }),
+    );
+  }
+
   function removeEditableItem(index: number) {
     setEditableItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
@@ -803,6 +958,13 @@ export default function SalesOrderDetailScreen() {
         price: item.rate,
         uom: item.uom,
         warehouse: item.warehouse,
+        salesMode: item.salesMode,
+        allUoms: item.allUoms,
+        stockUom: item.stockUom,
+        wholesaleDefaultUom: item.wholesaleDefaultUom,
+        retailDefaultUom: item.retailDefaultUom,
+        salesProfiles: item.salesProfiles,
+        priceSummary: item.priceSummary,
       })),
       orderDraftScope,
     );
@@ -837,6 +999,13 @@ export default function SalesOrderDetailScreen() {
         warehouse: item.warehouse,
         uom: item.uom,
         imageUrl: item.imageUrl,
+        salesMode: normalizeSalesMode(item.salesMode),
+        allUoms: item.allUoms,
+        stockUom: item.stockUom,
+        wholesaleDefaultUom: item.wholesaleDefaultUom,
+        retailDefaultUom: item.retailDefaultUom,
+        salesProfiles: item.salesProfiles,
+        priceSummary: item.priceSummary,
       })) ?? [];
     setEditableItems(nextItems);
     syncScopedDraft(nextItems);
@@ -854,6 +1023,13 @@ export default function SalesOrderDetailScreen() {
         warehouse: item.warehouse,
         uom: item.uom,
         imageUrl: item.imageUrl,
+        salesMode: normalizeSalesMode(item.salesMode),
+        allUoms: item.allUoms,
+        stockUom: item.stockUom,
+        wholesaleDefaultUom: item.wholesaleDefaultUom,
+        retailDefaultUom: item.retailDefaultUom,
+        salesProfiles: item.salesProfiles,
+        priceSummary: item.priceSummary,
       })) ?? [],
     );
     clearSalesOrderDraft(orderDraftScope);
@@ -875,6 +1051,7 @@ export default function SalesOrderDetailScreen() {
           price: item.rate,
           warehouse: item.warehouse,
           uom: item.uom,
+          salesMode: item.salesMode,
         })),
       });
 
@@ -954,6 +1131,7 @@ export default function SalesOrderDetailScreen() {
         mode: 'order',
         draftScope: orderDraftScope,
         returnOrderName: orderName,
+        defaultSalesMode: detail?.defaultSalesMode ?? 'wholesale',
       },
     });
   }
@@ -1148,6 +1326,13 @@ export default function SalesOrderDetailScreen() {
           warehouse: item.warehouse,
           uom: item.uom,
           imageUrl: item.imageUrl,
+          salesMode: normalizeSalesMode(item.salesMode),
+          allUoms: item.allUoms,
+          stockUom: item.stockUom,
+          wholesaleDefaultUom: item.wholesaleDefaultUom,
+          retailDefaultUom: item.retailDefaultUom,
+          salesProfiles: item.salesProfiles,
+          priceSummary: item.priceSummary,
         })) ?? [];
       setEditableItems(nextItems);
       syncScopedDraft(nextItems);
@@ -1700,6 +1885,7 @@ export default function SalesOrderDetailScreen() {
                         qty: Math.max(1, Number(value.replace(/[^0-9]/g, '')) || 1),
                       })
                     }
+                    onChangeSalesMode={(nextMode) => applyEditableItemSalesMode(index, nextMode)}
                     onDecreaseQty={() => stepEditableItemQty(index, -1)}
                     onIncreaseQty={() => stepEditableItemQty(index, 1)}
                     onCycleUom={() => cycleEditableItemUom(index)}
@@ -2223,6 +2409,16 @@ const styles = StyleSheet.create({
   editItemControls: {
     gap: 8,
   },
+  editItemModeBlock: {
+    gap: 6,
+  },
+  editItemModeReferences: {
+    gap: 2,
+  },
+  editItemModeReferenceText: {
+    color: '#475569',
+    fontSize: 12,
+  },
   editItemControlRow: {
     alignItems: 'stretch',
     flexDirection: 'row',
@@ -2347,6 +2543,26 @@ const styles = StyleSheet.create({
   },
   uomSwitcherDisabled: {
     opacity: 0.8,
+  },
+  salesModeSwitch: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 6,
+    padding: 4,
+  },
+  salesModeSwitchOption: {
+    alignItems: 'center',
+    borderColor: 'transparent',
+    borderRadius: 999,
+    borderWidth: 1,
+    minWidth: 68,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  salesModeSwitchText: {
+    color: '#64748B',
+    fontSize: 12,
   },
   uomHint: {
     fontSize: 11,

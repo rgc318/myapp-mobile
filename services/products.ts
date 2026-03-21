@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '@/lib/api-client';
 import { searchProducts, type ProductSearchItem } from '@/services/gateway';
+import type { PriceSummary, SalesProfile } from '@/lib/sales-mode';
 
 export type ProductDetail = {
   itemCode: string;
@@ -15,6 +16,10 @@ export type ProductDetail = {
   price: number | null;
   warehouse: string;
   allUoms: string[];
+  wholesaleDefaultUom?: string | null;
+  retailDefaultUom?: string | null;
+  salesProfiles?: SalesProfile[];
+  priceSummary?: PriceSummary | null;
 };
 
 export type { ProductSearchItem };
@@ -81,8 +86,57 @@ export async function fetchProductDetail(
     price: toOptionalNumber(data.price),
     warehouse: String(data.warehouse ?? ''),
     allUoms: Array.isArray(data.all_uoms)
-      ? data.all_uoms.map((value) => String(value)).filter(Boolean)
+      ? data.all_uoms
+          .map((value) => {
+            if (typeof value === 'string') {
+              return value;
+            }
+            if (value && typeof value === 'object' && typeof (value as Record<string, unknown>).uom === 'string') {
+              return String((value as Record<string, unknown>).uom);
+            }
+            return '';
+          })
+          .filter(Boolean)
       : [],
+    wholesaleDefaultUom:
+      typeof data.wholesale_default_uom === 'string' ? data.wholesale_default_uom : null,
+    retailDefaultUom:
+      typeof data.retail_default_uom === 'string' ? data.retail_default_uom : null,
+    salesProfiles: Array.isArray(data.sales_profiles)
+      ? data.sales_profiles
+          .map((value) => {
+            if (!value || typeof value !== 'object') {
+              return null;
+            }
+            const row = value as Record<string, unknown>;
+            const modeCode =
+              row.mode_code === 'retail' ? 'retail' : row.mode_code === 'wholesale' ? 'wholesale' : null;
+            if (!modeCode) {
+              return null;
+            }
+            return {
+              modeCode,
+              priceList: typeof row.price_list === 'string' ? row.price_list : null,
+              defaultUom: typeof row.default_uom === 'string' ? row.default_uom : null,
+            } satisfies SalesProfile;
+          })
+          .filter((entry): entry is SalesProfile => Boolean(entry))
+      : [],
+    priceSummary:
+      data.price_summary && typeof data.price_summary === 'object'
+        ? {
+            currentPriceList:
+              typeof (data.price_summary as Record<string, unknown>).current_price_list === 'string'
+                ? String((data.price_summary as Record<string, unknown>).current_price_list)
+                : null,
+            currentRate: toOptionalNumber((data.price_summary as Record<string, unknown>).current_rate),
+            standardSellingRate: toOptionalNumber((data.price_summary as Record<string, unknown>).standard_selling_rate),
+            wholesaleRate: toOptionalNumber((data.price_summary as Record<string, unknown>).wholesale_rate),
+            retailRate: toOptionalNumber((data.price_summary as Record<string, unknown>).retail_rate),
+            standardBuyingRate: toOptionalNumber((data.price_summary as Record<string, unknown>).standard_buying_rate),
+            valuationRate: toOptionalNumber((data.price_summary as Record<string, unknown>).valuation_rate),
+          }
+        : null,
   };
 }
 

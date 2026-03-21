@@ -2517,6 +2517,84 @@ This means frontend next-step work is an incremental adaptation, not a page rewr
 - line item controls:
   - actual mode / UOM / price
 
+### Sales mode frontend alignment (2026-03-21)
+
+This round connected the frontend order flow to the new sales-mode-aware product and order model.
+
+Completed:
+
+- create-order page now supports header-level `defaultSalesMode`
+  - the header mode only affects newly added items
+  - it does not force all existing lines to switch together
+
+- create-order draft items now carry sales-mode metadata
+  - line `salesMode`
+  - `wholesaleDefaultUom`
+  - `retailDefaultUom`
+  - `salesProfiles`
+  - `priceSummary`
+  - `allUoms`
+
+- product search now uses the same mode-aware draft key logic as the order page
+  - product matching no longer relies on the raw search-result UOM alone
+  - the selected state is resolved using the effective line UOM under the current default mode
+  - this avoids false “加入订单” states after the same product line has already switched UOM or sales mode inside the draft
+
+- create-order page and order-detail item editing now both show explicit price references
+  - `批发价 / 默认批发单位`
+  - `零售价 / 默认零售单位`
+  - this is intentionally displayed as always-visible reference copy
+  - operators should not need to rely only on the mode toggle to infer the intended price
+
+- order-detail item editing now supports line-level `salesMode`
+  - each editable line can switch between:
+    - `批发`
+    - `零售`
+  - switching mode updates the line default `uom / rate`
+    using the product sales profile returned by backend
+
+- old draft data is now auto-hydrated
+  - if a local draft item lacks:
+    - image
+    - price summary
+    - default wholesale / retail UOM
+    - sales profiles
+  - the create-order page fetches product detail once and enriches the draft item
+  - hydration is one-shot per product code in the active draft, to avoid repeated request loops
+
+- draft key normalization was tightened
+  - the draft key is now always rebuilt from:
+    - `itemCode`
+    - `warehouse`
+    - `uom`
+  - reading old draft data will also normalize stale keys
+  - this prevents search-page selection state from drifting after mode or UOM changes
+
+Current product-search UI rule:
+
+- remove the old single “价格” row
+- keep only the business-facing references:
+  - wholesale price + default wholesale UOM
+  - retail price + default retail UOM
+
+Current order-page UI rule:
+
+- keep the mode switch for action
+- keep the price references for comparison
+- the visible reference prices are guidance only
+  - final transaction values still come from the editable line `uom / price / qty`
+
+Site/master-data note:
+
+- this round also aligned the demo catalog master data in the active site for the main sample SKUs
+  - `SKU001` to `SKU010`
+- the site now has:
+  - `Wholesale`
+  - `Retail`
+  price lists
+- those SKUs now have demo wholesale / retail prices and default UOM mappings
+- this is runtime site data, not repository code
+
 ### UOM editing boundary
 
 The UI should not treat UOM as free text.

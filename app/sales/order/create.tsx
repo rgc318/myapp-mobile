@@ -10,6 +10,7 @@ import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
+import { formatDisplayUom } from '@/lib/display-uom';
 import {
   compactAddressText,
   composeStructuredAddressText,
@@ -17,6 +18,12 @@ import {
   requireText,
   toOptionalText,
 } from '@/lib/form-utils';
+import {
+  buildModeDefaults,
+  getSalesModeLabel,
+  normalizeSalesMode,
+  type SalesMode,
+} from '@/lib/sales-mode';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -31,16 +38,14 @@ import {
 import { useAuth } from '@/providers/auth-provider';
 import { useFeedback } from '@/providers/feedback-provider';
 import { fetchCustomerSalesContext, customerExists, searchCustomers } from '@/services/customers';
-import {
-  getProductDetail,
-  type LinkOption,
-} from '@/services/master-data';
+import { type LinkOption } from '@/services/master-data';
 import {
   companyExists,
   searchCompanies,
   submitQuickSalesOrderV2,
   submitSalesOrderV2,
 } from '@/services/sales';
+import { fetchProductDetail } from '@/services/products';
 
 const MONEY = new Intl.NumberFormat('zh-CN', {
   minimumFractionDigits: 2,
@@ -69,6 +74,50 @@ type TopFieldRowProps = {
 
 function formatMoney(value: number) {
   return MONEY.format(value);
+}
+
+function formatModeReference(
+  label: string,
+  rate: number | null | undefined,
+  uom: string | null | undefined,
+) {
+  const formattedRate = typeof rate === 'number' ? `¥ ${formatMoney(rate)}` : '未配置';
+  const formattedUom = uom ? formatDisplayUom(uom) : '未设置单位';
+  return `${label} ${formattedRate} / ${formattedUom}`;
+}
+
+function SalesModeSwitch({
+  value,
+  onChange,
+}: {
+  value: SalesMode;
+  onChange: (nextMode: SalesMode) => void;
+}) {
+  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const tintColor = useThemeColor({}, 'tint');
+
+  return (
+    <View style={[styles.salesModeSwitch, { backgroundColor: surfaceMuted }]}>
+      {(['wholesale', 'retail'] as SalesMode[]).map((mode) => {
+        const active = value === mode;
+        return (
+          <Pressable
+            key={mode}
+            onPress={() => onChange(mode)}
+            style={[
+              styles.salesModeSwitchOption,
+              active && { backgroundColor: '#FFFFFF', borderColor: tintColor },
+            ]}>
+            <ThemedText
+              style={[styles.salesModeSwitchText, active && { color: tintColor }]}
+              type="defaultSemiBold">
+              {getSalesModeLabel(mode)}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 function composeAddressDisplay(address: {
@@ -171,7 +220,14 @@ function SalesItemRow({
   imageUrl,
   price,
   qty,
+  salesMode,
+  uom,
+  wholesaleDefaultUom,
+  retailDefaultUom,
+  wholesaleRate,
+  retailRate,
   warehouse,
+  onChangeSalesMode,
   onChangePrice,
   onChangeQty,
   onRemove,
@@ -181,7 +237,14 @@ function SalesItemRow({
   imageUrl?: string | null;
   price: number | null;
   qty: number;
+  salesMode: SalesMode;
+  uom: string | null;
+  wholesaleDefaultUom?: string | null;
+  retailDefaultUom?: string | null;
+  wholesaleRate?: number | null;
+  retailRate?: number | null;
   warehouse?: string | null;
+  onChangeSalesMode: (value: SalesMode) => void;
   onChangePrice: (value: string) => void;
   onChangeQty: (value: string) => void;
   onRemove: () => void;
@@ -259,6 +322,22 @@ function SalesItemRow({
         </View>
 
         <View style={styles.itemEditRow}>
+          <View style={styles.itemEditBlockMode}>
+            <ThemedText style={styles.itemEditLabel}>{'销售模式'}</ThemedText>
+            <SalesModeSwitch onChange={onChangeSalesMode} value={salesMode} />
+            <ThemedText style={styles.itemModeHint}>{'当前单位 '} {uom || '未设置'}</ThemedText>
+            <View style={styles.itemModeReferences}>
+              <ThemedText style={styles.itemModeReferenceText}>
+                {formatModeReference('批发', wholesaleRate, wholesaleDefaultUom)}
+              </ThemedText>
+              <ThemedText style={styles.itemModeReferenceText}>
+                {formatModeReference('零售', retailRate, retailDefaultUom)}
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.itemEditRow}>
           <View style={styles.itemEditBlockCompact}>
             <ThemedText style={styles.itemEditLabel}>{'\u6570\u91cf'}</ThemedText>
             <View style={[styles.qtyStepper, { backgroundColor: surfaceMuted, borderColor }]}> 
@@ -317,6 +396,9 @@ export default function SalesOrderCreateScreen() {
 
   const [customer, setCustomer] = useState(initialDraftForm.customer);
   const [company, setCompany] = useState(initialDraftForm.company || preferences.defaultCompany);
+  const [defaultSalesMode, setDefaultSalesMode] = useState<SalesMode>(
+    normalizeSalesMode(initialDraftForm.defaultSalesMode),
+  );
   const [remarks, setRemarks] = useState(initialDraftForm.remarks);
   const [shippingAddress, setShippingAddress] = useState(initialDraftForm.shippingAddress);
   const [shippingContact, setShippingContact] = useState(initialDraftForm.shippingContact);
@@ -343,6 +425,7 @@ export default function SalesOrderCreateScreen() {
   const customerSectionYRef = useRef(0);
   const itemsSectionYRef = useRef(0);
   const shippingSectionYRef = useRef(0);
+  const hydratedDraftItemCodesRef = useRef<Record<string, true>>({});
   const shippingAddressTouchedRef = useRef(false);
   const shippingContactTouchedRef = useRef(false);
   const shippingPhoneTouchedRef = useRef(false);
@@ -401,6 +484,7 @@ export default function SalesOrderCreateScreen() {
     const nextDraftForm = getSalesOrderDraftForm();
     setCustomer(nextDraftForm.customer);
     setCompany(nextDraftForm.company || preferences.defaultCompany);
+    setDefaultSalesMode(normalizeSalesMode(nextDraftForm.defaultSalesMode));
     setRemarks(nextDraftForm.remarks);
     setShippingAddress(nextDraftForm.shippingAddress);
     setShippingContact(nextDraftForm.shippingContact);
@@ -415,12 +499,13 @@ export default function SalesOrderCreateScreen() {
     updateSalesOrderDraftForm({
       customer,
       company,
+      defaultSalesMode,
       remarks,
       shippingAddress,
       shippingContact,
       shippingPhone,
     });
-  }, [company, customer, remarks, shippingAddress, shippingContact, shippingPhone]);
+  }, [company, customer, defaultSalesMode, remarks, shippingAddress, shippingContact, shippingPhone]);
 
   useEffect(() => () => {
     if (removeUndoTimerRef.current) {
@@ -456,22 +541,66 @@ export default function SalesOrderCreateScreen() {
     return unsubscribe;
   }, [hasDraftContent, isSubmitting, navigation]);
   useEffect(() => {
-    const missingImageItems = draftItems.filter((item) => !item.imageUrl && item.itemCode);
+    const activeItemCodes = new Set(draftItems.map((item) => item.itemCode).filter(Boolean));
+    Object.keys(hydratedDraftItemCodesRef.current).forEach((itemCode) => {
+      if (!activeItemCodes.has(itemCode)) {
+        delete hydratedDraftItemCodesRef.current[itemCode];
+      }
+    });
 
-    if (!missingImageItems.length) {
+    const itemsNeedingRefresh = draftItems.filter(
+      (item) =>
+        item.itemCode &&
+        !hydratedDraftItemCodesRef.current[item.itemCode] &&
+        (!item.imageUrl ||
+          !item.priceSummary ||
+          !item.wholesaleDefaultUom ||
+          !item.retailDefaultUom ||
+          !item.allUoms?.length),
+    );
+
+    if (!itemsNeedingRefresh.length) {
       return;
     }
 
     let active = true;
 
     void Promise.all(
-      missingImageItems.map(async (item) => {
-        const detail = await getProductDetail(item.itemCode);
-        if (!active || !detail?.imageUrl) {
+      itemsNeedingRefresh.map(async (item) => {
+        const detail = await fetchProductDetail(item.itemCode);
+        hydratedDraftItemCodesRef.current[item.itemCode] = true;
+        if (!active || !detail) {
           return;
         }
 
-        restoreSalesOrderDraftItem({ ...item, imageUrl: detail.imageUrl });
+        const effectiveMode = normalizeSalesMode(item.salesMode ?? defaultSalesMode);
+        const defaults = buildModeDefaults(
+          {
+            salesProfiles: detail.salesProfiles,
+            wholesaleDefaultUom: detail.wholesaleDefaultUom,
+            retailDefaultUom: detail.retailDefaultUom,
+            allUoms: detail.allUoms,
+            stockUom: detail.stockUom,
+            uom: detail.uom,
+            priceSummary: detail.priceSummary,
+            price: detail.price,
+          },
+          effectiveMode,
+        );
+
+        restoreSalesOrderDraftItem({
+          ...item,
+          imageUrl: item.imageUrl || detail.imageUrl,
+          salesMode: effectiveMode,
+          uom: item.uom || defaults.uom || detail.uom,
+          price: item.price ?? defaults.price ?? detail.price ?? null,
+          allUoms: detail.allUoms,
+          stockUom: detail.stockUom,
+          wholesaleDefaultUom: detail.wholesaleDefaultUom,
+          retailDefaultUom: detail.retailDefaultUom,
+          salesProfiles: detail.salesProfiles,
+          priceSummary: detail.priceSummary,
+        });
       }),
     ).then(() => {
       if (active) {
@@ -482,7 +611,7 @@ export default function SalesOrderCreateScreen() {
     return () => {
       active = false;
     };
-  }, [draftItems]);
+  }, [defaultSalesMode, draftItems]);
 
   useEffect(() => {
     if (draftItems.length > 0 && messageTone === 'error' && message === ITEM_REQUIRED_MESSAGE) {
@@ -741,6 +870,7 @@ export default function SalesOrderCreateScreen() {
   const buildOrderPayload = (options?: { forceDelivery?: boolean }) => ({
     customer,
     company,
+    defaultSalesMode,
     force_delivery: options?.forceDelivery,
     transaction_date: postingDate,
     remarks: toOptionalText(remarks),
@@ -759,6 +889,7 @@ export default function SalesOrderCreateScreen() {
       price: item.price ?? undefined,
       warehouse: item.warehouse || preferences.defaultWarehouse || undefined,
       uom: item.uom || undefined,
+      sales_mode: item.salesMode,
     })),
   });
 
@@ -929,6 +1060,18 @@ export default function SalesOrderCreateScreen() {
             />
           </View>
 
+          <View style={styles.defaultModeBlock}>
+            <View style={styles.defaultModeHeader}>
+              <ThemedText style={styles.defaultModeLabel} type="defaultSemiBold">
+                默认销售模式
+              </ThemedText>
+              <ThemedText style={styles.defaultModeHint}>
+                只影响新加入商品的默认单位和价格
+              </ThemedText>
+            </View>
+            <SalesModeSwitch onChange={setDefaultSalesMode} value={defaultSalesMode} />
+          </View>
+
           <View style={styles.heroStatGrid}>
             <SummaryMetric
               label="已选商品"
@@ -946,7 +1089,12 @@ export default function SalesOrderCreateScreen() {
         <View
           style={[styles.quickActionsCard, { backgroundColor: surface, borderColor }]}>
           <Pressable
-            onPress={() => router.push('/common/product-search?mode=order')}
+            onPress={() =>
+              router.push({
+                pathname: '/common/product-search',
+                params: { mode: 'order', defaultSalesMode },
+              })
+            }
             style={styles.quickActionButton}>
             <View style={[styles.quickActionIcon, { backgroundColor: accentSoft }]}>
               <IconSymbol color={tintColor} name="cart.fill.badge.plus" size={18} />
@@ -1023,6 +1171,22 @@ export default function SalesOrderCreateScreen() {
                     itemName={item.itemName}
                     imageUrl={item.imageUrl}
                     key={item.draftKey}
+                    salesMode={normalizeSalesMode(item.salesMode)}
+                    uom={item.uom}
+                    wholesaleDefaultUom={item.wholesaleDefaultUom}
+                    retailDefaultUom={item.retailDefaultUom}
+                    wholesaleRate={item.priceSummary?.wholesaleRate ?? null}
+                    retailRate={item.priceSummary?.retailRate ?? null}
+                    onChangeSalesMode={(nextMode) => {
+                      const defaults = buildModeDefaults(item, nextMode);
+                      restoreSalesOrderDraftItem({
+                        ...item,
+                        salesMode: defaults.salesMode,
+                        uom: defaults.uom || item.uom,
+                        price: defaults.price,
+                      });
+                      syncDraft();
+                    }}
                     onChangePrice={(value) => {
                       updateSalesOrderDraftField(
                         item.draftKey,
@@ -1442,6 +1606,40 @@ const styles = StyleSheet.create({
     gap: 12,
     zIndex: 1,
   },
+  defaultModeBlock: {
+    gap: 8,
+    zIndex: 1,
+  },
+  defaultModeHeader: {
+    gap: 4,
+  },
+  defaultModeLabel: {
+    fontSize: 14,
+  },
+  defaultModeHint: {
+    color: '#6B7280',
+    fontSize: 12,
+  },
+  salesModeSwitch: {
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: 8,
+    padding: 4,
+  },
+  salesModeSwitchOption: {
+    alignItems: 'center',
+    borderColor: 'transparent',
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: 12,
+  },
+  salesModeSwitchText: {
+    color: '#6B7280',
+    fontSize: 13,
+  },
   heroStatGrid: {
     flexDirection: 'row',
     gap: 12,
@@ -1652,10 +1850,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   itemEditRow: {
-    alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
     marginTop: 10,
+  },
+  itemEditBlockMode: {
+    gap: 6,
+    width: '100%',
+  },
+  itemModeHint: {
+    color: '#6B7280',
+    fontSize: 12,
+  },
+  itemModeReferences: {
+    gap: 2,
+  },
+  itemModeReferenceText: {
+    color: '#475569',
+    fontSize: 12,
   },
   itemEditBlockCompact: {
     flexShrink: 0,
