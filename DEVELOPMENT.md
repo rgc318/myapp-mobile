@@ -3153,3 +3153,47 @@ This round focused on making the product workbench list usable on narrow mobile 
 
 1. keep the list row focused on summary data and resist adding warehouse/detail fields back into the card
 2. if operators later need denser browsing, introduce a separate compact/table mode instead of overloading the current card design
+
+## Product Create Alignment (2026-03-22)
+
+This round aligned the product-create flow with the already refactored product-detail/edit page, so create and edit no longer evolve as two unrelated form experiences.
+
+### Completed
+
+- product create page now follows the same interaction model as product edit
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+  - category and brand are now selected through the same bottom-sheet picker pattern instead of raw text entry
+  - wholesale and retail UOM are now also selected through a picker instead of free-text input
+  - create-page section order is now closer to detail/edit:
+    - basic info
+    - price and commercial UOM
+  - the create page now surfaces the same business rule:
+    - retail UOM is treated as the current stock-facing/base entry unit
+    - wholesale UOM is configured through a conversion factor
+  - redundant create-only preview blocks were removed
+    - price summary preview was removed because it only repeated "未配置" before any real input happened
+    - explanatory inventory cards were reduced so the page now focuses on actual creation inputs instead of pre-creation summaries
+
+- shared product form controls were extracted
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/product-form-controls.tsx`
+  - currently shared by create and detail/edit flows:
+    - text field
+    - selector field
+    - bottom-sheet picker modal
+  - this reduces drift between the two pages and matches the common React recommendation to reuse logic through shared components and hooks rather than duplicating form trees
+
+- detail/edit page now reuses the shared text field control
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+
+### Current Boundaries
+
+- create and edit now share the same field-control layer, but they do not yet share a fully centralized product-form state hook
+- master-data and UOM pickers are aligned, but create/edit save payload assembly is still maintained in each page separately
+
+### Recommended Next Steps
+
+1. extract shared product payload builders for create/edit so unit-conversion and price mapping cannot drift
+2. if product creation later needs opening stock or inventory setup, add it as a dedicated create-only section without forking the rest of the form structure

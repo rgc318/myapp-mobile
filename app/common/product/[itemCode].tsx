@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { ProductTextField as DetailField } from '@/components/product-form-controls';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatDisplayUom } from '@/lib/display-uom';
@@ -44,43 +45,6 @@ function isSelectableWarehouse(value: string) {
   }
 
   return true;
-}
-
-function DetailField({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  multiline = false,
-  labelColor,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
-  multiline?: boolean;
-  labelColor?: string;
-}) {
-  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
-  const borderColor = useThemeColor({}, 'border');
-
-  return (
-    <View style={styles.fieldBlock}>
-      <ThemedText style={[styles.fieldLabel, labelColor ? { color: labelColor } : null]} type="defaultSemiBold">
-        {label}
-      </ThemedText>
-      <TextInput
-        multiline={multiline}
-        numberOfLines={multiline ? 4 : 1}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="rgba(31,42,55,0.38)"
-        style={[multiline ? styles.textarea : styles.textInput, { backgroundColor: surfaceMuted, borderColor }]}
-        textAlignVertical={multiline ? 'top' : 'center'}
-        value={value}
-      />
-    </View>
-  );
 }
 
 export default function ProductDetailScreen() {

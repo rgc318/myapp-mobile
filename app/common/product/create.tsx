@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { ProductPickerSheet, ProductSelectorField, ProductTextField } from '@/components/product-form-controls';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatDisplayUom } from '@/lib/display-uom';
@@ -19,48 +20,10 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function ProductField({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  multiline = false,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
-  multiline?: boolean;
-}) {
-  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
-  const borderColor = useThemeColor({}, 'border');
-
-  return (
-    <View style={styles.fieldBlock}>
-      <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-        {label}
-      </ThemedText>
-      <TextInput
-        multiline={multiline}
-        numberOfLines={multiline ? 4 : 1}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="rgba(31,42,55,0.38)"
-        style={[multiline ? styles.textarea : styles.textInput, { backgroundColor: surfaceMuted, borderColor }]}
-        textAlignVertical={multiline ? 'top' : 'center'}
-        value={value}
-      />
-    </View>
-  );
-}
-
 export default function ProductCreateScreen() {
   const router = useRouter();
   const { showError, showSuccess } = useFeedback();
   const tintColor = useThemeColor({}, 'tint');
-  const surface = useThemeColor({}, 'surface');
-  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
-  const borderColor = useThemeColor({}, 'border');
 
   const [itemName, setItemName] = useState('');
   const [itemCode, setItemCode] = useState('');
@@ -82,6 +45,10 @@ export default function ProductCreateScreen() {
   const [masterPickerTarget, setMasterPickerTarget] = useState<'itemGroup' | 'brand' | null>(null);
   const [masterPickerQuery, setMasterPickerQuery] = useState('');
   const [masterPickerOptions, setMasterPickerOptions] = useState<string[]>([]);
+  const [uomPickerVisible, setUomPickerVisible] = useState(false);
+  const [uomPickerTarget, setUomPickerTarget] = useState<'wholesale' | 'retail' | null>(null);
+  const [uomPickerQuery, setUomPickerQuery] = useState('');
+  const [uomOptions, setUomOptions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!masterPickerVisible || !masterPickerTarget) {
@@ -114,6 +81,37 @@ export default function ProductCreateScreen() {
       cancelled = true;
     };
   }, [masterPickerQuery, masterPickerTarget, masterPickerVisible]);
+
+  useEffect(() => {
+    if (!uomPickerVisible) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadUoms() {
+      try {
+        const options = await searchLinkOptions('UOM', uomPickerQuery);
+        if (!cancelled) {
+          setUomOptions(
+            options
+              .map((option) => option.value.trim())
+              .filter(Boolean),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setUomOptions([]);
+        }
+      }
+    }
+
+    void loadUoms();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uomPickerQuery, uomPickerVisible]);
 
   const handleCreate = async () => {
     if (!itemName.trim()) {
@@ -222,6 +220,31 @@ export default function ProductCreateScreen() {
     setMasterPickerQuery('');
   };
 
+  const handleOpenUomPicker = (target: 'wholesale' | 'retail') => {
+    setUomPickerTarget(target);
+    setUomPickerQuery('');
+    setUomPickerVisible(true);
+  };
+
+  const handleSelectUom = (value: string) => {
+    if (uomPickerTarget === 'wholesale') {
+      setWholesaleDefaultUom(value);
+    }
+
+    if (uomPickerTarget === 'retail') {
+      setRetailDefaultUom(value);
+    }
+
+    setUomPickerVisible(false);
+    setUomPickerTarget(null);
+    setUomPickerQuery('');
+  };
+
+  const wholesaleNeedsFactor =
+    Boolean(wholesaleDefaultUom.trim()) &&
+    Boolean(retailDefaultUom.trim()) &&
+    wholesaleDefaultUom.trim() !== retailDefaultUom.trim();
+
   return (
     <AppShell
       compactHeader
@@ -247,89 +270,73 @@ export default function ProductCreateScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.sectionBlock}>
           <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            基础信息
+            基础资料
           </ThemedText>
-          <ProductField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" value={itemName} />
-          <ProductField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />
+          <ProductTextField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" value={itemName} />
+          <ProductTextField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
-              <View style={styles.fieldBlock}>
-                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                  商品分类
-                </ThemedText>
-                <Pressable
-                  onPress={() => handleOpenMasterPicker('itemGroup')}
-                  style={[styles.selectorField, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText numberOfLines={1} style={styles.selectorFieldValue} type="defaultSemiBold">
-                    {itemGroup || '请选择'}
-                  </ThemedText>
-                  <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                    选择
-                  </ThemedText>
-                </Pressable>
-              </View>
+              <ProductSelectorField label="商品分类" onPress={() => handleOpenMasterPicker('itemGroup')} value={itemGroup} />
             </View>
             <View style={styles.rowField}>
-              <View style={styles.fieldBlock}>
-                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                  品牌
-                </ThemedText>
-                <Pressable
-                  onPress={() => handleOpenMasterPicker('brand')}
-                  style={[styles.selectorField, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText numberOfLines={1} style={styles.selectorFieldValue} type="defaultSemiBold">
-                    {brand || '请选择'}
-                  </ThemedText>
-                  <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                    选择
-                  </ThemedText>
-                </Pressable>
-              </View>
+              <ProductSelectorField label="品牌" onPress={() => handleOpenMasterPicker('brand')} value={brand} />
             </View>
           </View>
-          <ProductField label="主条码" onChangeText={setBarcode} placeholder="输入商品主条码" value={barcode} />
-          <ProductField label="商品昵称" onChangeText={setNickname} placeholder="如常用简称或别名" value={nickname} />
-          <ProductField label="图片地址" onChangeText={setImageUrl} placeholder="输入商品图片 URL" value={imageUrl} />
-          <ProductField label="描述" multiline onChangeText={setDescription} placeholder="补充规格、备注或说明" value={description} />
+          <ProductTextField label="主条码" onChangeText={setBarcode} placeholder="输入商品主条码" value={barcode} />
+          <ProductTextField label="商品昵称" onChangeText={setNickname} placeholder="如常用简称或别名" value={nickname} />
+          <ProductTextField label="图片地址" onChangeText={setImageUrl} placeholder="输入商品图片 URL" value={imageUrl} />
+          <ProductTextField label="描述" multiline onChangeText={setDescription} placeholder="补充规格、备注或说明" value={description} />
         </View>
 
         <View style={styles.sectionBlock}>
           <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            单位与价格
+            价格与成交单位
           </ThemedText>
           <ThemedText style={styles.sectionHint}>
-            当前按零售单位作为库存基准口径，批发单位通过换算系数折算。
+            先选零售单位，再设置批发单位和换算关系。创建后库存默认按零售单位记账。
           </ThemedText>
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
-              <ProductField label="零售基准单位" onChangeText={setRetailDefaultUom} placeholder="例如 Nos" value={retailDefaultUom} />
-            </View>
-            <View style={styles.rowField}>
-              <ProductField label="批发默认单位" onChangeText={setWholesaleDefaultUom} placeholder="例如 Box" value={wholesaleDefaultUom} />
-            </View>
-          </View>
-          <View style={styles.rowFields}>
-            <View style={styles.rowField}>
-              <ProductField
-                label={`换算系数（1 ${formatDisplayUom(wholesaleDefaultUom || '批发单位')} = ? ${formatDisplayUom(retailDefaultUom || '零售单位')}）`}
-                onChangeText={setWholesaleConversionFactor}
-                placeholder="例如 12"
-                value={wholesaleConversionFactor}
+              <ProductSelectorField
+                label="批发成交单位"
+                onPress={() => handleOpenUomPicker('wholesale')}
+                value={formatDisplayUom(wholesaleDefaultUom)}
               />
             </View>
             <View style={styles.rowField}>
-              <ProductField label="标准售价" onChangeText={setStandardRate} placeholder="例如 99" value={standardRate} />
+              <ProductSelectorField
+                label="零售成交单位"
+                onPress={() => handleOpenUomPicker('retail')}
+                value={formatDisplayUom(retailDefaultUom)}
+              />
             </View>
           </View>
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
-              <ProductField label="批发价" onChangeText={setWholesaleRate} placeholder="例如 68" value={wholesaleRate} />
+              <ProductTextField
+                label={
+                  wholesaleNeedsFactor
+                    ? `换算系数（1 ${formatDisplayUom(wholesaleDefaultUom || '批发')} = ? ${formatDisplayUom(retailDefaultUom || '零售')}）`
+                    : '换算系数'
+                }
+                onChangeText={setWholesaleConversionFactor}
+                placeholder={wholesaleNeedsFactor ? '例如 12' : '与零售单位一致时自动按 1'}
+                value={wholesaleNeedsFactor ? wholesaleConversionFactor : '1'}
+              />
             </View>
             <View style={styles.rowField}>
-              <ProductField label="零售价" onChangeText={setRetailRate} placeholder="例如 9.9" value={retailRate} />
+              <ProductTextField label="标准售价" onChangeText={setStandardRate} placeholder="例如 99" value={standardRate} />
             </View>
           </View>
-          <ProductField
+          <View style={styles.rowFields}>
+            <View style={styles.rowField}>
+              <ProductTextField label="批发价" onChangeText={setWholesaleRate} placeholder="例如 68" value={wholesaleRate} />
+            </View>
+            <View style={styles.rowField}>
+              <ProductTextField label="零售价" onChangeText={setRetailRate} placeholder="例如 9.9" value={retailRate} />
+            </View>
+          </View>
+          <ProductTextField
             label="默认采购价"
             onChangeText={setStandardBuyingRate}
             placeholder="例如 55（默认按批发采购口径）"
@@ -337,74 +344,38 @@ export default function ProductCreateScreen() {
           />
         </View>
       </ScrollView>
-      <Modal
-        animationType="slide"
-        onRequestClose={() => {
+      <ProductPickerSheet
+        hint="通过搜索选择系统中已有主数据。"
+        onChangeQuery={setMasterPickerQuery}
+        onClose={() => {
           setMasterPickerVisible(false);
           setMasterPickerTarget(null);
           setMasterPickerQuery('');
         }}
-        transparent
-        visible={masterPickerVisible}>
-        <View style={styles.modalBackdrop}>
-          <Pressable
-            onPress={() => {
-              setMasterPickerVisible(false);
-              setMasterPickerTarget(null);
-              setMasterPickerQuery('');
-            }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={[styles.modalSheet, { backgroundColor: surface }]}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle} type="title">
-                {masterPickerTarget === 'brand' ? '选择品牌' : '选择商品分类'}
-              </ThemedText>
-              <ThemedText style={styles.modalHint}>通过搜索选择系统中已有主数据。</ThemedText>
-            </View>
-            <View style={[styles.modalSearchWrap, { backgroundColor: surfaceMuted, borderColor }]}>
-              <TextInput
-                onChangeText={setMasterPickerQuery}
-                placeholder={masterPickerTarget === 'brand' ? '搜索品牌名称' : '搜索分类名称'}
-                placeholderTextColor="rgba(31,42,55,0.38)"
-                style={styles.modalSearchInput}
-                value={masterPickerQuery}
-              />
-            </View>
-            <ScrollView contentContainerStyle={styles.modalList} showsVerticalScrollIndicator={false}>
-              {masterPickerOptions.length ? (
-                masterPickerOptions.map((value) => {
-                  const active =
-                    (masterPickerTarget === 'itemGroup' && value === itemGroup) ||
-                    (masterPickerTarget === 'brand' && value === brand);
-                  return (
-                    <Pressable
-                      key={value}
-                      onPress={() => handleSelectMasterOption(value)}
-                      style={[
-                        styles.modalOption,
-                        { backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted, borderColor },
-                      ]}>
-                      <ThemedText numberOfLines={1} style={styles.modalOptionValue} type="defaultSemiBold">
-                        {value}
-                      </ThemedText>
-                      <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                        {active ? '当前' : '选择'}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })
-              ) : (
-                <View style={[styles.emptyState, { backgroundColor: surfaceMuted }]}>
-                  <ThemedText type="defaultSemiBold">没有找到匹配主数据</ThemedText>
-                  <ThemedText style={styles.modalHint}>换个关键词试试。</ThemedText>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        onSelect={handleSelectMasterOption}
+        options={masterPickerOptions}
+        placeholder={masterPickerTarget === 'brand' ? '搜索品牌名称' : '搜索分类名称'}
+        query={masterPickerQuery}
+        selectedValue={masterPickerTarget === 'itemGroup' ? itemGroup : brand}
+        title={masterPickerTarget === 'brand' ? '选择品牌' : '选择商品分类'}
+        visible={masterPickerVisible}
+      />
+      <ProductPickerSheet
+        hint="请选择当前商品允许使用的成交单位。"
+        onChangeQuery={setUomPickerQuery}
+        onClose={() => {
+          setUomPickerVisible(false);
+          setUomPickerTarget(null);
+          setUomPickerQuery('');
+        }}
+        onSelect={handleSelectUom}
+        options={uomOptions}
+        placeholder="搜索单位名称"
+        query={uomPickerQuery}
+        selectedValue={uomPickerTarget === 'wholesale' ? wholesaleDefaultUom : retailDefaultUom}
+        title={uomPickerTarget === 'wholesale' ? '选择批发单位' : '选择零售单位'}
+        visible={uomPickerVisible}
+      />
     </AppShell>
   );
 }
@@ -424,40 +395,6 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     lineHeight: 18,
-  },
-  fieldBlock: {
-    gap: 8,
-  },
-  fieldLabel: {
-    fontSize: 14,
-  },
-  textInput: {
-    borderRadius: 16,
-    borderWidth: 1,
-    fontSize: 15,
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  textarea: {
-    borderRadius: 16,
-    borderWidth: 1,
-    fontSize: 15,
-    minHeight: 108,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  selectorField: {
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  selectorFieldValue: {
-    flex: 1,
-    paddingRight: 12,
   },
   rowFields: {
     flexDirection: 'row',
@@ -488,68 +425,5 @@ const styles = StyleSheet.create({
   },
   footerPrimaryText: {
     color: '#FFFFFF',
-  },
-  modalBackdrop: {
-    backgroundColor: 'rgba(15,23,42,0.28)',
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    gap: 14,
-    maxHeight: '78%',
-    paddingHorizontal: 18,
-    paddingBottom: 24,
-    paddingTop: 10,
-  },
-  modalHandle: {
-    alignSelf: 'center',
-    backgroundColor: 'rgba(148,163,184,0.9)',
-    borderRadius: 999,
-    height: 4,
-    width: 56,
-  },
-  modalHeader: {
-    gap: 4,
-  },
-  modalTitle: {
-    fontSize: 24,
-  },
-  modalHint: {
-    opacity: 0.72,
-  },
-  modalSearchWrap: {
-    borderRadius: 18,
-    borderWidth: 1,
-    minHeight: 52,
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-  },
-  modalSearchInput: {
-    fontSize: 15,
-    minHeight: 40,
-  },
-  modalList: {
-    gap: 10,
-    paddingBottom: 8,
-  },
-  modalOption: {
-    alignItems: 'center',
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 58,
-    paddingHorizontal: 14,
-  },
-  modalOptionValue: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  emptyState: {
-    borderRadius: 18,
-    gap: 6,
-    padding: 16,
   },
 });
