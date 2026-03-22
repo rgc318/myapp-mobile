@@ -3109,3 +3109,47 @@ This round focused on aligning the mobile frontend with the new server-side unit
 1. continue the same conversion-aware display pattern in purchase order entry
 2. decide whether historical items should fully hide stock/base UOM editing on mobile
 3. keep simplifying price hierarchy so wholesale / retail / default buying remain primary in the UI
+
+## Product List Layout Refinement (2026-03-22)
+
+This round focused on making the product workbench list usable on narrow mobile widths instead of continuing to stack more data into each card.
+
+### Completed
+
+- product-list rows were rebuilt into a more stable management-card structure
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/products.tsx`
+  - current structure is now:
+    - top-left: product title
+    - top-right: enabled / disabled status chip
+    - left content column: code / nickname / category
+    - bottom-left: fixed-size inventory summary blocks
+    - bottom-right: fixed-width price column
+
+- product-list cards now prioritize only the most useful summary data
+  - removed list-level emphasis on:
+    - current warehouse preview
+    - expanded warehouse rows inside each card
+  - retained:
+    - total stock
+    - warehouse-count summary
+    - wholesale price
+    - retail price
+    - buying-price summary
+
+- UOM display consistency was tightened in the product workbench
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/display-uom.ts`
+  - additional aliases such as `YARD / YD / YDS` now map to the business-facing Chinese display unit
+  - product-list prices and stock blocks therefore no longer depend on raw backend UOM text
+
+### Current Boundaries
+
+- the product list currently prefers stable summary cards over dense tabular detail
+- long product names and metadata are intentionally truncated instead of expanding the row height without limit
+- warehouse-level detail is still available in the product detail page, not in the list row itself
+
+### Recommended Next Steps
+
+1. keep the list row focused on summary data and resist adding warehouse/detail fields back into the card
+2. if operators later need denser browsing, introduce a separate compact/table mode instead of overloading the current card design

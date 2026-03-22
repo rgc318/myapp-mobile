@@ -39,6 +39,10 @@ export function formatDisplayUom(uom: string | null | undefined) {
     case 'METER':
     case 'METRE':
       return '\u7c73';
+    case 'YARD':
+    case 'YD':
+    case 'YDS':
+      return '\u7801';
     case 'CM':
       return '\u5398\u7c73';
     case 'MM':
