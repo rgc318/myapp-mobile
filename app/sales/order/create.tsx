@@ -25,6 +25,7 @@ import {
   normalizeSalesMode,
   type SalesMode,
 } from '@/lib/sales-mode';
+import { convertQtyToStockQty, formatConvertedQty } from '@/lib/uom-conversion';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -85,6 +86,33 @@ function formatModeReference(
   const formattedRate = typeof rate === 'number' ? `¥ ${formatMoney(rate)}` : '未配置';
   const formattedUom = uom ? formatDisplayUom(uom) : '未设置单位';
   return `${label} ${formattedRate} / ${formattedUom}`;
+}
+
+function formatDraftConversionSummary(item: SalesOrderDraftItem) {
+  const stockQty = convertQtyToStockQty({
+    qty: item.qty,
+    uom: item.uom,
+    stockUom: item.stockUom,
+    uomConversions: item.uomConversions,
+  });
+
+  if (stockQty == null || !item.stockUom) {
+    return null;
+  }
+
+  if (!item.uom || item.uom === item.stockUom) {
+    return `当前按 ${formatDisplayUom(item.stockUom)} 录入。`;
+  }
+
+  return `${item.qty} ${formatDisplayUom(item.uom)} 约等于 ${formatConvertedQty(stockQty)} ${formatDisplayUom(item.stockUom)}。`;
+}
+
+function formatDraftStockReference(item: SalesOrderDraftItem) {
+  if (typeof item.stockQty !== 'number' || !Number.isFinite(item.stockQty) || !item.stockUom) {
+    return null;
+  }
+
+  return `参考库存约 ${formatConvertedQty(item.stockQty)} ${formatDisplayUom(item.stockUom)}，仅作提醒。`;
 }
 
 function SalesModeSwitch({
@@ -426,7 +454,9 @@ export default function SalesOrderCreateScreen() {
           uom: item.uom || defaults.uom || detail.stockUom,
           price: item.price ?? defaults.price ?? detail.price ?? null,
           allUoms: detail.allUoms,
+          uomConversions: detail.uomConversions,
           stockUom: detail.stockUom,
+          stockQty: detail.stockQty,
           wholesaleDefaultUom: detail.wholesaleDefaultUom,
           retailDefaultUom: detail.retailDefaultUom,
           salesProfiles: detail.salesProfiles,
@@ -1015,6 +1045,8 @@ export default function SalesOrderCreateScreen() {
                       item.priceSummary?.retailRate ?? null,
                       item.retailDefaultUom,
                     )}
+                    conversionSummary={formatDraftConversionSummary(item)}
+                    stockReferenceSummary={formatDraftStockReference(item)}
                     onChangeSalesMode={(nextMode) => {
                       const defaults = buildModeDefaults(item, nextMode);
                       restoreSalesOrderDraftItem({

@@ -5,6 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { formatDisplayUom } from '@/lib/display-uom';
 import { useFeedback } from '@/providers/feedback-provider';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
 import { createProduct } from '@/services/products';
@@ -69,9 +70,9 @@ export default function ProductCreateScreen() {
   const [nickname, setNickname] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [stockUom, setStockUom] = useState('Nos');
   const [wholesaleDefaultUom, setWholesaleDefaultUom] = useState('Box');
   const [retailDefaultUom, setRetailDefaultUom] = useState('Nos');
+  const [wholesaleConversionFactor, setWholesaleConversionFactor] = useState('12');
   const [standardRate, setStandardRate] = useState('');
   const [wholesaleRate, setWholesaleRate] = useState('');
   const [retailRate, setRetailRate] = useState('');
@@ -141,6 +142,21 @@ export default function ProductCreateScreen() {
 
     try {
       setIsSaving(true);
+      const trimmedRetailUom = retailDefaultUom.trim();
+      if (!trimmedRetailUom) {
+        throw new Error('请先填写零售基准单位。');
+      }
+
+      const trimmedWholesaleUom = wholesaleDefaultUom.trim();
+      const wholesaleFactor = toNumberOrNull(wholesaleConversionFactor);
+      if (
+        trimmedWholesaleUom &&
+        trimmedWholesaleUom !== trimmedRetailUom &&
+        (wholesaleFactor == null || wholesaleFactor <= 0)
+      ) {
+        throw new Error('请填写有效的批发换算系数。');
+      }
+
       const created = await createProduct({
         itemName: itemName.trim(),
         itemCode: itemCode.trim() || undefined,
@@ -150,9 +166,20 @@ export default function ProductCreateScreen() {
         nickname: nickname.trim() || undefined,
         description: description.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
-        stockUom: stockUom.trim() || undefined,
-        wholesaleDefaultUom: wholesaleDefaultUom.trim() || undefined,
-        retailDefaultUom: retailDefaultUom.trim() || undefined,
+        stockUom: trimmedRetailUom,
+        wholesaleDefaultUom: trimmedWholesaleUom || undefined,
+        retailDefaultUom: trimmedRetailUom,
+        uomConversions: [
+          { uom: trimmedRetailUom, conversionFactor: 1 },
+          ...(trimmedWholesaleUom
+            ? [
+                {
+                  uom: trimmedWholesaleUom,
+                  conversionFactor: trimmedWholesaleUom === trimmedRetailUom ? 1 : (wholesaleFactor as number),
+                },
+              ]
+            : []),
+        ].filter((entry, index, array) => array.findIndex((row) => row.uom === entry.uom) === index),
         standardRate: toNumberOrNull(standardRate),
         wholesaleRate: toNumberOrNull(wholesaleRate),
         retailRate: toNumberOrNull(retailRate),
@@ -270,9 +297,12 @@ export default function ProductCreateScreen() {
           <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
             单位与价格
           </ThemedText>
+          <ThemedText style={styles.sectionHint}>
+            当前按零售单位作为库存基准口径，批发单位通过换算系数折算。
+          </ThemedText>
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
-              <ProductField label="库存单位" onChangeText={setStockUom} placeholder="例如 Nos" value={stockUom} />
+              <ProductField label="零售基准单位" onChangeText={setRetailDefaultUom} placeholder="例如 Nos" value={retailDefaultUom} />
             </View>
             <View style={styles.rowField}>
               <ProductField label="批发默认单位" onChangeText={setWholesaleDefaultUom} placeholder="例如 Box" value={wholesaleDefaultUom} />
@@ -280,7 +310,12 @@ export default function ProductCreateScreen() {
           </View>
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
-              <ProductField label="零售默认单位" onChangeText={setRetailDefaultUom} placeholder="例如 Nos" value={retailDefaultUom} />
+              <ProductField
+                label={`换算系数（1 ${formatDisplayUom(wholesaleDefaultUom || '批发单位')} = ? ${formatDisplayUom(retailDefaultUom || '零售单位')}）`}
+                onChangeText={setWholesaleConversionFactor}
+                placeholder="例如 12"
+                value={wholesaleConversionFactor}
+              />
             </View>
             <View style={styles.rowField}>
               <ProductField label="标准售价" onChangeText={setStandardRate} placeholder="例如 99" value={standardRate} />
@@ -294,7 +329,12 @@ export default function ProductCreateScreen() {
               <ProductField label="零售价" onChangeText={setRetailRate} placeholder="例如 9.9" value={retailRate} />
             </View>
           </View>
-          <ProductField label="采购价" onChangeText={setStandardBuyingRate} placeholder="例如 55" value={standardBuyingRate} />
+          <ProductField
+            label="默认采购价"
+            onChangeText={setStandardBuyingRate}
+            placeholder="例如 55（默认按批发采购口径）"
+            value={standardBuyingRate}
+          />
         </View>
       </ScrollView>
       <Modal
@@ -379,6 +419,11 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
+  },
+  sectionHint: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
   },
   fieldBlock: {
     gap: 8,

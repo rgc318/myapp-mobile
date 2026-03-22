@@ -1,4 +1,5 @@
 import { callGatewayMethod } from '@/lib/api-client';
+import type { UomConversion } from '@/lib/uom-conversion';
 import { searchProducts, type ProductSearchItem } from '@/services/gateway';
 import type { PriceSummary, SalesProfile } from '@/lib/sales-mode';
 
@@ -8,10 +9,7 @@ type WarehouseStockDetail = {
   qty: number;
 };
 
-export type ProductUomConversion = {
-  uom: string;
-  conversionFactor: number | null;
-};
+export type ProductUomConversion = UomConversion;
 
 export type ProductDetail = {
   itemCode: string;
@@ -49,6 +47,10 @@ export type CreateProductPayload = {
   brand?: string;
   barcode?: string;
   stockUom?: string;
+  uomConversions?: {
+    uom: string;
+    conversionFactor: number;
+  }[];
   nickname?: string;
   description?: string;
   imageUrl?: string;
@@ -58,6 +60,7 @@ export type CreateProductPayload = {
   standardBuyingRate?: number | null;
   wholesaleDefaultUom?: string | null;
   retailDefaultUom?: string | null;
+  openingUom?: string | null;
 };
 
 export type SaveProductPayload = {
@@ -66,6 +69,11 @@ export type SaveProductPayload = {
   itemGroup?: string;
   brand?: string;
   barcode?: string;
+  stockUom?: string;
+  uomConversions?: {
+    uom: string;
+    conversionFactor: number;
+  }[];
   description?: string;
   nickname?: string;
   imageUrl?: string;
@@ -78,6 +86,7 @@ export type SaveProductPayload = {
   disabled?: boolean;
   warehouse?: string;
   warehouseStockQty?: number | null;
+  warehouseStockUom?: string | null;
 };
 
 export type { ProductSearchItem };
@@ -355,6 +364,11 @@ export async function saveProductBasicInfo(payload: SaveProductPayload) {
       item_group: payload.itemGroup,
       brand: payload.brand,
       barcode: payload.barcode,
+      stock_uom: payload.stockUom,
+      uom_conversions: payload.uomConversions?.map((entry) => ({
+        uom: entry.uom,
+        conversion_factor: entry.conversionFactor,
+      })),
       description: payload.description,
       nickname: payload.nickname,
       image: payload.imageUrl,
@@ -366,6 +380,7 @@ export async function saveProductBasicInfo(payload: SaveProductPayload) {
       disabled: typeof payload.disabled === 'boolean' ? (payload.disabled ? 1 : 0) : undefined,
       warehouse: payload.warehouse,
       warehouse_stock_qty: payload.warehouseStockQty,
+      warehouse_stock_uom: payload.warehouseStockUom,
     },
   );
 
@@ -388,6 +403,10 @@ export async function createProduct(payload: CreateProductPayload) {
       brand: payload.brand,
       barcode: payload.barcode,
       stock_uom: payload.stockUom,
+      uom_conversions: payload.uomConversions?.map((entry) => ({
+        uom: entry.uom,
+        conversion_factor: entry.conversionFactor,
+      })),
       nickname: payload.nickname,
       description: payload.description,
       image: payload.imageUrl,
@@ -396,6 +415,7 @@ export async function createProduct(payload: CreateProductPayload) {
       buying_prices: buyingPrices,
       wholesale_default_uom: payload.wholesaleDefaultUom,
       retail_default_uom: payload.retailDefaultUom,
+      opening_uom: payload.openingUom,
     },
   );
 
@@ -428,6 +448,7 @@ export async function createProductAndStock(payload: {
   itemName: string;
   defaultWarehouse?: string;
   openingQty?: number;
+  openingUom?: string;
   standardRate?: number;
   description?: string;
   image?: string;
@@ -438,6 +459,7 @@ export async function createProductAndStock(payload: {
       item_name: payload.itemName,
       default_warehouse: payload.defaultWarehouse,
       opening_qty: payload.openingQty ?? 0,
+      opening_uom: payload.openingUom,
       standard_rate: payload.standardRate,
       description: payload.description,
       image: payload.image,

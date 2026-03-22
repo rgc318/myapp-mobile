@@ -245,6 +245,7 @@ export default function ProductSearchScreen() {
   const [message, setMessage] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const [newItemQty, setNewItemQty] = useState('0');
+  const [newItemOpeningUom, setNewItemOpeningUom] = useState('Nos');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
   const mode = params.mode === 'order' ? 'order' : 'lookup';
@@ -341,6 +342,7 @@ export default function ProductSearchScreen() {
         itemName,
         defaultWarehouse: preferences.defaultWarehouse || undefined,
         openingQty: Number(newItemQty) || 0,
+        openingUom: newItemOpeningUom.trim() || undefined,
         standardRate: newItemPrice.trim() ? Number(newItemPrice) || 0 : undefined,
         description: toOptionalText(newItemDescription),
       });
@@ -349,6 +351,7 @@ export default function ProductSearchScreen() {
       setMessage(`已创建商品 ${createdItem.itemName || createdItem.itemCode}。`);
       setNewItemName('');
       setNewItemQty('0');
+      setNewItemOpeningUom('Nos');
       setNewItemPrice('');
       setNewItemDescription('');
 
@@ -561,6 +564,13 @@ export default function ProductSearchScreen() {
                 placeholderTextColor="rgba(31,42,55,0.45)"
                 style={[styles.quickCreateInput, { backgroundColor: surfaceMuted, borderColor }]}
                 value={newItemQty}
+              />
+              <TextInput
+                onChangeText={setNewItemOpeningUom}
+                placeholder={'入库单位，例如 Box / Nos'}
+                placeholderTextColor="rgba(31,42,55,0.45)"
+                style={[styles.quickCreateInput, { backgroundColor: surfaceMuted, borderColor }]}
+                value={newItemOpeningUom}
               />
               <TextInput
                 keyboardType="numeric"

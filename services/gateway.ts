@@ -1,6 +1,7 @@
 import { callGatewayMethod } from '@/lib/api-client';
 import { compactAddressText } from '@/lib/form-utils';
 import type { PriceSummary, SalesMode, SalesProfile } from '@/lib/sales-mode';
+import type { UomConversion } from '@/lib/uom-conversion';
 
 export type ProductSearchItem = {
   itemCode: string;
@@ -10,6 +11,7 @@ export type ProductSearchItem = {
   uom: string | null;
   stockUom?: string | null;
   allUoms?: string[];
+  uomConversions?: UomConversion[];
   wholesaleDefaultUom?: string | null;
   retailDefaultUom?: string | null;
   salesProfiles?: SalesProfile[];
@@ -144,6 +146,29 @@ function mapUomNames(value: unknown) {
     .filter(Boolean);
 }
 
+function mapUomConversions(value: unknown): UomConversion[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+      const row = entry as Record<string, unknown>;
+      const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
+      if (!uom) {
+        return null;
+      }
+      return {
+        uom,
+        conversionFactor: toOptionalNumber(row.conversion_factor),
+      } satisfies UomConversion;
+    })
+    .filter((entry): entry is UomConversion => Boolean(entry));
+}
+
 function mapPriceSummary(value: unknown): PriceSummary | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -226,6 +251,7 @@ export async function searchProducts(
       uom: typeof row.uom === 'string' ? row.uom : null,
       stockUom: typeof row.stock_uom === 'string' ? row.stock_uom : null,
       allUoms: mapUomNames(row.all_uoms),
+      uomConversions: mapUomConversions(row.all_uoms),
       wholesaleDefaultUom:
         typeof row.wholesale_default_uom === 'string' ? row.wholesale_default_uom : null,
       retailDefaultUom:

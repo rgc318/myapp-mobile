@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 
+import type { UomConversion } from '@/lib/uom-conversion';
 import type { PriceSummary, SalesMode, SalesProfile } from '@/lib/sales-mode';
 import { buildModeDefaults, normalizeSalesMode } from '@/lib/sales-mode';
 import type { ProductSearchItem } from '@/services/gateway';
@@ -14,7 +15,9 @@ export type SalesOrderDraftItem = {
   uom: string | null;
   salesMode?: SalesMode;
   allUoms?: string[];
+  uomConversions?: UomConversion[];
   stockUom?: string | null;
+  stockQty?: number | null;
   wholesaleDefaultUom?: string | null;
   retailDefaultUom?: string | null;
   salesProfiles?: SalesProfile[];
@@ -64,7 +67,23 @@ function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
     allUoms: Array.isArray(item.allUoms)
       ? item.allUoms.map((value) => (typeof value === 'string' ? value : '')).filter(Boolean)
       : [],
+    uomConversions: Array.isArray(item.uomConversions)
+      ? item.uomConversions
+          .map((entry) =>
+            entry && typeof entry === 'object' && typeof entry.uom === 'string'
+              ? {
+                  uom: entry.uom,
+                  conversionFactor:
+                    typeof entry.conversionFactor === 'number' && Number.isFinite(entry.conversionFactor)
+                      ? entry.conversionFactor
+                      : null,
+                }
+              : null,
+          )
+          .filter((entry): entry is UomConversion => Boolean(entry))
+      : [],
     stockUom: typeof item.stockUom === 'string' ? item.stockUom : null,
+    stockQty: typeof item.stockQty === 'number' && Number.isFinite(item.stockQty) ? item.stockQty : null,
     wholesaleDefaultUom:
       typeof item.wholesaleDefaultUom === 'string' ? item.wholesaleDefaultUom : null,
     retailDefaultUom:
@@ -242,7 +261,9 @@ export function addItemToSalesOrderDraft(
     uom: defaults.uom || item.uom,
     salesMode: defaults.salesMode,
     allUoms: item.allUoms ?? [],
+    uomConversions: item.uomConversions ?? [],
     stockUom: item.stockUom ?? null,
+    stockQty: item.stockQty ?? null,
     wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
     retailDefaultUom: item.retailDefaultUom ?? null,
     salesProfiles: item.salesProfiles ?? [],

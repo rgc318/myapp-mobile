@@ -50,6 +50,8 @@ export type SalesOrderItemEditorProps = {
   uom: string | null;
   wholesaleReferenceLabel: string;
   retailReferenceLabel: string;
+  conversionSummary?: string | null;
+  stockReferenceSummary?: string | null;
   qty: number;
   priceText: string;
   onChangeSalesMode: (value: SalesMode) => void;
@@ -70,6 +72,8 @@ export function SalesOrderItemEditor({
   uom,
   wholesaleReferenceLabel,
   retailReferenceLabel,
+  conversionSummary,
+  stockReferenceSummary,
   qty,
   priceText,
   onChangeSalesMode,
@@ -203,6 +207,15 @@ export function SalesOrderItemEditor({
             </View>
           </View>
         </View>
+
+        {conversionSummary || stockReferenceSummary ? (
+          <View style={[styles.itemHintCard, { backgroundColor: surfaceMuted, borderColor }]}>
+            {conversionSummary ? <ThemedText style={styles.itemHintText}>{conversionSummary}</ThemedText> : null}
+            {stockReferenceSummary ? (
+              <ThemedText style={styles.itemHintText}>{stockReferenceSummary}</ThemedText>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -331,6 +344,19 @@ const styles = StyleSheet.create({
   itemEditBlockPrice: {
     flex: 1,
     gap: 4,
+  },
+  itemHintCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  itemHintText: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
   },
   itemEditLabel: {
     color: '#6B7280',

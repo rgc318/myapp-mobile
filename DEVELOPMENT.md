@@ -3001,3 +3001,111 @@ This rule is especially important because the sales flow has already standardize
   - credit control
   - customer-specific price
   - default warehouse strategy
+
+## Frontend Progress Update (2026-03-22)
+
+This round focused on aligning the mobile frontend with the new server-side unit conversion behavior and simplifying the product-unit model for current wholesale workflows.
+
+### Main Decisions
+
+- the mobile product UI now uses a simplified rule:
+  - retail UOM is treated as the practical base inventory-facing unit in frontend interaction
+  - wholesale UOM is configured through a conversion factor relative to the retail/base unit
+- final quantity conversion is still owned by backend
+- stock in order entry is shown as a reference and warning signal, not as a hard business gate
+
+### Completed
+
+- product detail inventory editing now supports business-UOM input
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+  - current warehouse stock target can now be entered by:
+    - wholesale UOM
+    - retail/base UOM
+  - the page shows a conversion reminder before save
+  - save flow now sends:
+    - `warehouse_stock_qty`
+    - `warehouse_stock_uom`
+
+- product detail unit area was simplified around current business needs
+  - retail/base UOM remains the main inventory-facing unit in the page
+  - wholesale UOM is edited together with a single conversion factor
+  - the page is no longer trying to expose a generic multi-row UOM editor on mobile
+
+- product create page now matches the same unit model
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+  - create flow now directly builds:
+    - `stock_uom`
+    - `uom_conversions`
+  - the page now treats:
+    - retail UOM as the base inventory-facing unit
+    - wholesale UOM as the business UOM that needs a conversion factor
+
+- quick create-and-stock now supports input UOM
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+  - quick product creation can now send:
+    - `opening_qty`
+    - `opening_uom`
+  - this allows field operators to create and stock by wholesale/business UOM instead of only thinking in base inventory UOM
+
+- shared conversion helper was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/uom-conversion.ts`
+  - current helper supports:
+    - resolving conversion factor relative to stock/base UOM
+    - converting current business quantity to stock/base quantity
+    - formatting conversion results for display
+
+- sales-order draft now carries conversion context
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/sales-order-draft.ts`
+  - draft items now keep:
+    - `uomConversions`
+    - `stockQty`
+    - `stockUom`
+
+- order item cards now show conversion-aware hints
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-order-item-editor.tsx`
+  - current cards can now show:
+    - current business quantity
+    - approximate converted base quantity
+    - current reference stock reminder
+  - these hints are advisory only and intentionally do not hard block the workflow
+
+- product service and gateway mapping were updated
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/products.ts`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/gateway.ts`
+  - product detail / product search rows now explicitly carry:
+    - `uomConversions`
+  - product save and quick-stock flows now support:
+    - `warehouse_stock_uom`
+    - `opening_uom`
+
+- product pricing copy was clarified
+  - `采购价` is now presented as:
+    - `默认采购价`
+  - current meaning is explicitly aligned to:
+    - default wholesale purchasing price
+  - the product detail price section now visually emphasizes:
+    - wholesale price
+    - retail price
+    - default buying price
+  - the generic standard selling price remains available, but is no longer the main visual focus
+
+### Current Boundaries
+
+- the current frontend model is intentionally simplified for current business reality and does not try to model every theoretical UOM case
+- existing products with historical ERPNext transactions may still reject stock/base UOM changes at save time
+- order entry currently shows conversion-aware reminders, but does not implement strict inventory gating
+- purchase-order item cards have not yet received the same conversion-aware hint treatment as sales-order item cards
+
+### Recommended Next Steps
+
+1. continue the same conversion-aware display pattern in purchase order entry
+2. decide whether historical items should fully hide stock/base UOM editing on mobile
+3. keep simplifying price hierarchy so wholesale / retail / default buying remain primary in the UI
