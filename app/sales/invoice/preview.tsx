@@ -60,7 +60,12 @@ export default function SalesInvoicePreviewScreen() {
       footer={
         <View style={styles.footerRow}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() =>
+              router.replace({
+                pathname: '/sales/invoice/create',
+                params: invoiceName ? { salesInvoice: invoiceName } : undefined,
+              })
+            }
             style={[styles.footerButton, styles.footerGhostButton]}>
             <ThemedText style={styles.footerGhostText} type="defaultSemiBold">
               返回发票

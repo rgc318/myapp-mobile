@@ -645,7 +645,7 @@ export default function ProductDetailScreen() {
       description="查看商品价格、库存分布，并维护基础信息。"
       footer={
         <View style={styles.footerBar}>
-          <Pressable onPress={() => router.back()} style={styles.footerSecondary}>
+          <Pressable onPress={() => router.replace('/common/products')} style={styles.footerSecondary}>
             <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
               返回商品
             </ThemedText>

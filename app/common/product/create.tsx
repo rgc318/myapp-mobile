@@ -252,7 +252,7 @@ export default function ProductCreateScreen() {
       description="录入商品基础资料、多价格和默认批发/零售单位。"
       footer={
         <View style={styles.footerBar}>
-          <Pressable onPress={() => router.back()} style={styles.footerSecondary}>
+          <Pressable onPress={() => router.replace('/common/products')} style={styles.footerSecondary}>
             <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
               返回商品
             </ThemedText>

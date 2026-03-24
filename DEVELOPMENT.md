@@ -255,9 +255,104 @@ This round focused on reducing confusion in the mobile sales-order detail page a
 - fixed the combined order save path
   - file:
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
-  - `handleSaveAll()` now forwards item-level `salesMode` together with:
+- `handleSaveAll()` now forwards item-level `salesMode` together with:
     - `qty`
     - `uom`
+
+## Product Search And Mobile Typography Polish (2026-03-24)
+
+This round focused on the mobile product-search page used during sales order item selection.
+
+The work had two goals:
+
+- make the add-item flow more suitable for a multi-warehouse order-entry scenario
+- correct several UI decisions that looked acceptable on desktop inspection but were too small or too dense for an actual phone app
+
+### Completed
+
+- product-search warehouse filtering and selection were expanded
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+  - supports:
+    - warehouse filtering
+    - explicit `全部仓库` entry
+    - in-stock-only toggle
+    - per-product warehouse switching before adding into the draft
+
+- product-search card information hierarchy was rebuilt
+  - item search cards now prioritize:
+    - product name
+    - current warehouse
+    - total stock
+    - wholesale / retail prices
+    - current warehouse picker
+    - total selected quantity
+    - current-warehouse quantity action
+  - low-value repeated hints were removed where they duplicated information already visible in the warehouse selector or right-side action area
+
+- pricing display was changed from compressed pills to more readable inline price rows
+  - `批发价` and `零售价` are now easier to scan
+  - price amount is visually stronger than descriptive text
+  - warehouse selector now explicitly shows:
+    - `该仓库库存：xx`
+
+- several child-page return paths were made explicit instead of depending on browser/app history
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/preview.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/payment/create.tsx`
+  - this avoids the common failure mode where:
+    - the user refreshes a subpage
+    - navigation history is lost
+    - `router.back()` returns to the app home page instead of the real business source page
+
+### Mobile UI Rule Clarified
+
+`myapp-mobile` is a phone app, not a desktop admin page squeezed into a mobile frame.
+
+Going forward, typography and spacing should follow these rules:
+
+- key operational text must be sized for direct phone reading
+  - examples:
+    - product name
+    - current warehouse
+    - total selected quantity
+    - current warehouse quantity label
+    - price amount
+- avoid desktop-style tiny helper labels for core business information
+- if an operator must make a decision based on a piece of text, that text should not be visually treated like metadata
+- repeated small labels are worse than one clear, larger label in the correct place
+- prefer fewer blocks with stronger hierarchy over many small pills or low-contrast helper rows
+
+In short:
+
+- mobile business UI should optimize for thumb-speed scanning on a phone
+- not for fitting the maximum possible number of labels into one card
+
+### Problems Encountered In This Round
+
+- product-search page originally over-relied on repeated helper text
+  - the same quantity meaning appeared in several positions
+  - users could not quickly distinguish:
+    - total selected quantity
+    - current warehouse quantity
+    - warehouse stock quantity
+
+- warehouse filtering had an implicit "all warehouses" behavior
+  - technically leaving the field empty already searched all warehouses
+  - but this was not obvious in the UI
+  - explicit options were needed
+
+- several return flows depended on history state instead of business source context
+  - this became visible after page refresh during testing
+
+### Current Recommended Next Steps
+
+1. continue checking other order-related child pages for refresh-safe return behavior
+2. keep reducing low-value helper text in product-search cards if it does not support a real operator decision
+3. maintain phone-first typography when adding new sales and purchase pages
     - `price`
     - `warehouse`
   - this keeps the "save all" path aligned with the dedicated item-save path

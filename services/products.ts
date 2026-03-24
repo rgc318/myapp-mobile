@@ -97,6 +97,7 @@ export function searchCatalogProducts(
     warehouse?: string;
     company?: string;
     limit?: number;
+    inStockOnly?: boolean;
   },
 ) {
   return searchProducts(query, options);

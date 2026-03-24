@@ -89,6 +89,24 @@ export default function SalesPaymentCreateScreen() {
     Number.isFinite(currentPaidAmount) &&
     currentPaidAmount > 0 &&
     currentPaidAmount > suggestedAmount;
+  const paymentSourceName =
+    typeof params.salesInvoice === 'string' && params.salesInvoice.trim()
+      ? params.salesInvoice.trim()
+      : typeof params.referenceName === 'string' && params.referenceName.trim()
+        ? params.referenceName.trim()
+        : '';
+
+  const returnToSourcePage = () => {
+    if (paymentSourceName) {
+      router.replace({
+        pathname: '/sales/invoice/create',
+        params: { salesInvoice: paymentSourceName },
+      });
+      return;
+    }
+
+    router.replace('/(tabs)/sales');
+  };
 
   useEffect(() => {
     const nextReferenceName =
@@ -225,7 +243,7 @@ export default function SalesPaymentCreateScreen() {
         confirmLabel: '返回来源页',
         onConfirm: () => {
           setResultDialog(null);
-          router.back();
+          returnToSourcePage();
         },
       });
     } catch (error) {

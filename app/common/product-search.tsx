@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -21,15 +22,53 @@ import {
   type SalesOrderDraftItem,
 } from '@/lib/sales-order-draft';
 import { useFeedback } from '@/providers/feedback-provider';
+import { searchLinkOptions } from '@/services/master-data';
 import { createProductAndStock, searchCatalogProducts, type ProductSearchItem } from '@/services/products';
 
-function getProductResultKey(item: ProductSearchItem, defaultSalesMode?: SalesMode) {
+function getProductResultKey(item: ProductSearchItem) {
   return [item.itemCode, item.warehouse ?? ''].join('::');
 }
 
-function getDraftItem(item: ProductSearchItem, draftItems: SalesOrderDraftItem[], defaultSalesMode?: SalesMode) {
-  const key = getProductResultKey(item, defaultSalesMode);
+function getDraftItem(item: ProductSearchItem, draftItems: SalesOrderDraftItem[]) {
+  const key = getProductResultKey(item);
   return draftItems.find((draftItem) => draftItem.draftKey === key) ?? null;
+}
+
+function getDraftSummaryForItem(itemCode: string, draftItems: SalesOrderDraftItem[]) {
+  const rows = draftItems.filter((draftItem) => draftItem.itemCode === itemCode);
+  const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
+  const byWarehouse = rows.map((row) => ({
+    warehouse: row.warehouse || '未指定仓库',
+    qty: row.qty,
+    uom: row.uom || '',
+  }));
+
+  return {
+    totalQty,
+    byWarehouse,
+  };
+}
+
+function getDraftQtyForWarehouse(itemCode: string, warehouse: string | null | undefined, draftItems: SalesOrderDraftItem[]) {
+  return draftItems
+    .filter((draftItem) => draftItem.itemCode === itemCode && (draftItem.warehouse || '') === (warehouse || ''))
+    .reduce((sum, draftItem) => sum + draftItem.qty, 0);
+}
+
+function buildWarehouseSummaryText(draftItems: SalesOrderDraftItem[]) {
+  if (!draftItems.length) {
+    return '点击查看已加入商品';
+  }
+
+  const grouped = draftItems.reduce<Record<string, number>>((acc, item) => {
+    const warehouse = item.warehouse || '未指定仓库';
+    acc[warehouse] = (acc[warehouse] ?? 0) + item.qty;
+    return acc;
+  }, {});
+
+  return Object.entries(grouped)
+    .map(([warehouse, qty]) => `${warehouse} ${qty}`)
+    .join(' / ');
 }
 
 function formatModePriceReference(
@@ -42,9 +81,19 @@ function formatModePriceReference(
   return `${label} ${priceText} / ${uomText}`;
 }
 
+function formatWarehouseStockLabel(item: ProductSearchItem, warehouse: string | null) {
+  const selectedRow = item.warehouseStockDetails?.find((row) => row.warehouse === warehouse);
+  const qty = selectedRow?.qty ?? item.stockQty ?? 0;
+  const uom = item.stockUom || item.uom || '';
+  return `${qty} ${uom ? formatDisplayUom(uom) : ''}`.trim();
+}
+
 function ResultRow({
   item,
   selectedQty,
+  totalSelectedQty,
+  selectedWarehouse,
+  onSelectWarehouse,
   onAdd,
   onDecrease,
   onOpenDetail,
@@ -52,6 +101,9 @@ function ResultRow({
 }: {
   item: ProductSearchItem;
   selectedQty: number;
+  totalSelectedQty: number;
+  selectedWarehouse: string | null;
+  onSelectWarehouse: (item: ProductSearchItem, warehouse: string) => void;
   onAdd: (item: ProductSearchItem) => void;
   onDecrease: (item: ProductSearchItem) => void;
   onOpenDetail: (item: ProductSearchItem) => void;
@@ -61,7 +113,9 @@ function ResultRow({
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
-  const successSoft = useThemeColor({}, 'accentSoft');
+  const selectedWarehouseName = selectedWarehouse || item.warehouse || '未指定仓库';
+  const selectedWarehouseStockText = formatWarehouseStockLabel(item, selectedWarehouse || item.warehouse);
+  const showTotalSelectedHint = totalSelectedQty > 0;
 
   return (
     <Pressable onPress={() => onOpenDetail(item)} style={[styles.resultRow, { backgroundColor: surface, borderColor }]}>
@@ -78,76 +132,135 @@ function ResultRow({
           <ThemedText numberOfLines={1} style={styles.resultTitle} type="defaultSemiBold">
             {item.itemName || item.itemCode}
           </ThemedText>
-          <View style={[styles.badge, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.badgeText}>{formatDisplayUom(item.uom)}</ThemedText>
-          </View>
         </View>
+
+        <ThemedText numberOfLines={1} style={styles.resultWarehouseHeadline} type="defaultSemiBold">
+          当前仓库 {selectedWarehouseName}
+        </ThemedText>
 
         <View style={styles.resultMetaRow}>
           <ThemedText numberOfLines={1} style={styles.resultMeta}>
             编码 {item.itemCode}
           </ThemedText>
-          <ThemedText numberOfLines={1} style={styles.resultMeta}>
-            库存 {item.stockQty ?? '-'}
-          </ThemedText>
         </View>
+
+        {typeof item.totalQty === 'number' ? (
+          <View style={styles.stockSummaryRow}>
+            <ThemedText style={styles.stockSummaryLabel}>总库存</ThemedText>
+            <ThemedText style={styles.stockSummaryValue} type="defaultSemiBold">
+              {item.totalQty}
+            </ThemedText>
+          </View>
+        ) : null}
 
         <View style={styles.modePriceInlineRow}>
-          <View style={[styles.modePricePill, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.modePricePillText}>
-              {formatModePriceReference('批发', item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
-            </ThemedText>
+          <View style={styles.modePriceBlock}>
+            <View style={styles.modePriceValueRow}>
+              <ThemedText style={styles.modePriceLabel}>批发价</ThemedText>
+              <ThemedText style={styles.modePriceValue} type="defaultSemiBold">
+                {typeof item.priceSummary?.wholesaleRate === 'number' ? `¥ ${item.priceSummary.wholesaleRate}` : '未配置'}
+              </ThemedText>
+              <ThemedText style={styles.modePriceUnit}>
+                {item.wholesaleDefaultUom ? `/ ${formatDisplayUom(item.wholesaleDefaultUom)}` : '/ 未设置单位'}
+              </ThemedText>
+            </View>
           </View>
-          <View style={[styles.modePricePill, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.modePricePillText}>
-              {formatModePriceReference('零售', item.priceSummary?.retailRate, item.retailDefaultUom)}
-            </ThemedText>
+          <View style={styles.modePriceBlock}>
+            <View style={styles.modePriceValueRow}>
+              <ThemedText style={styles.modePriceLabel}>零售价</ThemedText>
+              <ThemedText style={styles.modePriceValue} type="defaultSemiBold">
+                {typeof item.priceSummary?.retailRate === 'number' ? `¥ ${item.priceSummary.retailRate}` : '未配置'}
+              </ThemedText>
+              <ThemedText style={styles.modePriceUnit}>
+                {item.retailDefaultUom ? `/ ${formatDisplayUom(item.retailDefaultUom)}` : '/ 未设置单位'}
+              </ThemedText>
+            </View>
           </View>
         </View>
 
-        <View style={styles.resultFooterRow}>
-          <ThemedText numberOfLines={1} style={styles.resultMeta}>
-            {item.warehouse || '未指定仓库'}
-          </ThemedText>
-          {!isOrderMode ? (
+        {!isOrderMode ? (
+          <View style={styles.resultFooterRow}>
+            <View style={styles.resultFooterCopy} />
             <ThemedText style={styles.detailHint}>{'查看详情'}</ThemedText>
-          ) : selectedQty > 0 ? (
-            <View style={[styles.selectedPill, { backgroundColor: successSoft }]}>
-              <ThemedText style={[styles.selectedPillText, { color: tintColor }]} type="defaultSemiBold">
-                {'已加入 '} {selectedQty} {' 件'}
+          </View>
+        ) : null}
+
+        {item.warehouseStockDetails?.length ? (
+          <Pressable
+            onPress={(event) => {
+              event.stopPropagation();
+              onSelectWarehouse(item, selectedWarehouse || item.warehouse || '');
+            }}
+            style={[styles.warehouseSelectorButton, { backgroundColor: surfaceMuted, borderColor }]}>
+            <View style={styles.warehouseSelectorCopy}>
+              <ThemedText style={styles.warehouseSelectorLabel}>分仓选择</ThemedText>
+              <ThemedText numberOfLines={1} style={styles.warehouseSelectorValue} type="defaultSemiBold">
+                {selectedWarehouseName}
+              </ThemedText>
+              <ThemedText numberOfLines={1} style={styles.warehouseSelectorStock}>
+                该仓库库存：{selectedWarehouseStockText}
               </ThemedText>
             </View>
-          ) : (
-            <ThemedText style={styles.selectedHint}>{'还未加入订单'}</ThemedText>
-          )}
-        </View>
+            <View style={styles.warehouseSelectorAside}>
+              <ThemedText style={styles.warehouseSelectorAction} type="defaultSemiBold">
+                切换
+              </ThemedText>
+            </View>
+          </Pressable>
+        ) : null}
       </View>
 
       {isOrderMode ? (
         selectedQty > 0 ? (
-          <View style={[styles.stepper, { backgroundColor: surfaceMuted, borderColor }]}>
-            <Pressable onPress={(event) => { event.stopPropagation(); onDecrease(item); }} style={styles.stepperButton}>
-              <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
-                -
-              </ThemedText>
-            </Pressable>
-            <View style={styles.stepperValueWrap}>
-              <ThemedText style={styles.stepperValue} type="defaultSemiBold">
-                {selectedQty}
-              </ThemedText>
+          <View style={styles.actionColumn}>
+            {showTotalSelectedHint ? (
+              <View style={styles.actionSummaryBlock}>
+                <ThemedText style={styles.actionSummaryLabel}>总加入数</ThemedText>
+                <ThemedText style={[styles.actionSummaryValue, { color: tintColor }]} type="defaultSemiBold">
+                  {totalSelectedQty}
+                </ThemedText>
+              </View>
+            ) : null}
+            <View style={styles.actionControlGroup}>
+              <ThemedText style={styles.actionCurrentLabel}>当前仓库加入数</ThemedText>
+              <View style={[styles.stepper, { backgroundColor: surfaceMuted, borderColor }]}>
+                <Pressable onPress={(event) => { event.stopPropagation(); onDecrease(item); }} style={styles.stepperButton}>
+                  <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
+                    -
+                  </ThemedText>
+                </Pressable>
+                <View style={styles.stepperValueWrap}>
+                  <ThemedText style={styles.stepperValue} type="defaultSemiBold">
+                    {selectedQty}
+                  </ThemedText>
+                </View>
+                <Pressable onPress={(event) => { event.stopPropagation(); onAdd(item); }} style={styles.stepperButton}>
+                  <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
+                    +
+                  </ThemedText>
+                </Pressable>
+              </View>
             </View>
-            <Pressable onPress={(event) => { event.stopPropagation(); onAdd(item); }} style={styles.stepperButton}>
-              <ThemedText style={[styles.stepperActionText, { color: tintColor }]} type="defaultSemiBold">
-                +
-              </ThemedText>
-            </Pressable>
           </View>
         ) : (
-          <Pressable onPress={(event) => { event.stopPropagation(); onAdd(item); }} style={[styles.addButton, { backgroundColor: tintColor }]}>
-            <ThemedText style={styles.addButtonText} type="defaultSemiBold">
-              {'加入订单'}
-            </ThemedText>
-          </Pressable>
+          <View style={styles.actionColumn}>
+            {showTotalSelectedHint ? (
+              <View style={styles.actionSummaryBlock}>
+                <ThemedText style={styles.actionSummaryLabel}>总加入数</ThemedText>
+                <ThemedText style={[styles.actionSummaryValue, { color: tintColor }]} type="defaultSemiBold">
+                  {totalSelectedQty}
+                </ThemedText>
+              </View>
+            ) : null}
+            <View style={styles.actionControlGroup}>
+              <ThemedText style={styles.actionCurrentLabel}>当前仓库加入数</ThemedText>
+              <Pressable onPress={(event) => { event.stopPropagation(); onAdd(item); }} style={[styles.addButton, { backgroundColor: tintColor }]}>
+                <ThemedText style={styles.addButtonText} type="defaultSemiBold">
+                  {'加入当前仓'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
         )
       ) : null}
     </Pressable>
@@ -241,7 +354,11 @@ export default function ProductSearchScreen() {
   const preferences = getAppPreferences();
   const { showError, showSuccess } = useFeedback();
   const [query, setQuery] = useState('');
+  const [warehouseFilter, setWarehouseFilter] = useState(preferences.defaultWarehouse || '');
+  const [inStockOnly, setInStockOnly] = useState(true);
   const [results, setResults] = useState<ProductSearchItem[]>([]);
+  const [selectedWarehouseMap, setSelectedWarehouseMap] = useState<Record<string, string>>({});
+  const [warehousePickerItem, setWarehousePickerItem] = useState<ProductSearchItem | null>(null);
   const [message, setMessage] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const [newItemQty, setNewItemQty] = useState('0');
@@ -279,6 +396,21 @@ export default function ProductSearchScreen() {
     () => draftItems.reduce((sum, item) => sum + (item.price ?? 0) * item.qty, 0),
     [draftItems],
   );
+  const warehouseDraftSummaryText = useMemo(
+    () => buildWarehouseSummaryText(draftItems),
+    [draftItems],
+  );
+  const loadWarehouseOptions = async (text: string) => {
+    const options = await searchLinkOptions('Warehouse', text, ['warehouse_name']);
+    return [
+      {
+        label: '全部仓库',
+        value: '',
+        description: '不限制仓库，搜索所有仓库的商品库存',
+      },
+      ...options,
+    ];
+  };
 
   const handleSearch = async (rawQuery?: string) => {
     const nextQuery = (rawQuery ?? query).trim();
@@ -294,12 +426,28 @@ export default function ProductSearchScreen() {
       setQuery(nextQuery);
       const items = await searchCatalogProducts(nextQuery, {
         company: preferences.defaultCompany || undefined,
-        warehouse: preferences.defaultWarehouse || undefined,
+        warehouse: warehouseFilter.trim() || undefined,
+        inStockOnly,
       });
+      setSelectedWarehouseMap(
+        items.reduce<Record<string, string>>((acc, item) => {
+          const preferredWarehouse =
+            (warehouseFilter.trim() &&
+            item.warehouseStockDetails?.some((row) => row.warehouse === warehouseFilter.trim())
+              ? warehouseFilter.trim()
+              : item.warehouse) ||
+            item.warehouseStockDetails?.[0]?.warehouse ||
+            '';
+          if (preferredWarehouse) {
+            acc[item.itemCode] = preferredWarehouse;
+          }
+          return acc;
+        }, {}),
+      );
       setResults(items);
       setMessage(
         items.length
-          ? `\u5171\u627e\u5230 ${items.length} \u4e2a\u5546\u54c1\u3002`
+          ? `\u5171\u627e\u5230 ${items.length} \u4e2a\u5546\u54c1。${warehouseFilter.trim() ? ` 当前按仓库 ${warehouseFilter.trim()} 搜索。` : ''}${inStockOnly ? ' 仅显示有库存结果。' : ''}`
           : '\u6ca1\u6709\u627e\u5230\u5339\u914d\u5546\u54c1\u3002',
       );
     } catch (error) {
@@ -317,11 +465,18 @@ export default function ProductSearchScreen() {
   };
 
   const handleAdd = (item: ProductSearchItem) => {
-    addItemToSalesOrderDraft(item, draftScope, { defaultSalesMode });
+    const selectedWarehouse = selectedWarehouseMap[item.itemCode] ?? item.warehouse ?? null;
+    const nextItem = {
+      ...item,
+      warehouse: selectedWarehouse,
+      stockQty:
+        item.warehouseStockDetails?.find((row) => row.warehouse === selectedWarehouse)?.qty ?? item.stockQty,
+    };
+    addItemToSalesOrderDraft(nextItem, draftScope, { defaultSalesMode });
     const nextDraft = getSalesOrderDraft(draftScope);
-    const nextQty = getDraftItem(item, nextDraft, defaultSalesMode)?.qty ?? 0;
+    const nextQty = getDraftItem(nextItem, nextDraft)?.qty ?? 0;
     setDraftItems([...nextDraft]);
-    setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u52a0\u5165\u8ba2\u5355\uff0c\u5f53\u524d\u5df2\u9009 ${nextQty} \u4ef6\u3002`);
+    setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} 加入订单，仓库 ${selectedWarehouse || '未指定'}，当前已选 ${nextQty}。`);
     showSuccess(`已将 ${item.itemName || item.itemCode} 加入订单`);
   };
 
@@ -390,7 +545,14 @@ export default function ProductSearchScreen() {
   };
 
   const handleDecrease = (item: ProductSearchItem) => {
-    const draftItem = getDraftItem(item, getSalesOrderDraft(draftScope), defaultSalesMode);
+    const selectedWarehouse = selectedWarehouseMap[item.itemCode] ?? item.warehouse ?? null;
+    const draftItem = getDraftItem(
+      {
+        ...item,
+        warehouse: selectedWarehouse,
+      },
+      getSalesOrderDraft(draftScope),
+    );
     if (!draftItem) {
       return;
     }
@@ -398,15 +560,27 @@ export default function ProductSearchScreen() {
     if (draftItem.qty <= 1) {
       removeSalesOrderDraftItem(draftItem.draftKey, draftScope);
       syncDraftState();
-      setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} \u4ece\u8ba2\u5355\u4e2d\u79fb\u9664\u3002`);
+      setMessage(`\u5df2\u5c06 ${item.itemName || item.itemCode} 从订单中移除。`);
       return;
     }
 
     updateSalesOrderDraftQty(draftItem.draftKey, draftItem.qty - 1, draftScope);
     const nextDraft = getSalesOrderDraft(draftScope);
-    const nextQty = getDraftItem(item, nextDraft, defaultSalesMode)?.qty ?? 0;
+    const nextQty = getDraftItem({ ...item, warehouse: selectedWarehouse }, nextDraft)?.qty ?? 0;
     setDraftItems([...nextDraft]);
-    setMessage(`\u5df2\u8c03\u6574 ${item.itemName || item.itemCode} \u6570\u91cf\uff0c\u5f53\u524d\u4e3a ${nextQty} \u4ef6\u3002`);
+    setMessage(`\u5df2调整 ${item.itemName || item.itemCode} 数量，当前为 ${nextQty}。`);
+  };
+
+  const handleSelectWarehouse = (item: ProductSearchItem, warehouse: string) => {
+    if (!warehouse || warehouse === (selectedWarehouseMap[item.itemCode] ?? item.warehouse)) {
+      setWarehousePickerItem(item);
+      return;
+    }
+
+    setSelectedWarehouseMap((current) => ({
+      ...current,
+      [item.itemCode]: warehouse,
+    }));
   };
 
   const handleDraftIncrease = (item: SalesOrderDraftItem) => {
@@ -449,16 +623,16 @@ export default function ProductSearchScreen() {
   }, [draftScope, params.query]);
 
   const handleReturnToOrder = () => {
-    if (isOrderMode) {
-      router.back();
-      return;
-    }
-
     if (returnOrderName) {
-      router.push({
+      router.replace({
         pathname: '/sales/order/[orderName]',
         params: { orderName: returnOrderName },
       });
+      return;
+    }
+
+    if (isOrderMode) {
+      router.replace('/sales/order/create');
       return;
     }
 
@@ -481,10 +655,10 @@ export default function ProductSearchScreen() {
               </View>
               <View style={styles.footerCopy}>
                 <ThemedText style={styles.footerTitle} type="defaultSemiBold">
-                  已选 {draftCount} 项，合计 {totalSelectedQty} 件
+                  已选 {draftCount} 项，录入数量 {totalSelectedQty}
                 </ThemedText>
                 <ThemedText style={styles.footerHint}>
-                  点击查看已加入商品
+                  {warehouseDraftSummaryText}
                 </ThemedText>
               </View>
             </Pressable>
@@ -511,6 +685,58 @@ export default function ProductSearchScreen() {
           />
         </View>
 
+        <View style={styles.searchFilterRow}>
+          <View style={styles.searchFilterField}>
+            <LinkOptionInput
+              helperText="可直接选择“全部仓库”，或指定某个仓库后再搜索。"
+              label="仓库过滤"
+              loadOptions={loadWarehouseOptions}
+              onChangeText={setWarehouseFilter}
+              onOptionSelect={setWarehouseFilter}
+              placeholder="请输入或搜索仓库"
+              value={warehouseFilter}
+            />
+          </View>
+
+          <View style={styles.filterActionsColumn}>
+            <Pressable
+              onPress={() => setWarehouseFilter('')}
+              style={[
+                styles.toggleChip,
+                {
+                  backgroundColor: warehouseFilter.trim() ? surfaceMuted : tintColor,
+                  borderColor: warehouseFilter.trim() ? borderColor : tintColor,
+                },
+              ]}>
+              <ThemedText
+                style={[styles.toggleChipText, warehouseFilter.trim() ? null : styles.toggleChipTextActive]}
+                type="defaultSemiBold">
+                全部仓库
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setInStockOnly((current) => !current)}
+              style={[
+                styles.toggleChip,
+                {
+                  backgroundColor: inStockOnly ? tintColor : surfaceMuted,
+                  borderColor: inStockOnly ? tintColor : borderColor,
+                },
+              ]}>
+              <ThemedText
+                style={[styles.toggleChipText, inStockOnly ? styles.toggleChipTextActive : null]}
+                type="defaultSemiBold">
+                {inStockOnly ? '仅看有库存' : '包含无库存'}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
+        <ThemedText style={styles.searchHintText}>
+          可按商品编码、名称、条码、昵称、描述搜索。
+        </ThemedText>
+
         <Pressable onPress={() => void handleSearch()} style={[styles.searchButton, { backgroundColor: tintColor }]}>
           <ThemedText style={styles.searchButtonText} type="defaultSemiBold">
             {isLoading ? '\u641c\u7d22\u4e2d...' : '\u5f00\u59cb\u641c\u7d22'}
@@ -526,15 +752,36 @@ export default function ProductSearchScreen() {
         ) : null}
 
         {results.map((item) => (
-          <ResultRow
-            isOrderMode={isOrderMode}
-            item={item}
-            key={getProductResultKey(item, defaultSalesMode)}
-            onAdd={handleAdd}
-            onDecrease={handleDecrease}
-            onOpenDetail={handleOpenDetail}
-            selectedQty={getDraftItem(item, draftItems, defaultSalesMode)?.qty ?? 0}
-          />
+          (() => {
+            const selectedWarehouse = selectedWarehouseMap[item.itemCode] ?? item.warehouse;
+            const currentWarehouseQty =
+              getDraftItem(
+                {
+                  ...item,
+                  warehouse: selectedWarehouse,
+                },
+                draftItems,
+              )?.qty ?? 0;
+            const draftSummary = getDraftSummaryForItem(item.itemCode, draftItems);
+
+            return (
+              <ResultRow
+                isOrderMode={isOrderMode}
+                item={item}
+                key={getProductResultKey({
+                  ...item,
+                  warehouse: selectedWarehouse,
+                })}
+                onAdd={handleAdd}
+                onDecrease={handleDecrease}
+                onOpenDetail={handleOpenDetail}
+                onSelectWarehouse={handleSelectWarehouse}
+                selectedQty={currentWarehouseQty}
+                selectedWarehouse={selectedWarehouse}
+                totalSelectedQty={draftSummary.totalQty}
+              />
+            );
+          })()
         ))}
 
         {!results.length && query.trim() ? (
@@ -620,7 +867,7 @@ export default function ProductSearchScreen() {
                   当前订单商品
                 </ThemedText>
                 <ThemedText style={styles.sheetHint}>
-                  已选 {draftCount} 项，合计 {totalSelectedQty} 件
+                  已选 {draftCount} 项，录入数量 {totalSelectedQty}
                 </ThemedText>
               </View>
               <Pressable onPress={() => setShowDraftSheet(false)} style={styles.sheetCloseButton}>
@@ -670,6 +917,95 @@ export default function ProductSearchScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setWarehousePickerItem(null)}
+        transparent
+        visible={Boolean(warehousePickerItem)}>
+        <View style={styles.sheetBackdrop}>
+          <Pressable onPress={() => setWarehousePickerItem(null)} style={styles.sheetDismissArea} />
+          <View style={[styles.sheetCard, { backgroundColor: surface, borderColor }]}>
+            <View style={styles.sheetHeader}>
+              <View>
+                <ThemedText style={styles.sheetTitle} type="defaultSemiBold">
+                  选择加入仓库
+                </ThemedText>
+                <ThemedText style={styles.sheetHint}>
+                  {warehousePickerItem?.itemName || warehousePickerItem?.itemCode}
+                </ThemedText>
+              </View>
+              <Pressable onPress={() => setWarehousePickerItem(null)} style={styles.sheetCloseButton}>
+                <ThemedText style={styles.sheetCloseText} type="defaultSemiBold">
+                  收起
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.sheetList} style={styles.sheetScroll}>
+              {(warehousePickerItem?.warehouseStockDetails?.length
+                ? warehousePickerItem.warehouseStockDetails
+                : [
+                    {
+                      warehouse: warehousePickerItem?.warehouse || '未指定仓库',
+                      company: null,
+                      qty: warehousePickerItem?.stockQty ?? 0,
+                    },
+                  ]
+              ).map((stockRow) => {
+                const active =
+                  stockRow.warehouse ===
+                  (selectedWarehouseMap[warehousePickerItem?.itemCode ?? ''] ?? warehousePickerItem?.warehouse);
+                const warehouseAddedQty = warehousePickerItem
+                  ? getDraftQtyForWarehouse(warehousePickerItem.itemCode, stockRow.warehouse, draftItems)
+                  : 0;
+
+                return (
+                  <Pressable
+                    key={`${warehousePickerItem?.itemCode}-${stockRow.warehouse}`}
+                    onPress={() => {
+                      if (warehousePickerItem) {
+                        setSelectedWarehouseMap((current) => ({
+                          ...current,
+                          [warehousePickerItem.itemCode]: stockRow.warehouse,
+                        }));
+                      }
+                      setWarehousePickerItem(null);
+                    }}
+                    style={[
+                      styles.modalWarehouseOption,
+                      {
+                        backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted,
+                        borderColor,
+                      },
+                    ]}>
+                    <View style={styles.modalWarehouseCopy}>
+                      <ThemedText numberOfLines={1} type="defaultSemiBold">
+                        {stockRow.warehouse}
+                      </ThemedText>
+                      <ThemedText style={styles.modalWarehouseMeta}>
+                        库存 {stockRow.qty}{' '}
+                        {warehousePickerItem?.stockUom || warehousePickerItem?.uom
+                          ? formatDisplayUom(warehousePickerItem?.stockUom || warehousePickerItem?.uom || '')
+                          : ''}
+                      </ThemedText>
+                      <ThemedText style={styles.modalWarehouseMeta}>
+                        {warehouseAddedQty > 0 ? `当前仓库已加入数 ${warehouseAddedQty}` : '当前仓库未加入'}
+                      </ThemedText>
+                      {stockRow.company ? (
+                        <ThemedText style={styles.modalWarehouseMeta}>{stockRow.company}</ThemedText>
+                      ) : null}
+                    </View>
+                    <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                      {active ? '当前' : '选择'}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </AppShell>
   );
 }
@@ -679,7 +1015,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     gap: 12,
+    overflow: 'visible',
     padding: 16,
+    zIndex: 40,
   },
   searchInputWrap: {
     alignItems: 'center',
@@ -695,6 +1033,60 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 38,
     paddingVertical: 0,
+  },
+  searchFilterRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+    zIndex: 60,
+  },
+  inlineFilterInputWrap: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  inlineFilterLabel: {
+    color: '#475569',
+    fontSize: 13,
+  },
+  inlineFilterInput: {
+    flex: 1,
+    fontSize: 14,
+    minHeight: 34,
+    paddingVertical: 0,
+  },
+  searchFilterField: {
+    flex: 1,
+    zIndex: 80,
+  },
+  filterActionsColumn: {
+    gap: 8,
+  },
+  toggleChip: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 112,
+    paddingHorizontal: 12,
+  },
+  toggleChipText: {
+    color: '#334155',
+    fontSize: 13,
+  },
+  toggleChipTextActive: {
+    color: '#FFF',
+  },
+  searchHintText: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
   },
   searchButton: {
     alignItems: 'center',
@@ -763,6 +1155,7 @@ const styles = StyleSheet.create({
   },
   resultList: {
     gap: 12,
+    zIndex: 1,
   },
   resultRow: {
     alignItems: 'flex-start',
@@ -796,7 +1189,11 @@ const styles = StyleSheet.create({
   },
   resultTitle: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 22,
+  },
+  resultWarehouseHeadline: {
+    color: '#0F172A',
+    fontSize: 18,
   },
   badge: {
     borderRadius: 999,
@@ -809,46 +1206,106 @@ const styles = StyleSheet.create({
   },
   resultMeta: {
     opacity: 0.68,
-    fontSize: 12,
+    fontSize: 11,
   },
   resultMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
+  stockSummaryRow: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 2,
+  },
+  stockSummaryLabel: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  stockSummaryValue: {
+    color: '#0F172A',
+    fontSize: 18,
+  },
   modePriceInlineRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  modePriceBlock: {
+    flex: 1,
+    minWidth: 132,
+  },
+  modePriceLabel: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modePriceValueRow: {
+    alignItems: 'baseline',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
   },
-  modePricePill: {
-    borderRadius: 999,
-    maxWidth: '100%',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  modePriceValue: {
+    color: '#0F172A',
+    fontSize: 20,
+    lineHeight: 24,
   },
-  modePricePillText: {
+  modePriceUnit: {
     color: '#475569',
-    fontSize: 11,
+    fontSize: 14,
+    lineHeight: 20,
   },
   resultFooterRow: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 8,
     justifyContent: 'space-between',
     marginTop: 2,
   },
-  selectedPill: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  resultFooterCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
   },
-  selectedPillText: {
+  warehouseSelectorButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  warehouseSelectorCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  warehouseSelectorLabel: {
+    color: '#64748B',
     fontSize: 11,
   },
-  selectedHint: {
-    fontSize: 12,
-    opacity: 0.6,
+  warehouseSelectorValue: {
+    color: '#0F172A',
+    fontSize: 14,
+  },
+  warehouseSelectorStock: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  warehouseSelectorAside: {
+    alignItems: 'flex-end',
+    gap: 8,
+    marginLeft: 12,
+    minWidth: 52,
+  },
+  warehouseSelectorAction: {
+    color: '#2563EB',
   },
   detailHint: {
     color: '#2563EB',
@@ -865,6 +1322,38 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     color: '#FFF',
+  },
+  actionColumn: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    minWidth: 112,
+  },
+  actionSummaryBlock: {
+    alignItems: 'flex-end',
+    gap: 4,
+    minWidth: 92,
+  },
+  actionSummaryLabel: {
+    color: '#64748B',
+    fontSize: 16,
+    lineHeight: 20,
+    textAlign: 'right',
+  },
+  actionSummaryValue: {
+    fontSize: 32,
+    lineHeight: 34,
+  },
+  actionControlGroup: {
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  actionCurrentLabel: {
+    color: '#64748B',
+    fontSize: 16,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   stepper: {
     alignItems: 'center',
@@ -891,7 +1380,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   stepperValue: {
-    fontSize: 16,
+    fontSize: 18,
   },
   emptyState: {
     borderRadius: 18,
@@ -1033,6 +1522,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingTop: 14,
+  },
+  modalWarehouseOption: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  modalWarehouseCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  modalWarehouseMeta: {
+    color: '#64748B',
+    fontSize: 12,
   },
   sheetTotalLabel: {
     color: '#64748B',

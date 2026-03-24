@@ -7,6 +7,7 @@ export type ProductSearchItem = {
   itemCode: string;
   itemName: string;
   stockQty: number | null;
+  totalQty?: number | null;
   price: number | null;
   uom: string | null;
   stockUom?: string | null;
@@ -17,6 +18,11 @@ export type ProductSearchItem = {
   salesProfiles?: SalesProfile[];
   priceSummary?: PriceSummary | null;
   warehouse: string | null;
+  warehouseStockDetails?: {
+    warehouse: string;
+    company: string | null;
+    qty: number;
+  }[];
   imageUrl?: string | null;
   description?: string | null;
   nickname?: string | null;
@@ -220,6 +226,7 @@ export async function searchProducts(
     warehouse?: string;
     company?: string;
     limit?: number;
+    inStockOnly?: boolean;
   },
 ) {
   const data = await postGateway<any>('myapp.api.gateway.search_product_v2', {
@@ -227,7 +234,8 @@ export async function searchProducts(
     warehouse: options?.warehouse,
     company: options?.company,
     limit: options?.limit ?? 20,
-    search_fields: ['item_code', 'item_name', 'barcode', 'nickname'],
+    in_stock_only: options?.inStockOnly ? 1 : 0,
+    search_fields: ['item_code', 'item_name', 'barcode', 'nickname', 'description'],
     sort_by: 'relevance',
     sort_order: 'asc',
   });
@@ -247,6 +255,7 @@ export async function searchProducts(
         toOptionalNumber(row.actual_qty) ??
         toOptionalNumber(row.qty) ??
         null,
+      totalQty: toOptionalNumber(row.total_qty) ?? null,
       price: toOptionalNumber(row.price) ?? toOptionalNumber(row.rate) ?? null,
       uom: typeof row.uom === 'string' ? row.uom : null,
       stockUom: typeof row.stock_uom === 'string' ? row.stock_uom : null,
@@ -262,6 +271,30 @@ export async function searchProducts(
         typeof row.warehouse === 'string' && row.warehouse.trim()
           ? row.warehouse
           : options?.warehouse ?? null,
+      warehouseStockDetails: Array.isArray(row.warehouse_stock_details)
+        ? row.warehouse_stock_details
+            .map((entry) => {
+              if (!entry || typeof entry !== 'object') {
+                return null;
+              }
+              const stockRow = entry as Record<string, unknown>;
+              const warehouse =
+                typeof stockRow.warehouse === 'string' ? stockRow.warehouse.trim() : '';
+              if (!warehouse) {
+                return null;
+              }
+              return {
+                warehouse,
+                company: typeof stockRow.company === 'string' ? stockRow.company : null,
+                qty: toOptionalNumber(stockRow.qty) ?? 0,
+              };
+            })
+            .filter(
+              (
+                entry,
+              ): entry is { warehouse: string; company: string | null; qty: number } => Boolean(entry),
+            )
+        : [],
       imageUrl:
         typeof row.image === 'string'
           ? row.image
