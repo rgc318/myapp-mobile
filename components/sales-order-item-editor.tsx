@@ -40,6 +40,31 @@ function SalesModeSwitch({
   );
 }
 
+type WarehouseEntryEditorProps = {
+  warehouse?: string | null;
+  salesMode: SalesMode;
+  uom: string | null;
+  wholesaleReferenceLabel: string;
+  retailReferenceLabel: string;
+  conversionSummary?: string | null;
+  stockReferenceSummary?: string | null;
+  qty: number;
+  priceText: string;
+  lineAmountLabel: string;
+  onChangeSalesMode: (value: SalesMode) => void;
+  onChangePrice: (value: string) => void;
+  onChangeQty: (value: string) => void;
+  onDecreaseQty: () => void;
+  onIncreaseQty: () => void;
+  onRemove: () => void;
+  compact?: boolean;
+  readOnly?: boolean;
+};
+
+type GroupedWarehouseLine = WarehouseEntryEditorProps & {
+  key: string;
+};
+
 export type SalesOrderItemEditorProps = {
   itemCode: string;
   itemName: string;
@@ -60,13 +85,11 @@ export type SalesOrderItemEditorProps = {
   onDecreaseQty: () => void;
   onIncreaseQty: () => void;
   onRemove: () => void;
+  groupedLines?: GroupedWarehouseLine[];
+  groupedSummaryLabel?: string;
 };
 
-export function SalesOrderItemEditor({
-  itemCode,
-  itemName,
-  imageUrl,
-  lineAmountLabel,
+function WarehouseEntryEditor({
   warehouse,
   salesMode,
   uom,
@@ -76,13 +99,16 @@ export function SalesOrderItemEditor({
   stockReferenceSummary,
   qty,
   priceText,
+  lineAmountLabel,
   onChangeSalesMode,
   onChangePrice,
   onChangeQty,
   onDecreaseQty,
   onIncreaseQty,
   onRemove,
-}: SalesOrderItemEditorProps) {
+  compact = false,
+  readOnly = false,
+}: WarehouseEntryEditorProps) {
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
@@ -91,35 +117,47 @@ export function SalesOrderItemEditor({
   const warningColor = useThemeColor({}, 'warning');
 
   return (
-    <View style={[styles.itemRow, { backgroundColor: surface, borderColor }]}>
-      {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.itemThumbImage} />
-      ) : (
-        <View style={[styles.itemThumb, { backgroundColor: surfaceMuted }]}>
-          <IconSymbol color="#28B7D7" name="shippingbox.fill" size={20} />
-        </View>
-      )}
-
+    <View style={[styles.itemRow, compact ? styles.itemRowCompact : null, { backgroundColor: surface, borderColor }]}>
       <View style={styles.itemMain}>
         <View style={styles.itemHeaderRow}>
           <View style={styles.itemHeaderCopy}>
             <ThemedText numberOfLines={1} style={styles.itemTitle} type="defaultSemiBold">
-              {itemName || itemCode}
+              {compact ? `仓库 ${warehouse || '未指定仓库'}` : '商品'}
             </ThemedText>
-            <ThemedText style={styles.itemSubline}>{'编码 '} {itemCode}</ThemedText>
-            <ThemedText style={styles.itemSubline}>{'仓库 '} {warehouse || '未指定仓库'}</ThemedText>
+            {!compact ? <ThemedText style={styles.itemSubline}>{'仓库 '} {warehouse || '未指定仓库'}</ThemedText> : null}
           </View>
 
           <View style={styles.itemHeaderAside}>
             <ThemedText style={[styles.itemAmountInline, { color: warningColor }]} type="defaultSemiBold">
               {lineAmountLabel}
             </ThemedText>
-            <Pressable onPress={onRemove} style={[styles.removeButton, { borderColor }]}>
-              <ThemedText style={[styles.textAction, { color: dangerColor }]}>{'删除'}</ThemedText>
-            </Pressable>
+            {!readOnly ? (
+              <Pressable onPress={onRemove} style={[styles.removeButton, { borderColor }]}>
+                <ThemedText style={[styles.textAction, { color: dangerColor }]}>{'删除'}</ThemedText>
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
+        {readOnly ? (
+          <>
+            {conversionSummary ? <ThemedText style={styles.itemSubline}>{conversionSummary}</ThemedText> : null}
+            <View style={styles.readonlyMetricsRow}>
+              <ThemedText style={[styles.readonlyMetricValue, { color: warningColor }]} type="defaultSemiBold">
+                {priceText ? `¥ ${priceText}` : '—'}
+              </ThemedText>
+              <ThemedText style={styles.readonlyMetricMultiply}>x</ThemedText>
+              <ThemedText style={styles.readonlyMetricQty} type="defaultSemiBold">
+                {qty}
+              </ThemedText>
+              <ThemedText style={styles.readonlyMetricUom} type="defaultSemiBold">
+                {uom ? formatDisplayUom(uom) : '未设置'}
+              </ThemedText>
+            </View>
+            {stockReferenceSummary ? <ThemedText style={styles.itemHintText}>{stockReferenceSummary}</ThemedText> : null}
+          </>
+        ) : (
+          <>
         <View style={styles.itemEditRow}>
           <View style={styles.itemEditBlockMode}>
             <View style={styles.itemModeHeader}>
@@ -211,13 +249,120 @@ export function SalesOrderItemEditor({
         {conversionSummary || stockReferenceSummary ? (
           <View style={[styles.itemHintCard, { backgroundColor: surfaceMuted, borderColor }]}>
             {conversionSummary ? <ThemedText style={styles.itemHintText}>{conversionSummary}</ThemedText> : null}
-            {stockReferenceSummary ? (
-              <ThemedText style={styles.itemHintText}>{stockReferenceSummary}</ThemedText>
-            ) : null}
+            {stockReferenceSummary ? <ThemedText style={styles.itemHintText}>{stockReferenceSummary}</ThemedText> : null}
           </View>
         ) : null}
+          </>
+        )}
       </View>
     </View>
+  );
+}
+
+export function SalesOrderItemEditor({
+  itemCode,
+  itemName,
+  imageUrl,
+  lineAmountLabel,
+  warehouse,
+  salesMode,
+  uom,
+  wholesaleReferenceLabel,
+  retailReferenceLabel,
+  conversionSummary,
+  stockReferenceSummary,
+  qty,
+  priceText,
+  onChangeSalesMode,
+  onChangePrice,
+  onChangeQty,
+  onDecreaseQty,
+  onIncreaseQty,
+  onRemove,
+  groupedLines,
+  groupedSummaryLabel,
+}: SalesOrderItemEditorProps) {
+  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const borderColor = useThemeColor({}, 'border');
+  const warningColor = useThemeColor({}, 'warning');
+
+  if (groupedLines?.length) {
+    return (
+      <View style={[styles.groupCard, { backgroundColor: surfaceMuted, borderColor }]}>
+        <View style={styles.groupHeader}>
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.itemThumbImage} />
+          ) : (
+            <View style={[styles.itemThumb, { backgroundColor: '#FFFFFF' }]}>
+              <IconSymbol color="#28B7D7" name="shippingbox.fill" size={20} />
+            </View>
+          )}
+
+          <View style={styles.groupCopy}>
+            <ThemedText numberOfLines={1} style={styles.groupTitle} type="defaultSemiBold">
+              {itemName || itemCode}
+            </ThemedText>
+            <ThemedText style={styles.groupMeta}>{'编码 '} {itemCode}</ThemedText>
+            {groupedSummaryLabel ? (
+              <ThemedText style={styles.groupSummary} type="defaultSemiBold">
+                {groupedSummaryLabel}
+              </ThemedText>
+            ) : null}
+          </View>
+
+          <ThemedText style={[styles.groupAmount, { color: warningColor }]} type="defaultSemiBold">
+            {lineAmountLabel}
+          </ThemedText>
+        </View>
+
+        <View style={styles.groupRows}>
+          {groupedLines.map((line) => (
+            <WarehouseEntryEditor
+              compact
+              conversionSummary={line.conversionSummary}
+              key={line.key}
+              lineAmountLabel={line.lineAmountLabel}
+              onChangePrice={line.onChangePrice}
+              onChangeQty={line.onChangeQty}
+              onChangeSalesMode={line.onChangeSalesMode}
+              onDecreaseQty={line.onDecreaseQty}
+              onIncreaseQty={line.onIncreaseQty}
+              onRemove={line.onRemove}
+              priceText={line.priceText}
+              qty={line.qty}
+              retailReferenceLabel={line.retailReferenceLabel}
+              salesMode={line.salesMode}
+              stockReferenceSummary={line.stockReferenceSummary}
+              uom={line.uom}
+              warehouse={line.warehouse}
+              wholesaleReferenceLabel={line.wholesaleReferenceLabel}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <WarehouseEntryEditor
+      compact={false}
+      conversionSummary={conversionSummary}
+      lineAmountLabel={lineAmountLabel}
+      onChangePrice={onChangePrice}
+      onChangeQty={onChangeQty}
+      onChangeSalesMode={onChangeSalesMode}
+      onDecreaseQty={onDecreaseQty}
+      onIncreaseQty={onIncreaseQty}
+      onRemove={onRemove}
+      priceText={priceText}
+      qty={qty}
+      retailReferenceLabel={retailReferenceLabel}
+      salesMode={salesMode}
+      stockReferenceSummary={stockReferenceSummary}
+      uom={uom}
+      warehouse={warehouse}
+      wholesaleReferenceLabel={wholesaleReferenceLabel}
+    />
   );
 }
 
@@ -233,12 +378,45 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     flex: 1,
-    minHeight: 40,
     justifyContent: 'center',
+    minHeight: 40,
   },
   salesModeSwitchText: {
     color: '#475569',
     fontSize: 14,
+  },
+  groupCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+    padding: 12,
+  },
+  groupHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  groupCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  groupTitle: {
+    fontSize: 16,
+  },
+  groupMeta: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  groupSummary: {
+    color: '#2563EB',
+    fontSize: 13,
+  },
+  groupAmount: {
+    fontSize: 18,
+  },
+  groupRows: {
+    gap: 10,
   },
   itemRow: {
     borderRadius: 16,
@@ -246,6 +424,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     padding: 12,
+  },
+  itemRowCompact: {
+    gap: 0,
+    padding: 10,
   },
   itemThumb: {
     alignItems: 'center',
@@ -269,7 +451,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
-    minHeight: 60,
   },
   itemHeaderCopy: {
     flex: 1,
@@ -293,6 +474,29 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 12,
   },
+  readonlyMetricsRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  readonlyMetricValue: {
+    fontSize: 14,
+  },
+  readonlyMetricMultiply: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  readonlyMetricQty: {
+    color: '#2563EB',
+    fontSize: 15,
+  },
+  readonlyMetricUom: {
+    color: '#0F172A',
+    fontSize: 13,
+  },
   itemEditRow: {
     flexDirection: 'row',
     gap: 10,
@@ -314,8 +518,8 @@ const styles = StyleSheet.create({
   itemModeReferenceBlock: {
     borderRadius: 10,
     flex: 1,
-    minHeight: 34,
     justifyContent: 'center',
+    minHeight: 34,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },

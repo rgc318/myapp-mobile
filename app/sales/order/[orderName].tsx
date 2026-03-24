@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { SalesOrderItemEditor } from '@/components/sales-order-item-editor';
 import { ThemedText } from '@/components/themed-text';
@@ -306,6 +306,52 @@ function buildComparableItemSignature(items: {
   }));
 }
 
+function groupOrderItemsByProduct<T extends {
+  itemCode: string;
+  itemName?: string | null;
+  imageUrl?: string | null;
+  qty: number;
+  amount?: number | null;
+  rate?: number | null;
+}>(items: T[]) {
+  const grouped = new Map<
+    string,
+    {
+      itemCode: string;
+      itemName: string;
+      imageUrl?: string | null;
+      totalQty: number;
+      totalAmount: number;
+      rows: { item: T; index: number }[];
+    }
+  >();
+
+  items.forEach((item, index) => {
+    const lineAmount =
+      typeof item.amount === 'number'
+        ? item.amount
+        : (item.rate ?? 0) * item.qty;
+    const existing = grouped.get(item.itemCode);
+    if (existing) {
+      existing.rows.push({ item, index });
+      existing.totalQty += item.qty;
+      existing.totalAmount += lineAmount;
+      return;
+    }
+
+    grouped.set(item.itemCode, {
+      itemCode: item.itemCode,
+      itemName: item.itemName || item.itemCode,
+      imageUrl: item.imageUrl ?? null,
+      totalQty: item.qty,
+      totalAmount: lineAmount,
+      rows: [{ item, index }],
+    });
+  });
+
+  return Array.from(grouped.values());
+}
+
 export default function SalesOrderDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -572,6 +618,10 @@ export default function SalesOrderDetailScreen() {
   );
   const orderQuantitySummary = useMemo(
     () => buildOrderQuantitySummary(isEditingItems ? editableItems : detail?.items ?? []),
+    [detail?.items, editableItems, isEditingItems],
+  );
+  const groupedDisplayItems = useMemo(
+    () => groupOrderItemsByProduct(isEditingItems ? editableItems : detail?.items ?? []),
     [detail?.items, editableItems, isEditingItems],
   );
   const isSavingCurrentSection = isEditingAllSections
@@ -1733,116 +1783,111 @@ export default function SalesOrderDetailScreen() {
           ) : null}
           <View style={styles.goodsList}>
             {detail?.items?.length ? (
-              (isEditingItems ? editableItems : detail.items).map((item, index) =>
-                isEditingItems ? (
-                  (() => {
-                    const editableItem = item as EditableOrderItem;
-                    const itemDefaults = itemModeDefaults[editableItem.itemCode] ?? {};
-                    const effectivePriceSummary = editableItem.priceSummary ?? itemDefaults.priceSummary ?? null;
-                    const effectiveWholesaleDefaultUom =
-                      editableItem.wholesaleDefaultUom ?? itemDefaults.wholesaleDefaultUom ?? null;
-                    const effectiveRetailDefaultUom =
-                      editableItem.retailDefaultUom ?? itemDefaults.retailDefaultUom ?? null;
+              groupedDisplayItems.map((group) => (
+                <SalesOrderItemEditor
+                  imageUrl={group.rows[0]?.item.imageUrl}
+                  itemCode={group.itemCode}
+                  itemName={group.itemName}
+                  key={group.itemCode}
+                  groupedSummaryLabel={`共 ${group.rows.length} 个仓库条目，合计 ${group.totalQty}`}
+                  groupedLines={group.rows.map(({ item, index }) => {
+                    if (isEditingItems) {
+                      const editableItem = item as EditableOrderItem;
+                      const itemDefaults = itemModeDefaults[editableItem.itemCode] ?? {};
+                      const effectivePriceSummary = editableItem.priceSummary ?? itemDefaults.priceSummary ?? null;
+                      const effectiveWholesaleDefaultUom =
+                        editableItem.wholesaleDefaultUom ?? itemDefaults.wholesaleDefaultUom ?? null;
+                      const effectiveRetailDefaultUom =
+                        editableItem.retailDefaultUom ?? itemDefaults.retailDefaultUom ?? null;
 
-                    return (
-                  <SalesOrderItemEditor
-                    imageUrl={editableItem.imageUrl}
-                    itemCode={editableItem.itemCode}
-                    itemName={editableItem.itemName}
-                    key={`${item.itemCode}-${index}`}
-                    lineAmountLabel={formatCurrencyValue(
-                      ((editableItem.rate ?? 0) * editableItem.qty),
-                      detail?.currency || 'CNY',
-                    )}
-                    onChangePrice={(value) =>
-                      updateEditableItem(index, {
-                        rate: value.trim() ? Number(value) || 0 : null,
-                      })
+                      return {
+                        key: `${editableItem.itemCode}-${editableItem.warehouse}-${index}`,
+                        warehouse: editableItem.warehouse,
+                        salesMode: editableItem.salesMode,
+                        uom: editableItem.uom,
+                        wholesaleReferenceLabel: formatModeReference(
+                          '批发',
+                          effectivePriceSummary?.wholesaleRate ?? null,
+                          effectiveWholesaleDefaultUom,
+                          detail?.currency || 'CNY',
+                        ),
+                        retailReferenceLabel: formatModeReference(
+                          '零售',
+                          effectivePriceSummary?.retailRate ?? null,
+                          effectiveRetailDefaultUom,
+                          detail?.currency || 'CNY',
+                        ),
+                        conversionSummary: buildLineUnitSummary({
+                          salesMode: editableItem.salesMode,
+                          uom: editableItem.uom,
+                          stockUom: editableItem.stockUom,
+                        }),
+                        stockReferenceSummary:
+                          editableItem.stockUom
+                            ? `库存结算单位：${formatDisplayUom(editableItem.stockUom)}`
+                            : null,
+                        lineAmountLabel: formatCurrencyValue(
+                          ((editableItem.rate ?? 0) * editableItem.qty),
+                          detail?.currency || 'CNY',
+                        ),
+                        priceText: editableItem.rate == null ? '' : String(editableItem.rate),
+                        qty: editableItem.qty,
+                        onChangePrice: (value: string) =>
+                          updateEditableItem(index, {
+                            rate: value.trim() ? Number(value) || 0 : null,
+                          }),
+                        onChangeQty: (value: string) =>
+                          updateEditableItem(index, {
+                            qty: Math.max(1, Number(value.replace(/[^0-9]/g, '')) || 1),
+                          }),
+                        onChangeSalesMode: (nextMode: SalesMode) => applyEditableItemSalesMode(index, nextMode),
+                        onDecreaseQty: () => stepEditableItemQty(index, -1),
+                        onIncreaseQty: () => stepEditableItemQty(index, 1),
+                        onRemove: () => removeEditableItem(index),
+                      };
                     }
-                    onChangeQty={(value) =>
-                      updateEditableItem(index, {
-                        qty: Math.max(1, Number(value.replace(/[^0-9]/g, '')) || 1),
-                      })
-                    }
-                    onChangeSalesMode={(nextMode) => applyEditableItemSalesMode(index, nextMode)}
-                    onDecreaseQty={() => stepEditableItemQty(index, -1)}
-                    onIncreaseQty={() => stepEditableItemQty(index, 1)}
-                    onRemove={() => removeEditableItem(index)}
-                    priceText={editableItem.rate == null ? '' : String(editableItem.rate)}
-                    qty={editableItem.qty}
-                    retailReferenceLabel={formatModeReference(
-                      '零售',
-                      effectivePriceSummary?.retailRate ?? null,
-                      effectiveRetailDefaultUom,
-                      detail?.currency || 'CNY',
-                    )}
-                    salesMode={editableItem.salesMode}
-                    uom={editableItem.uom}
-                    warehouse={editableItem.warehouse}
-                    wholesaleReferenceLabel={formatModeReference(
-                      '批发',
-                      effectivePriceSummary?.wholesaleRate ?? null,
-                      effectiveWholesaleDefaultUom,
-                      detail?.currency || 'CNY',
-                    )}
-                    conversionSummary={buildLineUnitSummary({
-                      salesMode: editableItem.salesMode,
-                      uom: editableItem.uom,
-                      stockUom: editableItem.stockUom,
-                    })}
-                    stockReferenceSummary={
-                      editableItem.stockUom
-                        ? `库存结算单位：${formatDisplayUom(editableItem.stockUom)}`
-                        : null
-                    }
-                  />
-                    );
-                  })()
-                ) : (
-                  <View key={`${item.itemCode}-${index}`} style={styles.goodsListItem}>
-                    <View style={styles.goodsRow}>
-                      {item.imageUrl ? (
-                        <Image source={{ uri: item.imageUrl }} style={styles.goodsImage} />
-                      ) : (
-                        <View style={[styles.goodsImage, styles.imageFallback, { backgroundColor: surfaceMuted }]}>
-                          <IconSymbol color="#94A3B8" name="photo" size={20} />
-                        </View>
-                      )}
-                      <View style={styles.goodsBody}>
-                        <ThemedText style={styles.goodsName} type="defaultSemiBold">
-                          {item.itemName || item.itemCode}
-                        </ThemedText>
-                        <ThemedText style={styles.goodsSubMeta}>{item.warehouse || '未指定仓库'}</ThemedText>
-                        <ThemedText style={styles.goodsUnitHint}>
-                          {buildLineUnitSummary({
-                            salesMode: normalizeSalesMode(item.salesMode),
-                            uom: item.uom,
-                            stockUom: item.stockUom ?? null,
-                          })}
-                        </ThemedText>
-                        <View style={styles.goodsMetricsRow}>
-                          <ThemedText style={styles.goodsPriceValue} type="defaultSemiBold">
-                            {formatCurrencyValue(item.rate, detail?.currency || 'CNY')}
-                          </ThemedText>
-                          <ThemedText style={styles.metricMultiply}>x</ThemedText>
-                          <ThemedText style={styles.goodsQtyValue} type="defaultSemiBold">
-                            {item.qty ?? '—'}
-                          </ThemedText>
-                          <ThemedText style={styles.goodsUomValue} type="defaultSemiBold">
-                            {formatDisplayUom(item.uom)}
-                          </ThemedText>
-                        </View>
-                      </View>
-                      <ThemedText style={styles.goodsAmount} type="defaultSemiBold">
-                        {formatCurrencyValue(item.amount, detail?.currency || 'CNY')}
-                      </ThemedText>
-                    </View>
-                    {index < detail.items.length - 1 ? (
-                      <View style={[styles.goodsDivider, { backgroundColor: borderColor }]} />
-                    ) : null}
-                  </View>
-                ),
-              )
+
+                    return {
+                      key: `${item.itemCode}-${item.warehouse}-${index}`,
+                      readOnly: true,
+                      warehouse: item.warehouse || '未指定仓库',
+                      salesMode: normalizeSalesMode(item.salesMode),
+                      uom: item.uom,
+                      wholesaleReferenceLabel: '',
+                      retailReferenceLabel: '',
+                      conversionSummary: buildLineUnitSummary({
+                        salesMode: normalizeSalesMode(item.salesMode),
+                        uom: item.uom,
+                        stockUom: item.stockUom ?? null,
+                      }),
+                      stockReferenceSummary: null,
+                      lineAmountLabel: formatCurrencyValue(item.amount, detail?.currency || 'CNY'),
+                      priceText: item.rate == null ? '' : String(item.rate),
+                      qty: item.qty ?? 1,
+                      onChangePrice: () => {},
+                      onChangeQty: () => {},
+                      onChangeSalesMode: () => {},
+                      onDecreaseQty: () => {},
+                      onIncreaseQty: () => {},
+                      onRemove: () => {},
+                    };
+                  })}
+                  lineAmountLabel={formatCurrencyValue(group.totalAmount, detail?.currency || 'CNY')}
+                  onChangePrice={() => {}}
+                  onChangeQty={() => {}}
+                  onChangeSalesMode={() => {}}
+                  onDecreaseQty={() => {}}
+                  onIncreaseQty={() => {}}
+                  onRemove={() => {}}
+                  priceText=""
+                  qty={group.totalQty}
+                  retailReferenceLabel=""
+                  salesMode="wholesale"
+                  uom={null}
+                  warehouse=""
+                  wholesaleReferenceLabel=""
+                />
+              ))
             ) : (
               <ThemedText style={styles.emptyText}>暂无商品明细</ThemedText>
             )}
@@ -2280,6 +2325,41 @@ const styles = StyleSheet.create({
   },
   goodsList: {
     gap: 12,
+  },
+  groupedGoodsCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    gap: 12,
+    padding: 12,
+  },
+  groupedGoodsHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  groupedGoodsCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  groupedGoodsTitle: {
+    fontSize: 16,
+  },
+  groupedGoodsMeta: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  groupedGoodsSummary: {
+    color: '#2563EB',
+    fontSize: 13,
+  },
+  groupedGoodsAmount: {
+    color: '#A86518',
+    fontSize: 18,
+  },
+  groupedGoodsRows: {
+    gap: 10,
   },
   goodsListItem: {
     gap: 12,

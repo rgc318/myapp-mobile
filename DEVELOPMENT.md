@@ -3351,3 +3351,88 @@ This round aligned the product-create flow with the already refactored product-d
 
 1. extract shared product payload builders for create/edit so unit-conversion and price mapping cannot drift
 2. if product creation later needs opening stock or inventory setup, add it as a dedicated create-only section without forking the rest of the form structure
+
+## Sales Item Grouping Alignment (2026-03-24)
+
+This round aligned sales item presentation across:
+
+- product-search draft sheet
+- sales-order create page
+- sales-order detail page
+
+The main goal was to stop treating same-product-different-warehouse rows as unrelated cards in the UI.
+
+### Completed
+
+- sales item editing now uses a native grouped-item structure
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-order-item-editor.tsx`
+  - the component is no longer treated as a single flat item card only
+  - it now supports:
+    - a normal single-item mode
+    - a grouped-product mode with:
+      - product-level header
+      - grouped summary
+      - multiple warehouse-level child rows
+
+- warehouse-level rows still keep full editing ability where needed
+  - grouped mode does not remove line editing
+  - create page and detail edit page still support:
+    - qty editing
+    - price editing
+    - sales-mode switching
+    - remove line
+
+- create page and order detail page now follow the same grouping model
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+  - current visual model is:
+    - outer level: product
+    - inner level: warehouse rows carried by that product
+
+- this replaced the earlier UI problem where:
+  - the page visually grouped by product
+  - but each inner row still repeated full product image / name / code
+  - resulting in more height instead of less
+
+### Component Positioning
+
+`SalesOrderItemEditor` should now be understood as a higher-level sales item module, not a tiny flat row primitive.
+
+It is responsible for:
+
+- product-level presentation in grouped mode
+- warehouse-level editing rows inside that grouped product
+- keeping create-page and detail-page sales item editing visually consistent
+
+In other words:
+
+- it is no longer just a "single product row"
+- it is also not a full page-level list
+- it currently sits at a product-module level
+
+### Problems Encountered In This Round
+
+- an intermediate version grouped items at the page level but still rendered old full item cards inside each group
+  - this created visual duplication
+  - it made grouped layout taller instead of denser
+
+- another intermediate version over-corrected by degrading child rows into warehouse-only cards
+  - that removed too much product context
+  - this was not acceptable because operators still need the original product-level identity and editing context
+
+### Current Rule
+
+For sales item editing on mobile:
+
+- product identity belongs at the outer grouped level
+- warehouse identity belongs at the inner line level
+- child rows should not repeat full product identity once the group header already carries it
+- but child rows must still preserve the editing controls needed for that warehouse line
+
+### Recommended Next Steps
+
+1. continue tightening grouped child-row spacing so warehouse lines read more like true sub-rows than standalone cards
+2. consider extracting a dedicated internal `warehouse-line-editor` subcomponent later if sales and purchase both adopt the same grouped pattern
+3. keep create page and detail page on the same grouped-item rendering path to avoid future drift
