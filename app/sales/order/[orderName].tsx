@@ -41,6 +41,7 @@ type EditableOrderItem = {
   stockUom?: string | null;
   wholesaleDefaultUom?: string | null;
   retailDefaultUom?: string | null;
+  allUoms?: string[];
   salesProfiles?: { modeCode: SalesMode; priceList?: string | null; defaultUom?: string | null }[];
   priceSummary?: {
     currentPriceList?: string | null;
@@ -107,6 +108,42 @@ function formatModeReference(
   currency: string,
 ) {
   return `${label} ${formatCurrencyValue(rate ?? null, currency)} / ${uom ? formatDisplayUom(uom) : '未设置单位'}`;
+}
+
+function buildLineUnitSummary(item: {
+  salesMode: SalesMode;
+  uom?: string | null;
+  stockUom?: string | null;
+}) {
+  const currentUom = item.uom ? formatDisplayUom(item.uom) : '未设置单位';
+  const stockUom = item.stockUom ? formatDisplayUom(item.stockUom) : '';
+  const modeLabel = item.salesMode === 'retail' ? '零售' : '批发';
+
+  if (stockUom && item.uom && item.uom !== item.stockUom) {
+    return `${modeLabel}录入：${currentUom}；库存按 ${stockUom} 自动换算`;
+  }
+
+  return `${modeLabel}录入：${currentUom}${stockUom ? `；库存单位 ${stockUom}` : ''}`;
+}
+
+function buildOrderQuantitySummary(items: { qty?: number | null; uom?: string | null }[]) {
+  if (!items.length) {
+    return '暂无商品明细';
+  }
+
+  const uomSet = new Set(
+    items
+      .map((item) => (typeof item.uom === 'string' ? item.uom.trim() : ''))
+      .filter(Boolean),
+  );
+
+  if (uomSet.size === 1) {
+    const onlyUom = Array.from(uomSet)[0];
+    const totalQty = items.reduce((count, item) => count + (item.qty ?? 0), 0);
+    return `共 ${items.length} 行，录入数量 ${totalQty} ${formatDisplayUom(onlyUom)}`;
+  }
+
+  return `共 ${items.length} 行，存在多种单位，数量以各行显示为准`;
 }
 
 function getBusinessStatusLabel(detail: SalesOrderDetailV2 | null) {
@@ -526,17 +563,12 @@ export default function SalesOrderDetailScreen() {
   const businessStatus = getBusinessStatusLabel(detail);
   const isEditingAnySection = isEditingContact || isEditingItems || isEditingRemarks;
   const isEditingAllSections = isEditingContact && isEditingItems && isEditingRemarks;
-  const totalQuantity = useMemo(
-    () =>
-      (isEditingItems ? editableItems : detail?.items ?? []).reduce((count, item) => count + (item.qty ?? 0), 0),
-    [detail, editableItems, isEditingItems],
-  );
   const editingGrandTotal = useMemo(
     () => editableItems.reduce((sum, item) => sum + (item.rate ?? 0) * item.qty, 0),
     [editableItems],
   );
-  const totalLineCount = useMemo(
-    () => (isEditingItems ? editableItems.length : detail?.items?.length ?? 0),
+  const orderQuantitySummary = useMemo(
+    () => buildOrderQuantitySummary(isEditingItems ? editableItems : detail?.items ?? []),
     [detail?.items, editableItems, isEditingItems],
   );
   const isSavingCurrentSection = isEditingAllSections
@@ -1332,6 +1364,7 @@ export default function SalesOrderDetailScreen() {
           price: item.rate,
           warehouse: item.warehouse,
           uom: item.uom,
+          salesMode: item.salesMode,
         })),
       });
 
@@ -1346,6 +1379,7 @@ export default function SalesOrderDetailScreen() {
       clearSalesOrderDraft(orderDraftScope);
 
       if (itemUpdateResult.orderName !== orderName) {
+        allowLeaveRef.current = true;
         showInfo(
           `订单修改已生效，系统已生成新订单 ${itemUpdateResult.orderName}，原订单 ${itemUpdateResult.sourceOrderName || orderName} 已作废。`,
         );
@@ -1748,6 +1782,16 @@ export default function SalesOrderDetailScreen() {
                       effectiveWholesaleDefaultUom,
                       detail?.currency || 'CNY',
                     )}
+                    conversionSummary={buildLineUnitSummary({
+                      salesMode: editableItem.salesMode,
+                      uom: editableItem.uom,
+                      stockUom: editableItem.stockUom,
+                    })}
+                    stockReferenceSummary={
+                      editableItem.stockUom
+                        ? `库存结算单位：${formatDisplayUom(editableItem.stockUom)}`
+                        : null
+                    }
                   />
                     );
                   })()
@@ -1766,6 +1810,13 @@ export default function SalesOrderDetailScreen() {
                           {item.itemName || item.itemCode}
                         </ThemedText>
                         <ThemedText style={styles.goodsSubMeta}>{item.warehouse || '未指定仓库'}</ThemedText>
+                        <ThemedText style={styles.goodsUnitHint}>
+                          {buildLineUnitSummary({
+                            salesMode: normalizeSalesMode(item.salesMode),
+                            uom: item.uom,
+                            stockUom: item.stockUom ?? null,
+                          })}
+                        </ThemedText>
                         <View style={styles.goodsMetricsRow}>
                           <ThemedText style={styles.goodsPriceValue} type="defaultSemiBold">
                             {formatCurrencyValue(item.rate, detail?.currency || 'CNY')}
@@ -1795,7 +1846,7 @@ export default function SalesOrderDetailScreen() {
           </View>
 
           <View style={[styles.divider, { backgroundColor: borderColor }]} />
-          <InfoRow label="商品合计" value={`${totalQuantity} 件`} />
+          <InfoRow label="商品概览" value={orderQuantitySummary} />
         </View>
 
         <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
@@ -1885,7 +1936,7 @@ export default function SalesOrderDetailScreen() {
             </ThemedText>
           </View>
           <ThemedText style={styles.bottomSummaryPrimary} type="defaultSemiBold">
-            {`共 ${totalLineCount} 项，合计 ${totalQuantity} 件`}
+            {orderQuantitySummary}
           </ThemedText>
         </View>
 
@@ -2307,6 +2358,11 @@ const styles = StyleSheet.create({
   goodsSubMeta: {
     color: '#64748B',
     fontSize: 13,
+  },
+  goodsUnitHint: {
+    color: '#475569',
+    fontSize: 12,
+    lineHeight: 18,
   },
   goodsMetricsRow: {
     alignItems: 'center',

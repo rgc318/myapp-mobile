@@ -238,6 +238,65 @@ This round turned the mobile product flow from "search-only helper pages" into a
 ### Current Product Module Boundaries
 
 - "delete" is still handled as enable / disable, not physical removal
+
+## Sales Order Edit Polish (2026-03-24)
+
+This round focused on reducing confusion in the mobile sales-order detail page after backend UOM conversion and stock validation were tightened.
+
+### Background
+
+- backend order creation / order-item update / delivery now consistently convert `qty + uom` into stock-facing values
+- the mobile detail page therefore needs to make the "business UOM vs stock UOM" distinction clearer for operators
+- at the same time, the combined "save all" path on the order detail page still had a parameter gap:
+  - item-level `salesMode` was not forwarded during the combined save flow
+
+### Completed
+
+- fixed the combined order save path
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+  - `handleSaveAll()` now forwards item-level `salesMode` together with:
+    - `qty`
+    - `uom`
+    - `price`
+    - `warehouse`
+  - this keeps the "save all" path aligned with the dedicated item-save path
+
+- clarified unit messaging in the order detail page
+  - each item row now shows a clearer line-level summary such as:
+    - current entry mode
+    - current sales UOM
+    - stock-settlement UOM
+  - this is meant to reduce the "did I enter boxes or pieces?" ambiguity during final order confirmation
+
+- removed the misleading fixed `件` summary from order totals
+  - the order summary no longer assumes all lines share the same UOM
+  - when multiple UOMs are present, the page now explicitly tells the operator to confirm quantities line by line
+
+- kept amendment navigation continuity explicit
+  - when item replacement generates a new amended order, the detail page continues to redirect to the returned order name
+  - this remains important because `update_order_items_v2` may cancel the original submitted order and create a new amended one
+
+### Problems Addressed
+
+- fixed-unit summary text was misleading in mixed `Box / Nos` scenarios
+- operators could see correct line UOMs but still see an incorrect page-level "total X 件" summary
+- combined save and single-section save were not fully aligned in the parameters they sent to the backend
+
+### Validation
+
+- lint passed for the edited order detail screen:
+
+```bash
+cd /home/rgc318/python-project/frappe_docker/frontend/myapp-mobile
+npm run lint -- app/sales/order/[orderName].tsx components/sales-order-item-editor.tsx
+```
+
+### Recommended Next Steps
+
+1. make line-level quantity / amount changes more visually obvious after switching sales mode
+2. consider showing a stronger stock-settlement hint only for lines where `uom !== stockUom`
+3. continue reviewing the product-search to order-detail handoff, but keep unit confirmation centered on the order page rather than the search page
 - warehouse stock is currently shown as:
   - total stock
   - current warehouse
