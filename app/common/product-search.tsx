@@ -55,6 +55,41 @@ function getDraftQtyForWarehouse(itemCode: string, warehouse: string | null | un
     .reduce((sum, draftItem) => sum + draftItem.qty, 0);
 }
 
+function groupDraftItemsByProduct(draftItems: SalesOrderDraftItem[]) {
+  const grouped = new Map<
+    string,
+    {
+      itemCode: string;
+      itemName: string;
+      imageUrl?: string | null;
+      totalQty: number;
+      totalAmount: number;
+      rows: SalesOrderDraftItem[];
+    }
+  >();
+
+  draftItems.forEach((item) => {
+    const existing = grouped.get(item.itemCode);
+    if (existing) {
+      existing.rows.push(item);
+      existing.totalQty += item.qty;
+      existing.totalAmount += (item.price ?? 0) * item.qty;
+      return;
+    }
+
+    grouped.set(item.itemCode, {
+      itemCode: item.itemCode,
+      itemName: item.itemName || item.itemCode,
+      imageUrl: item.imageUrl ?? null,
+      totalQty: item.qty,
+      totalAmount: (item.price ?? 0) * item.qty,
+      rows: [item],
+    });
+  });
+
+  return Array.from(grouped.values());
+}
+
 function buildWarehouseSummaryText(draftItems: SalesOrderDraftItem[]) {
   if (!draftItems.length) {
     return '点击查看已加入商品';
@@ -267,7 +302,7 @@ function ResultRow({
   );
 }
 
-function DraftItemRow({
+function DraftWarehouseRow({
   item,
   onAdd,
   onDecrease,
@@ -280,30 +315,14 @@ function DraftItemRow({
   const tintColor = useThemeColor({}, 'tint');
 
   return (
-    <View style={styles.draftItemRow}>
-      <View style={[styles.draftThumbWrap, { backgroundColor: surfaceMuted }]}>
-        {item.imageUrl ? (
-          <Image contentFit="cover" source={item.imageUrl} style={styles.draftThumbImage} />
-        ) : (
-          <IconSymbol color={tintColor} name="shippingbox.fill" size={18} />
-        )}
-      </View>
-
+    <View style={styles.draftWarehouseRow}>
       <View style={styles.draftItemMain}>
-        <View style={styles.draftItemTitleRow}>
-          <ThemedText numberOfLines={1} style={styles.draftItemTitle} type="defaultSemiBold">
-            {item.itemName || item.itemCode}
+        <View style={styles.draftWarehouseTitleRow}>
+          <ThemedText numberOfLines={1} style={styles.draftWarehouseName} type="defaultSemiBold">
+            {item.warehouse || '未指定仓库'}
           </ThemedText>
           <ThemedText style={styles.draftItemPrice} type="defaultSemiBold">
             {item.price == null ? '--' : `¥ ${item.price}`}
-          </ThemedText>
-        </View>
-        <View style={styles.draftItemMetaRow}>
-          <ThemedText numberOfLines={1} style={styles.draftItemMeta}>
-            编码 {item.itemCode}
-          </ThemedText>
-          <ThemedText numberOfLines={1} style={styles.draftItemMeta}>
-            {item.warehouse || '未指定仓库'}
           </ThemedText>
         </View>
         <View style={styles.draftItemReferenceRow}>
@@ -338,6 +357,62 @@ function DraftItemRow({
             </ThemedText>
           </Pressable>
         </View>
+      </View>
+    </View>
+  );
+}
+
+function DraftProductGroup({
+  group,
+  onAdd,
+  onDecrease,
+}: {
+  group: ReturnType<typeof groupDraftItemsByProduct>[number];
+  onAdd: (item: SalesOrderDraftItem) => void;
+  onDecrease: (item: SalesOrderDraftItem) => void;
+}) {
+  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const borderColor = useThemeColor({}, 'border');
+  const tintColor = useThemeColor({}, 'tint');
+
+  return (
+    <View style={[styles.draftGroupCard, { borderColor }]}>
+      <View style={styles.draftGroupHeader}>
+        <View style={[styles.draftThumbWrap, { backgroundColor: surfaceMuted }]}>
+          {group.imageUrl ? (
+            <Image contentFit="cover" source={group.imageUrl} style={styles.draftThumbImage} />
+          ) : (
+            <IconSymbol color={tintColor} name="shippingbox.fill" size={18} />
+          )}
+        </View>
+
+        <View style={styles.draftGroupMain}>
+          <View style={styles.draftItemTitleRow}>
+            <ThemedText numberOfLines={1} style={styles.draftItemTitle} type="defaultSemiBold">
+              {group.itemName}
+            </ThemedText>
+            <ThemedText style={styles.draftItemPrice} type="defaultSemiBold">
+              ¥ {group.totalAmount.toFixed(2)}
+            </ThemedText>
+          </View>
+          <View style={styles.draftItemMetaRow}>
+            <ThemedText numberOfLines={1} style={styles.draftItemMeta}>
+              编码 {group.itemCode}
+            </ThemedText>
+            <ThemedText numberOfLines={1} style={styles.draftItemMeta}>
+              共 {group.rows.length} 个仓库条目
+            </ThemedText>
+          </View>
+          <ThemedText style={styles.draftGroupSummary} type="defaultSemiBold">
+            总加入数 {group.totalQty}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.draftGroupRows}>
+        {group.rows.map((item) => (
+          <DraftWarehouseRow key={item.draftKey} item={item} onAdd={onAdd} onDecrease={onDecrease} />
+        ))}
       </View>
     </View>
   );
@@ -398,6 +473,10 @@ export default function ProductSearchScreen() {
   );
   const warehouseDraftSummaryText = useMemo(
     () => buildWarehouseSummaryText(draftItems),
+    [draftItems],
+  );
+  const groupedDraftItems = useMemo(
+    () => groupDraftItemsByProduct(draftItems),
     [draftItems],
   );
   const loadWarehouseOptions = async (text: string) => {
@@ -880,10 +959,10 @@ export default function ProductSearchScreen() {
             {draftItems.length ? (
               <>
                 <ScrollView contentContainerStyle={styles.sheetList} style={styles.sheetScroll}>
-                  {draftItems.map((item) => (
-                    <DraftItemRow
-                      item={item}
-                      key={item.draftKey}
+                  {groupedDraftItems.map((group) => (
+                    <DraftProductGroup
+                      group={group}
+                      key={group.itemCode}
                       onAdd={handleDraftIncrease}
                       onDecrease={handleDraftDecrease}
                     />
@@ -1453,6 +1532,49 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
+  },
+  draftGroupCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+    padding: 12,
+  },
+  draftGroupHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  draftGroupMain: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  draftGroupSummary: {
+    color: '#2563EB',
+    fontSize: 13,
+  },
+  draftGroupRows: {
+    gap: 10,
+  },
+  draftWarehouseRow: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(248,250,252,0.92)',
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  draftWarehouseTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  draftWarehouseName: {
+    color: '#0F172A',
+    flex: 1,
+    fontSize: 14,
   },
   draftThumbWrap: {
     alignItems: 'center',

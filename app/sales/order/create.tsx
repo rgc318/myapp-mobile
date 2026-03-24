@@ -846,6 +846,9 @@ export default function SalesOrderCreateScreen() {
       : messageTone === 'error'
         ? dangerColor
         : '#6B7280';
+  const returnToSalesHome = () => {
+    router.replace('/(tabs)/sales');
+  };
 
   return (
     <View style={[styles.page, { backgroundColor: background }]}>
@@ -857,7 +860,7 @@ export default function SalesOrderCreateScreen() {
                 setShowLeaveConfirm(true);
                 return;
               }
-              router.back();
+              returnToSalesHome();
             }}
             style={styles.iconCircle}>
             <IconSymbol color="#111827" name="chevron.left" size={20} />
@@ -1406,7 +1409,7 @@ export default function SalesOrderCreateScreen() {
                   if (pendingAction) {
                     navigation.dispatch(pendingAction);
                   } else {
-                    router.back();
+                    returnToSalesHome();
                   }
                 }}
                 style={[styles.dialogButton, styles.dialogPrimaryButton, { backgroundColor: tintColor }]}>

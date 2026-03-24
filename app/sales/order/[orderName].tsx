@@ -344,6 +344,9 @@ export default function SalesOrderDetailScreen() {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const tintColor = useThemeColor({}, 'tint');
   const { showError, showInfo, showSuccess } = useFeedback();
+  const returnToSalesHome = () => {
+    router.replace('/(tabs)/sales');
+  };
 
   useEffect(() => {
     if (!orderName || !isFocused) {
@@ -1451,7 +1454,7 @@ export default function SalesOrderDetailScreen() {
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              requestLeaveConfirmation(() => router.back());
+              requestLeaveConfirmation(() => returnToSalesHome());
             }}
             style={styles.topIconButton}>
             <IconSymbol color="#0F172A" name="chevron.left" size={22} />
@@ -2078,7 +2081,7 @@ export default function SalesOrderDetailScreen() {
                   } else if (pendingCallback) {
                     pendingCallback();
                   } else {
-                    router.back();
+                    returnToSalesHome();
                   }
                 }}
                 style={[styles.dialogButton, styles.dialogDangerButton]}>
