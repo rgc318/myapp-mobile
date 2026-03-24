@@ -128,9 +128,11 @@ function WarehouseEntryEditor({
           </View>
 
           <View style={styles.itemHeaderAside}>
-            <ThemedText style={[styles.itemAmountInline, { color: warningColor }]} type="defaultSemiBold">
-              {lineAmountLabel}
-            </ThemedText>
+            {!compact ? (
+              <ThemedText style={[styles.itemAmountInline, { color: warningColor }]} type="defaultSemiBold">
+                {lineAmountLabel}
+              </ThemedText>
+            ) : null}
             {!readOnly ? (
               <Pressable onPress={onRemove} style={[styles.removeButton, { borderColor }]}>
                 <ThemedText style={[styles.textAction, { color: dangerColor }]}>{'删除'}</ThemedText>
@@ -160,9 +162,11 @@ function WarehouseEntryEditor({
           <>
         <View style={styles.itemEditRow}>
           <View style={styles.itemEditBlockMode}>
-            <View style={styles.itemModeHeader}>
-              <ThemedText style={styles.itemEditLabel}>{'销售模式'}</ThemedText>
-            </View>
+            {!compact ? (
+              <View style={styles.itemModeHeader}>
+                <ThemedText style={styles.itemEditLabel}>{'销售模式'}</ThemedText>
+              </View>
+            ) : null}
             <SalesModeSwitch onChange={onChangeSalesMode} value={salesMode} />
             <View style={styles.itemModeReferences}>
               <View
@@ -427,7 +431,7 @@ const styles = StyleSheet.create({
   },
   itemRowCompact: {
     gap: 0,
-    padding: 10,
+    padding: 8,
   },
   itemThumb: {
     alignItems: 'center',
@@ -459,7 +463,7 @@ const styles = StyleSheet.create({
   },
   itemHeaderAside: {
     alignItems: 'flex-end',
-    gap: 8,
+    gap: 4,
   },
   itemTitle: {
     flex: 1,
@@ -519,7 +523,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 34,
+    minHeight: 32,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
@@ -553,9 +557,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     gap: 4,
-    marginTop: 8,
+    marginTop: 6,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   itemHintText: {
     color: '#64748B',

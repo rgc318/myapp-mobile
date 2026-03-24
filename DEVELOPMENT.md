@@ -3436,3 +3436,72 @@ For sales item editing on mobile:
 1. continue tightening grouped child-row spacing so warehouse lines read more like true sub-rows than standalone cards
 2. consider extracting a dedicated internal `warehouse-line-editor` subcomponent later if sales and purchase both adopt the same grouped pattern
 3. keep create page and detail page on the same grouped-item rendering path to avoid future drift
+
+## Grouped Warehouse Row Tightening (2026-03-24)
+
+After the first grouped-product rollout, warehouse child rows in the sales editor still looked too much like full cards and consumed too much vertical space.
+
+### Adjustments
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-order-item-editor.tsx`
+
+- compact grouped warehouse rows were tightened further
+  - reduced compact row padding and header spacing
+  - reduced hint-card top margin and vertical padding
+  - slightly reduced compact mode reference block height
+
+- low-priority information in compact child rows was reduced
+  - per-warehouse inline amount was hidden in compact mode
+  - the literal `销售模式` label was removed in compact mode while the switch itself remains
+
+### Why
+
+- order operators primarily care about:
+  - product-level grouped total
+  - warehouse-level editable quantity, mode, unit, and price
+- per-warehouse inline subtotal inside every compact child row added noise and made the grouped layout taller
+- once a grouped product header already carries product identity, the child row should read more like a warehouse sub-row than a second standalone card
+
+## Sales Calculation Safety Check (2026-03-24)
+
+After the grouped sales-item UI changes, the critical calculation path was reviewed again to confirm that the recent frontend work did not alter pricing, quantity, or payload semantics.
+
+### Checked Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-order-item-editor.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+
+### Confirmed Results
+
+- grouped rendering only changes presentation structure
+  - same-product rows are grouped visually
+  - warehouse-level rows are still edited individually
+
+- create-order submission is still line-based
+  - `buildOrderPayload()` still maps each draft warehouse row into a separate `items[]` entry
+
+- order-detail item save is still line-based
+  - `updateSalesOrderItemsV2()` is still called with each editable warehouse row mapped independently
+
+- backend payload shape is unchanged
+  - item code, quantity, price, warehouse, uom, and sales mode still flow to the gateway in the same structure
+
+- recent grouped UI work did not introduce new pricing or quantity formulas
+  - grouped totals are display summaries only
+  - they do not overwrite the underlying warehouse rows
+
+### Important Note
+
+- one earlier fix did affect save correctness in a positive way
+  - the combined save flow now includes `salesMode` consistently
+  - this was a bug fix for persistence consistency, not a new calculation change
+
+### Remaining Boundary
+
+- grouped quantity summaries currently add raw `qty` values for display
+  - this is acceptable for the current workflow
+  - if mixed-UOM grouping becomes common later, the display summary may need a more explicit label
+  - this is a presentation caution, not a business-logic or payload issue
