@@ -3505,3 +3505,55 @@ After the grouped sales-item UI changes, the critical calculation path was revie
   - this is acceptable for the current workflow
   - if mixed-UOM grouping becomes common later, the display summary may need a more explicit label
   - this is a presentation caution, not a business-logic or payload issue
+
+## Warehouse Stock Remaining Reference (2026-03-25)
+
+Operators editing warehouse-level order rows needed a stock reference close to the quantity control, without having to go back to the product search page.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/sales-order-draft.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/gateway.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-order-item-editor.tsx`
+
+### What Was Added
+
+- product search now carries warehouse-level stock into the sales-order draft
+  - the selected warehouse stock quantity and stock uom are stored separately from the business quantity being edited
+
+- create page and order-detail edit page now display `库存剩余` beside the warehouse header
+  - this is shown on compact warehouse rows
+  - the label is placed on the same line as the delete action instead of taking an extra block
+
+- `库存剩余` now updates when the operator changes quantity
+  - the display is no longer a static warehouse stock snapshot
+  - it reflects the current warehouse row reservation
+
+- old draft rows are re-hydrated if warehouse stock fields are missing
+  - this prevents older draft entries from showing no stock reference while newer entries do
+
+### Calculation Rule
+
+- displayed stock reference is:
+  - warehouse stock for the selected warehouse
+  - minus the current row reservation
+
+- the reservation is calculated in stock units when needed
+  - if the selling uom differs from the stock uom, the quantity is converted before subtracting
+  - this keeps `库存剩余` aligned with inventory semantics instead of raw typed quantity
+
+### UI Rule
+
+- `库存剩余` is a warehouse-line editing aid, not an order summary metric
+- it should stay close to:
+  - warehouse identity
+  - delete action
+  - quantity editing controls
+
+- low-stock state is visually emphasized
+  - normal remaining stock uses neutral subdued text
+  - low remaining stock uses warning color
+  - zero remaining stock uses danger color

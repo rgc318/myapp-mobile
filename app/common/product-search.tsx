@@ -545,11 +545,13 @@ export default function ProductSearchScreen() {
 
   const handleAdd = (item: ProductSearchItem) => {
     const selectedWarehouse = selectedWarehouseMap[item.itemCode] ?? item.warehouse ?? null;
+    const selectedWarehouseQty =
+      item.warehouseStockDetails?.find((row) => row.warehouse === selectedWarehouse)?.qty ?? item.stockQty;
     const nextItem = {
       ...item,
       warehouse: selectedWarehouse,
-      stockQty:
-        item.warehouseStockDetails?.find((row) => row.warehouse === selectedWarehouse)?.qty ?? item.stockQty,
+      warehouseStockQty: selectedWarehouseQty,
+      warehouseStockUom: item.stockUom ?? item.uom ?? null,
     };
     addItemToSalesOrderDraft(nextItem, draftScope, { defaultSalesMode });
     const nextDraft = getSalesOrderDraft(draftScope);
@@ -670,6 +672,8 @@ export default function ProductSearchScreen() {
         imageUrl: item.imageUrl ?? null,
         price: item.price,
         stockQty: null,
+        warehouseStockQty: item.warehouseStockQty ?? null,
+        warehouseStockUom: item.warehouseStockUom ?? item.stockUom ?? item.uom ?? null,
         uom: item.uom,
         warehouse: item.warehouse,
       },

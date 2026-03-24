@@ -115,6 +115,38 @@ function formatDraftStockReference(item: SalesOrderDraftItem) {
   return `参考库存约 ${formatConvertedQty(item.stockQty)} ${formatDisplayUom(item.stockUom)}，仅作提醒。`;
 }
 
+function buildWarehouseStockDisplay(options: {
+  warehouseStockQty?: number | null;
+  warehouseStockUom?: string | null;
+  qty: number;
+  uom?: string | null;
+  stockUom?: string | null;
+  uomConversions?: SalesOrderDraftItem['uomConversions'];
+}): { label: string; tone: 'default' | 'warning' | 'danger' } | null {
+  if (
+    typeof options.warehouseStockQty !== 'number' ||
+    !Number.isFinite(options.warehouseStockQty) ||
+    !options.warehouseStockUom
+  ) {
+    return null;
+  }
+
+  const reservedQty =
+    convertQtyToStockQty({
+      qty: options.qty,
+      uom: options.uom,
+      stockUom: options.stockUom ?? options.warehouseStockUom,
+      uomConversions: options.uomConversions,
+    }) ?? options.qty;
+  const remainingQty = Math.max(0, options.warehouseStockQty - reservedQty);
+  const tone = remainingQty <= 0 ? 'danger' : remainingQty <= 10 ? 'warning' : 'default';
+
+  return {
+    label: `库存剩余：${formatConvertedQty(remainingQty)} ${formatDisplayUom(options.warehouseStockUom)}`,
+    tone,
+  };
+}
+
 function groupDraftItemsByProduct(items: SalesOrderDraftItem[]) {
   const grouped = new Map<
     string,
@@ -447,7 +479,9 @@ export default function SalesOrderCreateScreen() {
           !item.priceSummary ||
           !item.wholesaleDefaultUom ||
           !item.retailDefaultUom ||
-          !item.allUoms?.length),
+          !item.allUoms?.length ||
+          item.warehouseStockQty == null ||
+          !item.warehouseStockUom),
     );
 
     if (!itemsNeedingRefresh.length) {
@@ -490,6 +524,11 @@ export default function SalesOrderCreateScreen() {
           uomConversions: detail.uomConversions,
           stockUom: detail.stockUom,
           stockQty: detail.stockQty,
+          warehouseStockQty:
+            detail.warehouseStockDetails.find((row) => row.warehouse === item.warehouse)?.qty ??
+            item.warehouseStockQty ??
+            null,
+          warehouseStockUom: item.warehouseStockUom ?? detail.stockUom,
           wholesaleDefaultUom: detail.wholesaleDefaultUom,
           retailDefaultUom: detail.retailDefaultUom,
           salesProfiles: detail.salesProfiles,
@@ -1074,7 +1113,17 @@ export default function SalesOrderCreateScreen() {
                     itemName={group.itemName}
                     key={group.itemCode}
                     groupedSummaryLabel={`共 ${group.rows.length} 个仓库条目，合计 ${group.totalQty}`}
-                    groupedLines={group.rows.map((item) => ({
+                    groupedLines={group.rows.map((item) => {
+                      const warehouseStockDisplay = buildWarehouseStockDisplay({
+                        warehouseStockQty: item.warehouseStockQty,
+                        warehouseStockUom: item.warehouseStockUom ?? item.stockUom,
+                        qty: item.qty,
+                        uom: item.uom,
+                        stockUom: item.stockUom,
+                        uomConversions: item.uomConversions,
+                      });
+
+                      return {
                       key: item.draftKey,
                       warehouse: item.warehouse || preferences.defaultWarehouse,
                       salesMode: normalizeSalesMode(item.salesMode),
@@ -1089,6 +1138,8 @@ export default function SalesOrderCreateScreen() {
                         item.priceSummary?.retailRate ?? null,
                         item.retailDefaultUom,
                       ),
+                      warehouseStockLabel: warehouseStockDisplay?.label ?? null,
+                      warehouseStockTone: warehouseStockDisplay?.tone ?? 'default',
                       conversionSummary: formatDraftConversionSummary(item),
                       stockReferenceSummary: formatDraftStockReference(item),
                       onChangeSalesMode: (nextMode) => {
@@ -1128,7 +1179,8 @@ export default function SalesOrderCreateScreen() {
                         updateSalesOrderDraftQty(item.draftKey, item.qty + 1);
                         syncDraft();
                       },
-                    }))}
+                    };
+                    })}
                     lineAmountLabel={`¥ ${formatMoney(group.totalAmount)}`}
                     onChangePrice={() => {}}
                     onChangeQty={() => {}}

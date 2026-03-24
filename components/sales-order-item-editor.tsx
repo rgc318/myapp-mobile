@@ -42,6 +42,8 @@ function SalesModeSwitch({
 
 type WarehouseEntryEditorProps = {
   warehouse?: string | null;
+  warehouseStockLabel?: string | null;
+  warehouseStockTone?: 'default' | 'warning' | 'danger';
   salesMode: SalesMode;
   uom: string | null;
   wholesaleReferenceLabel: string;
@@ -71,6 +73,8 @@ export type SalesOrderItemEditorProps = {
   imageUrl?: string | null;
   lineAmountLabel: string;
   warehouse?: string | null;
+  warehouseStockLabel?: string | null;
+  warehouseStockTone?: 'default' | 'warning' | 'danger';
   salesMode: SalesMode;
   uom: string | null;
   wholesaleReferenceLabel: string;
@@ -91,6 +95,8 @@ export type SalesOrderItemEditorProps = {
 
 function WarehouseEntryEditor({
   warehouse,
+  warehouseStockLabel,
+  warehouseStockTone = 'default',
   salesMode,
   uom,
   wholesaleReferenceLabel,
@@ -115,6 +121,12 @@ function WarehouseEntryEditor({
   const dangerColor = useThemeColor({}, 'danger');
   const tintColor = useThemeColor({}, 'tint');
   const warningColor = useThemeColor({}, 'warning');
+  const warehouseStockColor =
+    warehouseStockTone === 'danger'
+      ? dangerColor
+      : warehouseStockTone === 'warning'
+        ? warningColor
+        : '#64748B';
 
   return (
     <View style={[styles.itemRow, compact ? styles.itemRowCompact : null, { backgroundColor: surface, borderColor }]}>
@@ -127,7 +139,12 @@ function WarehouseEntryEditor({
             {!compact ? <ThemedText style={styles.itemSubline}>{'仓库 '} {warehouse || '未指定仓库'}</ThemedText> : null}
           </View>
 
-          <View style={styles.itemHeaderAside}>
+          <View style={[styles.itemHeaderAside, compact ? styles.itemHeaderAsideCompact : null]}>
+            {compact && warehouseStockLabel ? (
+              <ThemedText style={[styles.itemWarehouseStock, { color: warehouseStockColor }]} type="defaultSemiBold">
+                {warehouseStockLabel}
+              </ThemedText>
+            ) : null}
             {!compact ? (
               <ThemedText style={[styles.itemAmountInline, { color: warningColor }]} type="defaultSemiBold">
                 {lineAmountLabel}
@@ -250,7 +267,7 @@ function WarehouseEntryEditor({
           </View>
         </View>
 
-        {conversionSummary || stockReferenceSummary ? (
+        {!compact && (conversionSummary || stockReferenceSummary) ? (
           <View style={[styles.itemHintCard, { backgroundColor: surfaceMuted, borderColor }]}>
             {conversionSummary ? <ThemedText style={styles.itemHintText}>{conversionSummary}</ThemedText> : null}
             {stockReferenceSummary ? <ThemedText style={styles.itemHintText}>{stockReferenceSummary}</ThemedText> : null}
@@ -269,6 +286,8 @@ export function SalesOrderItemEditor({
   imageUrl,
   lineAmountLabel,
   warehouse,
+  warehouseStockLabel,
+  warehouseStockTone,
   salesMode,
   uom,
   wholesaleReferenceLabel,
@@ -339,6 +358,8 @@ export function SalesOrderItemEditor({
               stockReferenceSummary={line.stockReferenceSummary}
               uom={line.uom}
               warehouse={line.warehouse}
+              warehouseStockLabel={line.warehouseStockLabel}
+              warehouseStockTone={line.warehouseStockTone}
               wholesaleReferenceLabel={line.wholesaleReferenceLabel}
             />
           ))}
@@ -365,6 +386,8 @@ export function SalesOrderItemEditor({
       stockReferenceSummary={stockReferenceSummary}
       uom={uom}
       warehouse={warehouse}
+      warehouseStockLabel={warehouseStockLabel}
+      warehouseStockTone={warehouseStockTone}
       wholesaleReferenceLabel={wholesaleReferenceLabel}
     />
   );
@@ -465,6 +488,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 4,
   },
+  itemHeaderAsideCompact: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
   itemTitle: {
     flex: 1,
     fontSize: 16,
@@ -473,6 +501,9 @@ const styles = StyleSheet.create({
   itemAmountInline: {
     color: '#2D3748',
     fontSize: 17,
+  },
+  itemWarehouseStock: {
+    fontSize: 14,
   },
   itemSubline: {
     color: '#6B7280',

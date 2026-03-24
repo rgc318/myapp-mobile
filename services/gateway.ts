@@ -7,10 +7,12 @@ export type ProductSearchItem = {
   itemCode: string;
   itemName: string;
   stockQty: number | null;
+  warehouseStockQty?: number | null;
   totalQty?: number | null;
   price: number | null;
   uom: string | null;
   stockUom?: string | null;
+  warehouseStockUom?: string | null;
   allUoms?: string[];
   uomConversions?: UomConversion[];
   wholesaleDefaultUom?: string | null;

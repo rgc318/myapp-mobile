@@ -13,6 +13,7 @@ import { formatCurrencyValue } from '@/lib/display-currency';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { getPaymentResultHandoff, type PaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { buildModeDefaults, normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
+import { convertQtyToStockQty, formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -39,6 +40,9 @@ type EditableOrderItem = {
   uom: string;
   salesMode: SalesMode;
   stockUom?: string | null;
+  uomConversions?: UomConversion[];
+  warehouseStockQty?: number | null;
+  warehouseStockUom?: string | null;
   wholesaleDefaultUom?: string | null;
   retailDefaultUom?: string | null;
   allUoms?: string[];
@@ -144,6 +148,38 @@ function buildOrderQuantitySummary(items: { qty?: number | null; uom?: string | 
   }
 
   return `共 ${items.length} 行，存在多种单位，数量以各行显示为准`;
+}
+
+function buildWarehouseStockDisplay(options: {
+  warehouseStockQty?: number | null;
+  warehouseStockUom?: string | null;
+  qty: number;
+  uom?: string | null;
+  stockUom?: string | null;
+  uomConversions?: UomConversion[];
+}): { label: string; tone: 'default' | 'warning' | 'danger' } | null {
+  if (
+    typeof options.warehouseStockQty !== 'number' ||
+    !Number.isFinite(options.warehouseStockQty) ||
+    !options.warehouseStockUom
+  ) {
+    return null;
+  }
+
+  const reservedQty =
+    convertQtyToStockQty({
+      qty: options.qty,
+      uom: options.uom,
+      stockUom: options.stockUom ?? options.warehouseStockUom,
+      uomConversions: options.uomConversions,
+    }) ?? options.qty;
+  const remainingQty = Math.max(0, options.warehouseStockQty - reservedQty);
+  const tone = remainingQty <= 0 ? 'danger' : remainingQty <= 10 ? 'warning' : 'default';
+
+  return {
+    label: `库存剩余：${formatConvertedQty(remainingQty)} ${formatDisplayUom(options.warehouseStockUom)}`,
+    tone,
+  };
 }
 
 function getBusinessStatusLabel(detail: SalesOrderDetailV2 | null) {
@@ -419,6 +455,7 @@ export default function SalesOrderDetailScreen() {
             uom: item.uom,
             salesMode: normalizeSalesMode(item.salesMode),
             stockUom: item.stockUom ?? null,
+            uomConversions: [],
             wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
             retailDefaultUom: item.retailDefaultUom ?? null,
             salesProfiles: item.salesProfiles ?? [],
@@ -436,6 +473,8 @@ export default function SalesOrderDetailScreen() {
               uom: item.uom ?? '',
               salesMode: normalizeSalesMode(item.salesMode),
               stockUom: item.stockUom ?? null,
+              warehouseStockQty: null,
+              warehouseStockUom: item.stockUom ?? null,
               wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
               retailDefaultUom: item.retailDefaultUom ?? null,
               salesProfiles: item.salesProfiles ?? [],
@@ -493,6 +532,9 @@ export default function SalesOrderDetailScreen() {
         uom: item.uom ?? '',
         salesMode: normalizeSalesMode(item.salesMode),
         stockUom: item.stockUom ?? null,
+        uomConversions: item.uomConversions ?? [],
+        warehouseStockQty: item.warehouseStockQty ?? null,
+        warehouseStockUom: item.warehouseStockUom ?? item.stockUom ?? null,
         wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
         retailDefaultUom: item.retailDefaultUom ?? null,
         salesProfiles: item.salesProfiles ?? [],
@@ -548,6 +590,8 @@ export default function SalesOrderDetailScreen() {
             {
               allUoms: Array.from(new Set(allUoms.filter(Boolean))),
               stockUom: productDetail?.stockUom ?? null,
+              uomConversions: productDetail?.uomConversions ?? [],
+              warehouseStockDetails: productDetail?.warehouseStockDetails ?? [],
               wholesaleDefaultUom: productDetail?.wholesaleDefaultUom ?? null,
               retailDefaultUom: productDetail?.retailDefaultUom ?? null,
               salesProfiles: productDetail?.salesProfiles ?? [],
@@ -590,10 +634,17 @@ export default function SalesOrderDetailScreen() {
             return item;
           }
 
+          const matchedWarehouseStock = config.warehouseStockDetails?.find(
+            (row) => row.warehouse === item.warehouse,
+          );
+
           return {
             ...item,
             allUoms: item.allUoms?.length ? item.allUoms : config.allUoms,
             stockUom: item.stockUom ?? config.stockUom ?? null,
+            uomConversions: item.uomConversions?.length ? item.uomConversions : config.uomConversions ?? [],
+            warehouseStockQty: matchedWarehouseStock?.qty ?? item.warehouseStockQty ?? null,
+            warehouseStockUom: item.warehouseStockUom ?? config.stockUom ?? null,
             wholesaleDefaultUom: item.wholesaleDefaultUom ?? config.wholesaleDefaultUom ?? null,
             retailDefaultUom: item.retailDefaultUom ?? config.retailDefaultUom ?? null,
             salesProfiles: item.salesProfiles?.length ? item.salesProfiles : config.salesProfiles ?? [],
@@ -824,6 +875,8 @@ export default function SalesOrderDetailScreen() {
         salesMode: normalizeSalesMode(item.salesMode),
         allUoms: item.allUoms,
         stockUom: item.stockUom,
+        warehouseStockQty: null,
+        warehouseStockUom: item.stockUom ?? null,
         wholesaleDefaultUom: item.wholesaleDefaultUom,
         retailDefaultUom: item.retailDefaultUom,
         salesProfiles: item.salesProfiles,
@@ -897,6 +950,9 @@ export default function SalesOrderDetailScreen() {
         salesMode: item.salesMode,
         allUoms: item.allUoms,
         stockUom: item.stockUom,
+        uomConversions: item.uomConversions,
+        warehouseStockQty: item.warehouseStockQty,
+        warehouseStockUom: item.warehouseStockUom,
         wholesaleDefaultUom: item.wholesaleDefaultUom,
         retailDefaultUom: item.retailDefaultUom,
         salesProfiles: item.salesProfiles,
@@ -938,6 +994,9 @@ export default function SalesOrderDetailScreen() {
         salesMode: normalizeSalesMode(item.salesMode),
         allUoms: item.allUoms,
         stockUom: item.stockUom,
+        uomConversions: [],
+        warehouseStockQty: null,
+        warehouseStockUom: item.stockUom ?? null,
         wholesaleDefaultUom: item.wholesaleDefaultUom,
         retailDefaultUom: item.retailDefaultUom,
         salesProfiles: item.salesProfiles,
@@ -962,6 +1021,9 @@ export default function SalesOrderDetailScreen() {
         salesMode: normalizeSalesMode(item.salesMode),
         allUoms: item.allUoms,
         stockUom: item.stockUom,
+        uomConversions: [],
+        warehouseStockQty: null,
+        warehouseStockUom: item.stockUom ?? null,
         wholesaleDefaultUom: item.wholesaleDefaultUom,
         retailDefaultUom: item.retailDefaultUom,
         salesProfiles: item.salesProfiles,
@@ -1799,6 +1861,14 @@ export default function SalesOrderDetailScreen() {
                         editableItem.wholesaleDefaultUom ?? itemDefaults.wholesaleDefaultUom ?? null;
                       const effectiveRetailDefaultUom =
                         editableItem.retailDefaultUom ?? itemDefaults.retailDefaultUom ?? null;
+                      const warehouseStockDisplay = buildWarehouseStockDisplay({
+                        warehouseStockQty: editableItem.warehouseStockQty,
+                        warehouseStockUom: editableItem.warehouseStockUom ?? editableItem.stockUom,
+                        qty: editableItem.qty,
+                        uom: editableItem.uom,
+                        stockUom: editableItem.stockUom,
+                        uomConversions: editableItem.uomConversions,
+                      });
 
                       return {
                         key: `${editableItem.itemCode}-${editableItem.warehouse}-${index}`,
@@ -1817,6 +1887,8 @@ export default function SalesOrderDetailScreen() {
                           effectiveRetailDefaultUom,
                           detail?.currency || 'CNY',
                         ),
+                        warehouseStockLabel: warehouseStockDisplay?.label ?? null,
+                        warehouseStockTone: warehouseStockDisplay?.tone ?? 'default',
                         conversionSummary: buildLineUnitSummary({
                           salesMode: editableItem.salesMode,
                           uom: editableItem.uom,
@@ -1855,6 +1927,7 @@ export default function SalesOrderDetailScreen() {
                       uom: item.uom,
                       wholesaleReferenceLabel: '',
                       retailReferenceLabel: '',
+                      warehouseStockLabel: null,
                       conversionSummary: buildLineUnitSummary({
                         salesMode: normalizeSalesMode(item.salesMode),
                         uom: item.uom,

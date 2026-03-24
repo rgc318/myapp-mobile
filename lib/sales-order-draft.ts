@@ -18,6 +18,8 @@ export type SalesOrderDraftItem = {
   uomConversions?: UomConversion[];
   stockUom?: string | null;
   stockQty?: number | null;
+  warehouseStockQty?: number | null;
+  warehouseStockUom?: string | null;
   wholesaleDefaultUom?: string | null;
   retailDefaultUom?: string | null;
   salesProfiles?: SalesProfile[];
@@ -84,6 +86,11 @@ function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
       : [],
     stockUom: typeof item.stockUom === 'string' ? item.stockUom : null,
     stockQty: typeof item.stockQty === 'number' && Number.isFinite(item.stockQty) ? item.stockQty : null,
+    warehouseStockQty:
+      typeof item.warehouseStockQty === 'number' && Number.isFinite(item.warehouseStockQty)
+        ? item.warehouseStockQty
+        : null,
+    warehouseStockUom: typeof item.warehouseStockUom === 'string' ? item.warehouseStockUom : null,
     wholesaleDefaultUom:
       typeof item.wholesaleDefaultUom === 'string' ? item.wholesaleDefaultUom : null,
     retailDefaultUom:
@@ -264,6 +271,8 @@ export function addItemToSalesOrderDraft(
     uomConversions: item.uomConversions ?? [],
     stockUom: item.stockUom ?? null,
     stockQty: item.stockQty ?? null,
+    warehouseStockQty: item.warehouseStockQty ?? item.stockQty ?? null,
+    warehouseStockUom: item.warehouseStockUom ?? item.stockUom ?? null,
     wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
     retailDefaultUom: item.retailDefaultUom ?? null,
     salesProfiles: item.salesProfiles ?? [],
