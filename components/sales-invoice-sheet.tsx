@@ -169,9 +169,14 @@ export function SalesInvoiceSheet({ detail }: { detail: SalesInvoiceDetailV2 }) 
               : `${item.rows[0]?.qty ?? '—'} ${item.rows[0]?.uom ? formatDisplayUom(item.rows[0].uom) : ''}`}
           </ThemedText>
           <ThemedText style={styles.tableCell}>{buildInvoiceRateSummary(item.rows, detail.currency)}</ThemedText>
-          <ThemedText style={[styles.tableCell, styles.tableCellAmount]}>
-            {formatCurrency(item.totalAmount, detail.currency)}
-          </ThemedText>
+          <View style={[styles.tableCell, styles.tableCellAmount, styles.tableAmountBlock]}>
+            <ThemedText style={styles.tableAmountLabel} type="defaultSemiBold">
+              商品总价
+            </ThemedText>
+            <ThemedText style={styles.tableAmountValue}>
+              {formatCurrency(item.totalAmount, detail.currency)}
+            </ThemedText>
+          </View>
         </View>
       ))}
 
@@ -305,6 +310,18 @@ const styles = StyleSheet.create({
   },
   tableCellAmount: {
     textAlign: 'right',
+  },
+  tableAmountBlock: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  tableAmountLabel: {
+    color: '#64748B',
+    fontSize: 11,
+  },
+  tableAmountValue: {
+    color: '#111827',
+    fontSize: 13,
   },
   itemName: {
     color: '#0F172A',

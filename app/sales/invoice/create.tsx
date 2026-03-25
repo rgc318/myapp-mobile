@@ -138,6 +138,7 @@ export default function SalesInvoiceCreateScreen() {
   const settlementTone = detail ? buildSettlementTone(detail) : 'warning';
   const salesInvoiceName =
     typeof params.salesInvoice === 'string' ? params.salesInvoice.trim() : '';
+  const sourceOrderName = lockedSourceName || sourceName.trim();
 
   useEffect(() => {
     if (lockedSourceName) {
@@ -240,6 +241,18 @@ export default function SalesInvoiceCreateScreen() {
       void loadDetail(true);
     }, [loadDetail, refreshPaymentNotice]),
   );
+
+  function returnToInvoiceSource() {
+    if (sourceOrderName) {
+      router.replace({
+        pathname: '/sales/order/[orderName]',
+        params: { orderName: sourceOrderName },
+      });
+      return;
+    }
+
+    router.replace('/(tabs)/sales');
+  }
 
   async function handleSubmit() {
     const trimmedSource = sourceName.trim();
@@ -379,10 +392,10 @@ export default function SalesInvoiceCreateScreen() {
         footer={
           <View style={styles.footerRow}>
             <Pressable
-              onPress={() => router.push('/(tabs)/sales')}
+              onPress={returnToInvoiceSource}
               style={[styles.footerButton, styles.footerGhostButton]}>
               <ThemedText style={styles.footerGhostText} type="defaultSemiBold">
-                返回销售
+                {sourceOrderName ? '返回订单' : '返回销售'}
               </ThemedText>
             </Pressable>
             <Pressable onPress={() => void handleSubmit()} style={[styles.footerButton, styles.primaryButton]}>
@@ -871,15 +884,15 @@ function InvoiceSourceSummary({ detail }: { detail: SalesOrderDetailV2 }) {
       </View>
 
       <View style={styles.summaryGrid}>
-        <View style={styles.summaryCell}>
-          <ThemedText style={styles.summaryLabel}>订单金额</ThemedText>
-          <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+        <View style={[styles.summaryCell, styles.primaryAmountCell]}>
+          <ThemedText style={[styles.summaryLabel, styles.primaryAmountLabel]}>订单总价</ThemedText>
+          <ThemedText style={[styles.summaryValue, styles.primaryAmountValue]} type="defaultSemiBold">
             {formatCurrency(detail.grandTotal, detail.currency)}
           </ThemedText>
         </View>
-        <View style={styles.summaryCell}>
-          <ThemedText style={styles.summaryLabel}>未开票金额参考</ThemedText>
-          <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+        <View style={[styles.summaryCell, styles.secondaryAmountCell]}>
+          <ThemedText style={[styles.summaryLabel, styles.secondaryAmountLabel]}>未开票金额参考</ThemedText>
+          <ThemedText style={[styles.summaryValue, styles.secondaryAmountValue]} type="defaultSemiBold">
             {formatCurrency(detail.grandTotal, detail.currency)}
           </ThemedText>
         </View>
@@ -921,9 +934,14 @@ function InvoiceSourceSummary({ detail }: { detail: SalesOrderDetailV2 }) {
                 {`合计 ${buildQuantityComposition(item.rows)}`}
               </ThemedText>
             </View>
-            <ThemedText style={styles.previewItemAmount} type="defaultSemiBold">
-              {formatCurrency(item.totalAmount, detail.currency)}
-            </ThemedText>
+            <View style={styles.previewItemAmountBlock}>
+              <ThemedText style={styles.previewItemAmountLabel} type="defaultSemiBold">
+                商品总价
+              </ThemedText>
+              <ThemedText style={styles.previewItemAmount} type="defaultSemiBold">
+                {formatCurrency(item.totalAmount, detail.currency)}
+              </ThemedText>
+            </View>
           </View>
         ))}
       </View>
@@ -1167,6 +1185,30 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 15,
   },
+  primaryAmountCell: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  primaryAmountLabel: {
+    color: '#9A3412',
+  },
+  primaryAmountValue: {
+    color: '#B45309',
+    fontSize: 24,
+    lineHeight: 30,
+  },
+  secondaryAmountCell: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  secondaryAmountLabel: {
+    color: '#1D4ED8',
+  },
+  secondaryAmountValue: {
+    color: '#1D4ED8',
+    fontSize: 20,
+    lineHeight: 26,
+  },
   statusHintCard: {
     backgroundColor: '#EFF6FF',
     borderColor: '#BFDBFE',
@@ -1397,6 +1439,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  previewItemAmountBlock: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
   previewItemName: {
     color: '#0F172A',
     fontSize: 16,
@@ -1409,6 +1455,10 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     fontSize: 15,
     lineHeight: 22,
+  },
+  previewItemAmountLabel: {
+    color: '#64748B',
+    fontSize: 12,
   },
   previewItemAmount: {
     color: '#B45309',

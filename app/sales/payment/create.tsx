@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
@@ -8,6 +8,7 @@ import { useFeedback } from '@/providers/feedback-provider';
 import { formatCurrencyValue } from '@/lib/display-currency';
 import { rememberPaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { recordSalesPayment } from '@/services/gateway';
+import { getSalesInvoiceDetailV2, type SalesInvoiceDetailV2 } from '@/services/sales';
 import { checkLinkOptionExists, searchLinkOptions, type LinkOption } from '@/services/master-data';
 
 const MODE_OF_PAYMENT_LABELS: Record<string, string> = {
@@ -64,6 +65,8 @@ export default function SalesPaymentCreateScreen() {
   const [amountAutoCorrectHint, setAmountAutoCorrectHint] = useState('');
   const [resultDialog, setResultDialog] = useState<ResultDialogState>(null);
   const [settlementMode, setSettlementMode] = useState<'partial' | 'writeoff'>('partial');
+  const [invoiceDetail, setInvoiceDetail] = useState<SalesInvoiceDetailV2 | null>(null);
+  const [isLoadingInvoiceDetail, setIsLoadingInvoiceDetail] = useState(false);
   const currency = typeof params.currency === 'string' && params.currency.trim() ? params.currency.trim() : 'CNY';
   const featuredModeOptions = modeOptions.filter((option, index, array) => {
     if (!isFeaturedMode(option.value)) {
@@ -95,7 +98,8 @@ export default function SalesPaymentCreateScreen() {
       : typeof params.referenceName === 'string' && params.referenceName.trim()
         ? params.referenceName.trim()
         : '';
-
+  const normalizedPaidAmount =
+    Number.isFinite(currentPaidAmount) && currentPaidAmount > 0 ? currentPaidAmount : 0;
   const returnToSourcePage = () => {
     if (paymentSourceName) {
       router.replace({
@@ -132,6 +136,39 @@ export default function SalesPaymentCreateScreen() {
       }
     }
   }, [params.amount, params.defaultPaidAmount, params.referenceName, params.salesInvoice]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadInvoiceDetail() {
+      if (!paymentSourceName) {
+        setInvoiceDetail(null);
+        return;
+      }
+
+      try {
+        setIsLoadingInvoiceDetail(true);
+        const detail = await getSalesInvoiceDetailV2(paymentSourceName);
+        if (!cancelled) {
+          setInvoiceDetail(detail);
+        }
+      } catch {
+        if (!cancelled) {
+          setInvoiceDetail(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingInvoiceDetail(false);
+        }
+      }
+    }
+
+    void loadInvoiceDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentSourceName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -278,8 +315,75 @@ export default function SalesPaymentCreateScreen() {
   }
 
   return (
-    <AppShell title="销售收款" description="根据销售发票登记客户实收金额，作为后续对账和结算依据。">
+    <AppShell
+      title="销售收款"
+      description="根据销售发票登记客户实收金额，作为后续对账和结算依据。"
+      footer={
+        <View style={styles.footerRow}>
+          <Pressable
+            onPress={returnToSourcePage}
+            style={[styles.footerButton, styles.footerGhostButton]}>
+            <ThemedText style={styles.footerGhostText} type="defaultSemiBold">
+              返回来源页
+            </ThemedText>
+          </Pressable>
+          <Pressable onPress={handleSubmit} style={[styles.footerButton, styles.primaryFooterButton]}>
+            <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
+              {isSubmitting ? '登记中...' : '登记收款'}
+            </ThemedText>
+          </Pressable>
+        </View>
+      }>
       <View style={styles.formCard}>
+        {isLoadingInvoiceDetail ? (
+          <View style={styles.confirmationLoadingCard}>
+            <ActivityIndicator color="#2563EB" />
+            <ThemedText style={styles.confirmationLoadingText}>正在加载发票收款摘要...</ThemedText>
+          </View>
+        ) : invoiceDetail ? (
+          <View style={styles.confirmationCard}>
+            <ThemedText style={styles.confirmationTitle} type="subtitle">
+              收款确认
+            </ThemedText>
+
+            <ThemedText style={styles.confirmationMetaLine}>
+              {`来源发票 ${invoiceDetail.name}`}
+            </ThemedText>
+            <View style={styles.confirmationCustomerCard}>
+              <ThemedText style={styles.confirmationLabel}>客户</ThemedText>
+              <ThemedText style={styles.confirmationCustomerValue} type="defaultSemiBold">
+                {invoiceDetail.customer || '未配置'}
+              </ThemedText>
+            </View>
+
+            <View style={styles.paymentSummaryGrid}>
+              <View style={styles.paymentSummaryCell}>
+                <ThemedText style={styles.confirmationLabel}>发票金额</ThemedText>
+                <ThemedText style={styles.paymentSummaryValue} type="defaultSemiBold">
+                  {formatCurrencyValue(invoiceDetail.receivableAmount ?? invoiceDetail.grandTotal, invoiceDetail.currency)}
+                </ThemedText>
+              </View>
+              <View style={styles.paymentSummaryCell}>
+                <ThemedText style={styles.confirmationLabel}>已收金额</ThemedText>
+                <ThemedText style={[styles.paymentSummaryValue, styles.positiveText]} type="defaultSemiBold">
+                  {formatCurrencyValue(invoiceDetail.actualPaidAmount, invoiceDetail.currency)}
+                </ThemedText>
+              </View>
+              <View style={styles.paymentSummaryCell}>
+                <ThemedText style={styles.confirmationLabel}>当前未收</ThemedText>
+                <ThemedText
+                  style={[
+                    styles.paymentSummaryValue,
+                    (invoiceDetail.outstandingAmount ?? 0) > 0 ? styles.warningTextStrong : styles.mutedText,
+                  ]}
+                  type="defaultSemiBold">
+                  {formatCurrencyValue(invoiceDetail.outstandingAmount, invoiceDetail.currency)}
+                </ThemedText>
+              </View>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.fieldBlock}>
           <ThemedText style={styles.label} type="defaultSemiBold">销售发票号</ThemedText>
           <TextInput
@@ -438,6 +542,38 @@ export default function SalesPaymentCreateScreen() {
           </ThemedText>
         </View>
 
+        {modeOfPayment ? (
+          <View style={styles.submitHintCard}>
+            <ThemedText style={styles.submitHintTitle} type="defaultSemiBold">
+              提交前确认
+            </ThemedText>
+            <ThemedText style={styles.submitHintText}>
+              即将为发票 {paymentSourceName || '未指定发票'} 登记 {formatCurrencyValue(normalizedPaidAmount || null, currency)}，
+              付款方式为 {getModeOfPaymentLabel(modeOfPayment)}。
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {invoiceDetail ? (
+          <View style={styles.contactCard}>
+            <ThemedText style={styles.contactCardTitle} type="defaultSemiBold">
+              客户与收款补充
+            </ThemedText>
+            <View style={styles.confirmationRow}>
+              <ThemedText style={styles.confirmationMetaLabel}>收货联系人</ThemedText>
+              <ThemedText style={styles.confirmationMetaValue}>
+                {invoiceDetail.contactDisplay || '未配置'}
+              </ThemedText>
+            </View>
+            <View style={styles.confirmationRowBlock}>
+              <ThemedText style={styles.confirmationMetaLabel}>收货地址</ThemedText>
+              <ThemedText style={styles.confirmationMetaValue}>
+                {invoiceDetail.addressDisplay || '未配置收货地址'}
+              </ThemedText>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.fieldBlock}>
           <ThemedText style={styles.label} type="defaultSemiBold">参考单号</ThemedText>
           <TextInput
@@ -459,12 +595,6 @@ export default function SalesPaymentCreateScreen() {
             value={referenceDate}
           />
         </View>
-
-        <Pressable onPress={handleSubmit} style={styles.primaryButton}>
-          <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
-            {isSubmitting ? '登记中...' : '登记收款'}
-          </ThemedText>
-        </Pressable>
 
       </View>
 
@@ -605,6 +735,94 @@ const styles = StyleSheet.create({
   formCard: {
     gap: 16,
   },
+  confirmationLoadingCard: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D7DEE7',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
+  confirmationLoadingText: {
+    color: '#64748B',
+    fontSize: 14,
+  },
+  confirmationCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D7DEE7',
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 14,
+    padding: 16,
+  },
+  confirmationTitle: {
+    color: '#0F172A',
+    fontSize: 18,
+  },
+  confirmationLabel: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  confirmationValue: {
+    color: '#0F172A',
+    fontSize: 16,
+  },
+  confirmationMetaLine: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  confirmationCustomerCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  confirmationCustomerValue: {
+    color: '#0F172A',
+    fontSize: 18,
+  },
+  confirmationRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  confirmationRowBlock: {
+    gap: 8,
+  },
+  confirmationMetaLabel: {
+    color: '#64748B',
+    fontSize: 14,
+  },
+  confirmationMetaValue: {
+    color: '#0F172A',
+    flex: 1,
+    fontSize: 15,
+    textAlign: 'right',
+  },
+  paymentSummaryGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  paymentSummaryCell: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  paymentSummaryValue: {
+    color: '#0F172A',
+    fontSize: 18,
+  },
   fieldBlock: {
     gap: 8,
   },
@@ -733,15 +951,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  primaryButton: {
+  primaryButtonText: {
+    color: '#FFFFFF',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  footerButton: {
+    flex: 1,
+  },
+  footerGhostButton: {
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  footerGhostText: {
+    color: '#1D4ED8',
+  },
+  primaryFooterButton: {
     alignItems: 'center',
     backgroundColor: '#2563EB',
     borderRadius: 16,
     justifyContent: 'center',
     minHeight: 48,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
   },
   selectorInput: {
     alignItems: 'center',
@@ -802,6 +1039,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     paddingLeft: 4,
+  },
+  contactCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  contactCardTitle: {
+    color: '#334155',
+    fontSize: 14,
+  },
+  submitHintCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  submitHintTitle: {
+    color: '#334155',
+    fontSize: 14,
+  },
+  submitHintText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  positiveText: {
+    color: '#15803D',
+  },
+  warningTextStrong: {
+    color: '#B45309',
+  },
+  infoTextStrong: {
+    color: '#1D4ED8',
+  },
+  mutedText: {
+    color: '#64748B',
   },
   dialogBackdrop: {
     alignItems: 'center',

@@ -136,9 +136,14 @@ function GroupedDeliveryItems({
                     {group.itemName}
                   </ThemedText>
                 </View>
-                <ThemedText style={styles.deliveryGroupAmount} type="defaultSemiBold">
-                  {formatCurrency(group.totalAmount, currency)}
-                </ThemedText>
+                <View style={styles.deliveryGroupAmountBlock}>
+                  <ThemedText style={styles.deliveryGroupAmountLabel} type="defaultSemiBold">
+                    商品总价
+                  </ThemedText>
+                  <ThemedText style={styles.deliveryGroupAmount} type="defaultSemiBold">
+                    {formatCurrency(group.totalAmount, currency)}
+                  </ThemedText>
+                </View>
               </View>
               <ThemedText style={styles.deliveryGroupMeta}>{`编码 ${group.itemCode}`}</ThemedText>
               <ThemedText style={styles.deliveryGroupSummary} type="defaultSemiBold">
@@ -163,9 +168,14 @@ function GroupedDeliveryItems({
                     </ThemedText>
                   </View>
                 </View>
-                <ThemedText style={styles.deliveryWarehouseAmount} type="defaultSemiBold">
-                  {formatCurrency(item.amount, currency)}
-                </ThemedText>
+                <View style={styles.deliveryWarehouseAmountBlock}>
+                  <ThemedText style={styles.deliveryWarehouseAmountLabel} type="defaultSemiBold">
+                    仓库小计
+                  </ThemedText>
+                  <ThemedText style={styles.deliveryWarehouseAmount} type="defaultSemiBold">
+                    {formatCurrency(item.amount, currency)}
+                  </ThemedText>
+                </View>
               </View>
             ))}
           </View>
@@ -438,9 +448,9 @@ export default function SalesDeliveryCreateScreen() {
                 </View>
 
                 <View style={styles.heroStats}>
-                  <View style={styles.statCard}>
-                    <ThemedText style={styles.statLabel}>订单金额</ThemedText>
-                    <ThemedText style={styles.statValue} type="defaultSemiBold">
+                  <View style={[styles.statCard, styles.primaryStatCard]}>
+                    <ThemedText style={[styles.statLabel, styles.primaryStatLabel]}>订单总价</ThemedText>
+                    <ThemedText style={[styles.statValue, styles.primaryStatValue]} type="defaultSemiBold">
                       {formatCurrency(orderDetail.grandTotal, orderDetail.currency)}
                     </ThemedText>
                   </View>
@@ -528,7 +538,64 @@ export default function SalesDeliveryCreateScreen() {
   return (
     <AppShell
       title="发货单详情"
-      description="查看发货单对应的客户、商品明细、来源订单与关联销售发票。">
+      description="查看发货单对应的客户、商品明细、来源订单与关联销售发票。"
+      footer={
+        detail ? (
+          <View style={styles.footerWrap}>
+            {(!detail.salesInvoices.length && detail.salesOrders[0] && !isCancelledDetail) || isCancelledDetail ? (
+              <ThemedText style={styles.footerHint}>
+                {isCancelledDetail
+                  ? '当前发货单已经作废，建议返回订单查看最新履约状态；如需继续开票，应基于仍然有效的订单或发票链路重新处理。'
+                  : '当前移动端仍以销售订单作为开票来源，可返回订单继续处理，或直接前往开票。'}
+              </ThemedText>
+            ) : null}
+            <View style={styles.footerActionRow}>
+              {detail.salesOrders[0] ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/order/[orderName]',
+                      params: { orderName: detail.salesOrders[0] },
+                    })
+                  }
+                  style={[styles.footerActionButton, styles.actionButton, styles.secondaryActionButton]}>
+                  <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                    返回订单
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {detail.salesInvoices[0] ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/invoice/create',
+                      params: { salesInvoice: detail.salesInvoices[0] },
+                    })
+                  }
+                  style={[styles.footerActionButton, styles.actionButton]}>
+                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                    查看发票
+                  </ThemedText>
+                </Pressable>
+              ) : detail.salesOrders[0] && !isCancelledDetail ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/sales/invoice/create',
+                      params: { sourceName: detail.salesOrders[0] },
+                    })
+                  }
+                  style={[styles.footerActionButton, styles.actionButton]}>
+                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                    前往开票
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : null
+      }>
       {isLoading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color="#2563EB" />
@@ -554,9 +621,9 @@ export default function SalesDeliveryCreateScreen() {
             </View>
 
             <View style={styles.heroStats}>
-              <View style={styles.statCard}>
-                <ThemedText style={styles.statLabel}>发货金额</ThemedText>
-                <ThemedText style={styles.statValue} type="defaultSemiBold">
+              <View style={[styles.statCard, styles.primaryStatCard]}>
+                <ThemedText style={[styles.statLabel, styles.primaryStatLabel]}>发货单总价</ThemedText>
+                <ThemedText style={[styles.statValue, styles.primaryStatValue]} type="defaultSemiBold">
                   {formatCurrency(detail.grandTotal, detail.currency)}
                 </ThemedText>
               </View>
@@ -611,52 +678,8 @@ export default function SalesDeliveryCreateScreen() {
 
           <View style={styles.sectionCard}>
             <ThemedText style={styles.sectionTitle} type="subtitle">
-              {isCancelledDetail ? '历史单据跳转' : '后续操作'}
+              {isCancelledDetail ? '历史单据说明' : '后续处理说明'}
             </ThemedText>
-            <View style={styles.actionRow}>
-              {detail.salesOrders[0] ? (
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/sales/order/[orderName]',
-                      params: { orderName: detail.salesOrders[0] },
-                    })
-                  }
-                  style={[styles.actionButton, styles.secondaryActionButton]}>
-                  <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
-                    返回订单
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-
-              {detail.salesInvoices[0] ? (
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/sales/invoice/create',
-                      params: { salesInvoice: detail.salesInvoices[0] },
-                    })
-                  }
-                  style={styles.actionButton}>
-                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
-                    查看发票
-                  </ThemedText>
-                </Pressable>
-              ) : detail.salesOrders[0] && !isCancelledDetail ? (
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/sales/invoice/create',
-                      params: { sourceName: detail.salesOrders[0] },
-                    })
-                  }
-                  style={styles.actionButton}>
-                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
-                    前往开票
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-            </View>
             {!detail.salesInvoices.length && detail.salesOrders[0] && !isCancelledDetail ? (
               <ThemedText style={styles.actionHint}>
                 当前移动端仍以销售订单作为开票来源，这里会带你回到订单链路继续开票。
@@ -958,6 +981,19 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 16,
   },
+  primaryStatCard: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+    borderWidth: 1,
+  },
+  primaryStatLabel: {
+    color: '#9A3412',
+  },
+  primaryStatValue: {
+    color: '#B45309',
+    fontSize: 22,
+    lineHeight: 28,
+  },
   sectionCard: {
     backgroundColor: '#FFFFFF',
     borderColor: '#D7DEE7',
@@ -1188,6 +1224,10 @@ const styles = StyleSheet.create({
     gap: 8,
     minWidth: 0,
   },
+  deliveryGroupAmountBlock: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
   deliveryGroupTag: {
     alignSelf: 'flex-start',
     backgroundColor: '#DBEAFE',
@@ -1213,6 +1253,10 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     fontSize: 17,
     lineHeight: 24,
+  },
+  deliveryGroupAmountLabel: {
+    color: '#64748B',
+    fontSize: 12,
   },
   deliveryGroupAmount: {
     color: '#B45309',
@@ -1245,6 +1289,15 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     fontSize: 17,
   },
+  deliveryWarehouseAmountBlock: {
+    alignItems: 'flex-end',
+    gap: 4,
+    paddingTop: 1,
+  },
+  deliveryWarehouseAmountLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
   deliveryWarehouseSummaryRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1257,7 +1310,6 @@ const styles = StyleSheet.create({
   deliveryWarehouseAmount: {
     color: '#B45309',
     fontSize: 19,
-    paddingTop: 1,
     textAlign: 'right',
   },
   itemRow: {

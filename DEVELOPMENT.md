@@ -3854,3 +3854,88 @@ The pre-submit invoice page was previously too thin. It behaved like a plain ent
   - who the invoice is for
   - what goods and amounts will appear
 - the page should feel like a proper "开票确认页", not only a place to type the order number and press create
+
+## Delivery Footer Actions (2026-03-26)
+
+Delivery-note detail should not force operators to scroll through the whole document just to reach the next business action.
+
+### File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+
+### What Changed
+
+- delivery-note detail now uses the shared app-shell footer for its primary actions
+- the footer exposes:
+  - `返回订单`
+  - `查看发票`
+  - or `前往开票`
+- the mid-page "后续操作" block was reduced into an explanation block instead of repeating the same buttons
+
+### Why
+
+- delivery note is a document page, not an endless action list
+- the most common next actions should stay reachable without scrolling past the entire goods list
+
+## Payment Page As Confirmation Page (2026-03-26)
+
+The payment page should prioritize money and settlement action, not secondary shipping snapshot data.
+
+### File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/payment/create.tsx`
+
+### What Changed
+
+- the page now loads invoice detail first when a sales invoice is known
+- the top area focuses on:
+  - invoice number
+  - customer
+  - invoice amount
+  - already paid amount
+  - current outstanding amount
+- the previous "本次登记后预计结果" block was removed
+  - it was considered too easy to misread as actual posted settlement state
+- shipping contact and address were pushed lower as secondary reference information
+- the primary payment action was moved into the fixed footer
+  - `返回来源页`
+  - `登记收款`
+
+### Why
+
+- payment registration is primarily about:
+  - which invoice
+  - which customer
+  - how much is still unpaid
+  - how much is being collected now
+- shipping address and contact are not the first thing the operator should see on a payment page
+
+## Primary Total Price Emphasis (2026-03-26)
+
+Large document pages were showing many prices, but not clearly identifying which one was the main document total.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-invoice-sheet.tsx`
+
+### What Changed
+
+- delivery and invoice pages now distinguish:
+  - document total
+  - grouped product total
+  - warehouse subtotal
+- main amount cards use clearer wording and stronger visual emphasis
+  - `订单总价`
+  - `发货单总价`
+  - `商品总价`
+  - `仓库小计`
+
+### Why
+
+- users should not have to infer from layout alone whether a number is:
+  - the document total
+  - one product total
+  - or a line subtotal
+- explicit labels reduce hesitation and improve scan speed on mobile
