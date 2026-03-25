@@ -248,12 +248,14 @@ This round aligned the mobile product module with the backend rule that inventor
 - product create page no longer assumes "retail UOM = inventory UOM"
   - file:
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
-  - now supports separate input for:
+  - now supports the same unit-rule editor structure as the detail page:
     - stock base UOM
     - wholesale default transaction UOM
     - retail default transaction UOM
-    - wholesale-to-stock conversion
-    - retail-to-stock conversion
+    - `manual / sync with wholesale / sync with retail`
+    - formula-style conversion rows instead of separate scattered fields
+  - create flow now defaults to `sync with wholesale` to better match the current wholesale-first operating model
+  - save logic now follows the same conversion semantics as detail edit, including the reversed readable retail rule when stock base is synced to wholesale
 
 - product detail edit page now preserves and edits `stockUom` as an independent field
   - file:
@@ -280,6 +282,7 @@ This round aligned the mobile product module with the backend rule that inventor
   - switching stock-base sync mode no longer blindly keeps old factors that belonged to the previous base UOM
   - the remaining editable side is reset to a re-confirm state when needed
   - formula preview text is used to keep the direction readable for operators, especially in wholesale-sync mode
+  - create page and detail page now share the same sync-mode behavior so operators do not have to relearn unit rules between "new product" and "edit product"
 
 - a real backend constraint was confirmed during manual testing
   - once an item already has historical transactions under an existing unit system, backend validation may reject direct stock/default-UOM changes

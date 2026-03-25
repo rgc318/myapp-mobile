@@ -33,11 +33,12 @@ export default function ProductCreateScreen() {
   const [nickname, setNickname] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [stockUom, setStockUom] = useState('Nos');
+  const [stockUom, setStockUom] = useState('Box');
   const [wholesaleDefaultUom, setWholesaleDefaultUom] = useState('Box');
   const [retailDefaultUom, setRetailDefaultUom] = useState('Nos');
   const [wholesaleConversionFactor, setWholesaleConversionFactor] = useState('12');
   const [retailConversionFactor, setRetailConversionFactor] = useState('1');
+  const [stockSyncMode, setStockSyncMode] = useState<'manual' | 'wholesale' | 'retail'>('wholesale');
   const [standardRate, setStandardRate] = useState('');
   const [wholesaleRate, setWholesaleRate] = useState('');
   const [retailRate, setRetailRate] = useState('');
@@ -197,7 +198,12 @@ export default function ProductCreateScreen() {
             ? [
                 {
                   uom: trimmedRetailUom,
-                  conversionFactor: trimmedRetailUom === trimmedStockUom ? 1 : (retailFactor as number),
+                  conversionFactor:
+                    trimmedRetailUom === trimmedStockUom
+                      ? 1
+                      : stockSyncMode === 'wholesale'
+                        ? 1 / (retailFactor as number)
+                        : (retailFactor as number),
                 },
               ]
             : []),
@@ -253,14 +259,27 @@ export default function ProductCreateScreen() {
   const handleSelectUom = (value: string) => {
     if (uomPickerTarget === 'stock') {
       setStockUom(value);
+      setStockSyncMode('manual');
+      setWholesaleConversionFactor(wholesaleDefaultUom.trim() && wholesaleDefaultUom.trim() !== value ? '' : '1');
+      setRetailConversionFactor(retailDefaultUom.trim() && retailDefaultUom.trim() !== value ? '' : '1');
     }
 
     if (uomPickerTarget === 'wholesale') {
       setWholesaleDefaultUom(value);
+      if (stockSyncMode === 'wholesale') {
+        setStockUom(value);
+        setWholesaleConversionFactor('1');
+        setRetailConversionFactor(retailDefaultUom.trim() && retailDefaultUom.trim() !== value ? '' : '1');
+      }
     }
 
     if (uomPickerTarget === 'retail') {
       setRetailDefaultUom(value);
+      if (stockSyncMode === 'retail') {
+        setStockUom(value);
+        setRetailConversionFactor('1');
+        setWholesaleConversionFactor(wholesaleDefaultUom.trim() && wholesaleDefaultUom.trim() !== value ? '' : '1');
+      }
     }
 
     setUomPickerVisible(false);
@@ -268,11 +287,41 @@ export default function ProductCreateScreen() {
     setUomPickerQuery('');
   };
 
+  const applyStockSyncMode = (mode: 'manual' | 'wholesale' | 'retail') => {
+    setStockSyncMode(mode);
+
+    if (mode === 'wholesale' && wholesaleDefaultUom.trim()) {
+      const nextStock = wholesaleDefaultUom.trim();
+      setStockUom(nextStock);
+      setWholesaleConversionFactor('1');
+      setRetailConversionFactor(retailDefaultUom.trim() && retailDefaultUom.trim() !== nextStock ? '' : '1');
+      return;
+    }
+
+    if (mode === 'retail' && retailDefaultUom.trim()) {
+      const nextStock = retailDefaultUom.trim();
+      setStockUom(nextStock);
+      setRetailConversionFactor('1');
+      setWholesaleConversionFactor(wholesaleDefaultUom.trim() && wholesaleDefaultUom.trim() !== nextStock ? '' : '1');
+    }
+  };
+
   const wholesaleNeedsFactor =
     Boolean(wholesaleDefaultUom.trim()) &&
     Boolean(stockUom.trim()) &&
     wholesaleDefaultUom.trim() !== stockUom.trim();
   const retailNeedsFactor = Boolean(retailDefaultUom.trim()) && Boolean(stockUom.trim()) && retailDefaultUom.trim() !== stockUom.trim();
+  const wholesaleFormulaPreview = wholesaleDefaultUom.trim() && stockUom.trim()
+    ? `1 ${formatDisplayUom(wholesaleDefaultUom)} = ${wholesaleConversionFactor || '？'} ${formatDisplayUom(stockUom)}`
+    : '';
+  const retailFormulaPreview =
+    retailDefaultUom.trim() && stockUom.trim()
+      ? stockSyncMode === 'wholesale'
+        ? `1 ${formatDisplayUom(stockUom)} = ${retailConversionFactor || '？'} ${formatDisplayUom(retailDefaultUom)}`
+        : stockSyncMode === 'retail'
+          ? `1 ${formatDisplayUom(retailDefaultUom)} = 1 ${formatDisplayUom(stockUom)}`
+          : `1 ${formatDisplayUom(retailDefaultUom)} = ${retailConversionFactor || '？'} ${formatDisplayUom(stockUom)}`
+      : '';
 
   return (
     <AppShell
@@ -324,44 +373,156 @@ export default function ProductCreateScreen() {
           <ThemedText style={styles.sectionHint}>
             先确定库存基准单位，再配置批发、零售默认成交单位以及到库存基准单位的换算关系。
           </ThemedText>
-          <ProductSelectorField label="库存基准单位" onPress={() => handleOpenUomPicker('stock')} value={formatDisplayUom(stockUom)} />
-          <View style={styles.rowFields}>
-            <View style={styles.rowField}>
-              <ProductSelectorField
-                label="批发默认成交单位"
-                onPress={() => handleOpenUomPicker('wholesale')}
-                value={formatDisplayUom(wholesaleDefaultUom)}
-              />
-            </View>
-            <View style={styles.rowField}>
-              <ProductSelectorField
-                label="零售默认成交单位"
-                onPress={() => handleOpenUomPicker('retail')}
-                value={formatDisplayUom(retailDefaultUom)}
-              />
+          <View style={styles.inlineInfoCard}>
+            <ThemedText style={styles.inlineInfoLabel}>库存基准单位</ThemedText>
+            <ThemedText style={styles.inlineInfoValue} type="defaultSemiBold">
+              {formatDisplayUom(stockUom)}
+            </ThemedText>
+            <ThemedText style={styles.inlineInfoHint}>库存统一按这个单位结算，批发和零售默认单位都要能换算到这里。</ThemedText>
+          </View>
+          <View style={styles.unitEditorRow}>
+            <View style={styles.unitEditorCell}>
+              <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                库存基准单位
+              </ThemedText>
+              <Pressable onPress={() => handleOpenUomPicker('stock')} style={styles.selectorFieldCompact}>
+                <View style={styles.selectorFieldCompactCopy}>
+                  <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                    {formatDisplayUom(stockUom)}
+                  </ThemedText>
+                </View>
+                <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                  选择
+                </ThemedText>
+              </Pressable>
             </View>
           </View>
-          <View style={styles.rowFields}>
-            <View style={styles.rowField}>
-              <ProductTextField
-                label={
-                  wholesaleNeedsFactor
-                    ? `批发换算（1 ${formatDisplayUom(wholesaleDefaultUom || '批发')} = ? ${formatDisplayUom(stockUom || '库存基准')})`
-                    : '批发换算'
-                }
-                onChangeText={setWholesaleConversionFactor}
-                placeholder={wholesaleNeedsFactor ? '例如 12' : '与库存基准单位一致时自动按 1'}
-                value={wholesaleNeedsFactor ? wholesaleConversionFactor : '1'}
-              />
-            </View>
-            <View style={styles.rowField}>
-              <ProductTextField
-                label={retailNeedsFactor ? `零售换算（1 ${formatDisplayUom(retailDefaultUom || '零售')} = ? ${formatDisplayUom(stockUom || '库存基准')})` : '零售换算'}
-                onChangeText={setRetailConversionFactor}
-                placeholder={retailNeedsFactor ? '例如 1' : '与库存基准单位一致时自动按 1'}
-                value={retailNeedsFactor ? retailConversionFactor : '1'}
-              />
-            </View>
+          <View style={styles.syncModeRow}>
+            {[
+              { key: 'manual', label: '手动指定' },
+              { key: 'wholesale', label: '与批发单位同步' },
+              { key: 'retail', label: '与零售单位同步' },
+            ].map((option) => {
+              const active = stockSyncMode === option.key;
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => applyStockSyncMode(option.key as 'manual' | 'wholesale' | 'retail')}
+                  style={[styles.syncModeChip, active ? styles.syncModeChipActive : null]}>
+                  <ThemedText style={[styles.syncModeChipText, active ? { color: tintColor } : null]} type="defaultSemiBold">
+                    {option.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+          <ThemedText style={styles.sectionHint}>
+            选择同步后，库存基准单位会跟随对应默认成交单位变化；只需要配置另一侧到基准单位的换算关系。
+          </ThemedText>
+          <View style={styles.unitRuleList}>
+            {stockSyncMode !== 'wholesale' ? (
+              <View style={styles.unitRuleRow}>
+                <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                  批发规则
+                </ThemedText>
+                <View style={styles.unitFormulaRow}>
+                  <View style={styles.unitFormulaUnitCell}>
+                    <Pressable onPress={() => handleOpenUomPicker('wholesale')} style={styles.selectorFieldCompact}>
+                      <View style={styles.selectorFieldCompactCopy}>
+                        <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                          {wholesaleDefaultUom ? formatDisplayUom(wholesaleDefaultUom) : '请选择'}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                        选择
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                  <ThemedText style={styles.unitFormulaOperator} type="defaultSemiBold">
+                    =
+                  </ThemedText>
+                  <View style={styles.unitFormulaFactorCell}>
+                    <ProductTextField
+                      label=""
+                      onChangeText={setWholesaleConversionFactor}
+                      placeholder={wholesaleNeedsFactor ? '例如 12' : '1'}
+                      value={wholesaleNeedsFactor ? wholesaleConversionFactor : '1'}
+                    />
+                  </View>
+                  <View style={styles.unitFormulaTargetCell}>
+                    <View style={styles.staticField}>
+                      <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                        {formatDisplayUom(stockUom)}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </View>
+                <ThemedText style={styles.unitFormulaPreview}>{wholesaleFormulaPreview}</ThemedText>
+              </View>
+            ) : null}
+            {stockSyncMode !== 'retail' ? (
+              <View style={styles.unitRuleRow}>
+                <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                  零售规则
+                </ThemedText>
+                <View style={styles.unitFormulaRow}>
+                  {stockSyncMode === 'wholesale' ? (
+                    <View style={styles.unitFormulaUnitCell}>
+                      <View style={styles.staticField}>
+                        <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                          {formatDisplayUom(stockUom)}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.unitFormulaUnitCell}>
+                      <Pressable onPress={() => handleOpenUomPicker('retail')} style={styles.selectorFieldCompact}>
+                        <View style={styles.selectorFieldCompactCopy}>
+                          <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                            {retailDefaultUom ? formatDisplayUom(retailDefaultUom) : '请选择'}
+                          </ThemedText>
+                        </View>
+                        <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                          选择
+                        </ThemedText>
+                      </Pressable>
+                    </View>
+                  )}
+                  <ThemedText style={styles.unitFormulaOperator} type="defaultSemiBold">
+                    =
+                  </ThemedText>
+                  <View style={styles.unitFormulaFactorCell}>
+                    <ProductTextField
+                      label=""
+                      onChangeText={setRetailConversionFactor}
+                      placeholder={retailNeedsFactor ? '例如 1' : '1'}
+                      value={retailNeedsFactor ? retailConversionFactor : '1'}
+                    />
+                  </View>
+                  <View style={styles.unitFormulaTargetCell}>
+                    {stockSyncMode === 'wholesale' ? (
+                      <Pressable onPress={() => handleOpenUomPicker('retail')} style={styles.selectorFieldCompact}>
+                        <View style={styles.selectorFieldCompactCopy}>
+                          <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                            {retailDefaultUom ? formatDisplayUom(retailDefaultUom) : '请选择'}
+                          </ThemedText>
+                        </View>
+                        <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                          选择
+                        </ThemedText>
+                      </Pressable>
+                    ) : (
+                      <View style={styles.staticField}>
+                        <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                          {formatDisplayUom(stockUom)}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <ThemedText style={styles.unitFormulaPreview}>{retailFormulaPreview}</ThemedText>
+              </View>
+            ) : null}
           </View>
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
@@ -444,6 +605,116 @@ const styles = StyleSheet.create({
   },
   rowField: {
     flex: 1,
+  },
+  inlineInfoCard: {
+    backgroundColor: 'rgba(148,163,184,0.08)',
+    borderRadius: 18,
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  inlineInfoLabel: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  inlineInfoValue: {
+    fontSize: 20,
+  },
+  inlineInfoHint: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  unitEditorRow: {
+    flexDirection: 'row',
+  },
+  unitEditorCell: {
+    flex: 1,
+  },
+  selectorFieldCompact: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(148,163,184,0.08)',
+    borderColor: 'rgba(148,163,184,0.2)',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    minHeight: 56,
+    paddingHorizontal: 16,
+  },
+  selectorFieldCompactCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  selectorFieldCompactValue: {
+    fontSize: 16,
+  },
+  staticField: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(148,163,184,0.08)',
+    borderColor: 'rgba(148,163,184,0.2)',
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 56,
+    paddingHorizontal: 16,
+  },
+  syncModeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  syncModeChip: {
+    backgroundColor: 'rgba(148,163,184,0.08)',
+    borderColor: 'rgba(148,163,184,0.2)',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  syncModeChipActive: {
+    backgroundColor: 'rgba(59,130,246,0.08)',
+    borderColor: 'rgba(59,130,246,0.35)',
+  },
+  syncModeChipText: {
+    fontSize: 14,
+  },
+  unitRuleList: {
+    gap: 16,
+  },
+  unitRuleRow: {
+    gap: 8,
+  },
+  unitRuleLabel: {
+    fontSize: 15,
+  },
+  unitFormulaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  unitFormulaUnitCell: {
+    flex: 1.15,
+  },
+  unitFormulaFactorCell: {
+    flex: 0.9,
+  },
+  unitFormulaTargetCell: {
+    flex: 0.8,
+  },
+  unitFormulaOperator: {
+    color: '#475569',
+    fontSize: 18,
+  },
+  unitFormulaPreview: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
   },
   footerBar: {
     flexDirection: 'row',
