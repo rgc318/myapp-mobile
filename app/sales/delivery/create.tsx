@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { normalizeAppError } from '@/lib/app-error';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { buildQuantityComposition } from '@/lib/uom-display';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
   cancelDeliveryNoteV2,
@@ -55,6 +56,123 @@ function buildDeliveryErrorMessage(message: string) {
   }
 
   return message;
+}
+
+function groupItemsByProduct<T extends {
+  itemCode: string;
+  itemName: string;
+  imageUrl?: string | null;
+  qty: number | null;
+  amount: number | null;
+  warehouse: string;
+  uom: string;
+  rate: number | null;
+}>(items: T[]) {
+  const grouped = new Map<
+    string,
+    {
+      itemCode: string;
+      itemName: string;
+      imageUrl?: string | null;
+      totalAmount: number;
+      rows: T[];
+    }
+  >();
+
+  items.forEach((item) => {
+    const existing = grouped.get(item.itemCode);
+    if (existing) {
+      existing.rows.push(item);
+      existing.totalAmount += item.amount ?? 0;
+      return;
+    }
+
+    grouped.set(item.itemCode, {
+      itemCode: item.itemCode,
+      itemName: item.itemName || item.itemCode,
+      imageUrl: item.imageUrl ?? null,
+      totalAmount: item.amount ?? 0,
+      rows: [item],
+    });
+  });
+
+  return Array.from(grouped.values());
+}
+
+function GroupedDeliveryItems({
+  items,
+  currency,
+}: {
+  items: {
+    itemCode: string;
+    itemName: string;
+    qty: number | null;
+    rate: number | null;
+    amount: number | null;
+    warehouse: string;
+    uom: string;
+    imageUrl?: string | null;
+  }[];
+  currency: string;
+}) {
+  const groupedItems = groupItemsByProduct(items);
+
+  return (
+    <>
+      {groupedItems.map((group, index) => (
+        <View
+          key={group.itemCode}
+          style={[styles.deliveryGroupCard, index > 0 ? styles.deliveryGroupDivider : null]}>
+          <View style={styles.deliveryGroupHeader}>
+            <View style={styles.deliveryGroupMain}>
+              <View style={styles.deliveryGroupHeaderTop}>
+                <View style={styles.deliveryGroupTitleBlock}>
+                  <View style={styles.deliveryGroupTag}>
+                    <ThemedText style={styles.deliveryGroupTagText} type="defaultSemiBold">
+                      商品名称
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={styles.deliveryGroupTitle} type="defaultSemiBold">
+                    {group.itemName}
+                  </ThemedText>
+                </View>
+                <ThemedText style={styles.deliveryGroupAmount} type="defaultSemiBold">
+                  {formatCurrency(group.totalAmount, currency)}
+                </ThemedText>
+              </View>
+              <ThemedText style={styles.deliveryGroupMeta}>{`编码 ${group.itemCode}`}</ThemedText>
+              <ThemedText style={styles.deliveryGroupSummary} type="defaultSemiBold">
+                {`共 ${group.rows.length} 个仓库条目，合计 ${buildQuantityComposition(group.rows)}`}
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.deliveryGroupRows}>
+            {group.rows.map((item, index) => (
+              <View
+                key={`${group.itemCode}-${item.warehouse}-${index}`}
+                style={[styles.deliveryWarehouseRow, index > 0 ? styles.deliveryWarehouseDivider : null]}>
+                <View style={styles.deliveryWarehouseMain}>
+                  <ThemedText style={styles.deliveryWarehouseTitle} type="defaultSemiBold">
+                    {`仓库 ${item.warehouse || '未配置仓库'}`}
+                  </ThemedText>
+                  <View style={styles.deliveryWarehouseSummaryRow}>
+                    <ThemedText style={styles.deliveryWarehouseFormula}>
+                      {formatCurrency(item.rate, currency)} x {item.qty ?? '—'}{' '}
+                      {item.uom ? formatDisplayUom(item.uom) : ''}
+                    </ThemedText>
+                  </View>
+                </View>
+                <ThemedText style={styles.deliveryWarehouseAmount} type="defaultSemiBold">
+                  {formatCurrency(item.amount, currency)}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        </View>
+      ))}
+    </>
+  );
 }
 
 export default function SalesDeliveryCreateScreen() {
@@ -371,22 +489,7 @@ export default function SalesDeliveryCreateScreen() {
                 <ThemedText style={styles.sectionTitle} type="subtitle">
                   待发货商品
                 </ThemedText>
-                {orderDetail.items.map((item, index) => (
-                  <View key={`${item.itemCode}-${index}`} style={[styles.itemRow, index > 0 ? styles.itemDivider : null]}>
-                    <View style={styles.itemMain}>
-                      <ThemedText style={styles.itemTitle} type="defaultSemiBold">
-                        {item.itemName}
-                      </ThemedText>
-                      <ThemedText style={styles.itemMeta}>{item.warehouse || '未配置仓库'}</ThemedText>
-                      <ThemedText style={styles.itemFormula}>
-                        {formatCurrency(item.rate, orderDetail.currency)} x {item.qty ?? '—'} {item.uom ? formatDisplayUom(item.uom) : ''}
-                      </ThemedText>
-                    </View>
-                    <ThemedText style={styles.itemAmount} type="defaultSemiBold">
-                      {formatCurrency(item.amount, orderDetail.currency)}
-                    </ThemedText>
-                  </View>
-                ))}
+                <GroupedDeliveryItems currency={orderDetail.currency} items={orderDetail.items} />
               </View>
 
               {!orderDetail.canSubmitDelivery ? (
@@ -588,24 +691,7 @@ export default function SalesDeliveryCreateScreen() {
             <ThemedText style={styles.sectionTitle} type="subtitle">
               发货商品
             </ThemedText>
-            {detail.items.map((item, index) => (
-              <View key={`${item.itemCode}-${index}`} style={[styles.itemRow, index > 0 ? styles.itemDivider : null]}>
-                <View style={styles.itemMain}>
-                  <ThemedText style={styles.itemTitle} type="defaultSemiBold">
-                    {item.itemName}
-                  </ThemedText>
-                  <ThemedText style={styles.itemMeta}>
-                    {item.warehouse || '未配置仓库'}
-                  </ThemedText>
-                  <ThemedText style={styles.itemFormula}>
-                    {formatCurrency(item.rate, detail.currency)} x {item.qty ?? '—'} {item.uom ? formatDisplayUom(item.uom) : ''}
-                  </ThemedText>
-                </View>
-                <ThemedText style={styles.itemAmount} type="defaultSemiBold">
-                  {formatCurrency(item.amount, detail.currency)}
-                </ThemedText>
-              </View>
-            ))}
+            <GroupedDeliveryItems currency={detail.currency} items={detail.items} />
           </View>
 
           {detail.remarks ? (
@@ -1066,6 +1152,112 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     flex: 1,
     fontSize: 15,
+    textAlign: 'right',
+  },
+  deliveryGroupCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#CBD5E1',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    overflow: 'hidden',
+    padding: 14,
+  },
+  deliveryGroupDivider: {
+    marginTop: 18,
+  },
+  deliveryGroupHeader: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#DBEAFE',
+    borderLeftWidth: 4,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  deliveryGroupMain: {
+    gap: 6,
+  },
+  deliveryGroupHeaderTop: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  deliveryGroupTitleBlock: {
+    flex: 1,
+    gap: 8,
+    minWidth: 0,
+  },
+  deliveryGroupTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#DBEAFE',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  deliveryGroupTagText: {
+    color: '#1D4ED8',
+    fontSize: 12,
+  },
+  deliveryGroupTitle: {
+    color: '#0F172A',
+    flex: 1,
+    fontSize: 20,
+    lineHeight: 26,
+  },
+  deliveryGroupMeta: {
+    color: '#64748B',
+    fontSize: 14,
+  },
+  deliveryGroupSummary: {
+    color: '#2563EB',
+    fontSize: 17,
+    lineHeight: 24,
+  },
+  deliveryGroupAmount: {
+    color: '#B45309',
+    fontSize: 24,
+    lineHeight: 30,
+    paddingTop: 2,
+    textAlign: 'right',
+  },
+  deliveryGroupRows: {
+    gap: 0,
+    paddingHorizontal: 2,
+  },
+  deliveryWarehouseRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+  },
+  deliveryWarehouseDivider: {
+    borderTopColor: '#CBD5E1',
+    borderTopWidth: 1,
+  },
+  deliveryWarehouseMain: {
+    flex: 1,
+    gap: 6,
+  },
+  deliveryWarehouseTitle: {
+    color: '#1E293B',
+    fontSize: 17,
+  },
+  deliveryWarehouseSummaryRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  deliveryWarehouseFormula: {
+    color: '#B45309',
+    fontSize: 19,
+  },
+  deliveryWarehouseAmount: {
+    color: '#B45309',
+    fontSize: 19,
+    paddingTop: 1,
     textAlign: 'right',
   },
   itemRow: {

@@ -3790,3 +3790,67 @@ When the same product appears with multiple transaction UOMs, grouped headers sh
   into
   - `102 箱 2 瓶`
 - stock conversion remains an internal settlement rule, not a reason to rewrite customer-facing quantity facts
+
+## Delivery Page Grouped Presentation (2026-03-26)
+
+Delivery confirmation and delivery-note detail should not reuse the same heavy card hierarchy as order editing.
+
+### File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+
+### What Changed
+
+- pending-delivery rows are still grouped by product, but the presentation is lighter and closer to a document-style execution list
+- each grouped product now has:
+  - a clearer product header
+  - a visible `商品名称` label
+  - a larger grouped amount on the right
+  - a grouped quantity summary such as `合计 25 箱 + 9 件`
+- warehouse children are shown as execution lines instead of nested mini-cards
+  - warehouse name
+  - row amount
+  - `单价 x 数量 单位`
+
+### Why
+
+- delivery pages are operational confirmation pages
+- they should emphasize:
+  - what product is being shipped
+  - how the shipment is split by warehouse
+  - what amount belongs to each warehouse row
+- a card-inside-card hierarchy looked too much like a generic detail editor instead of a shipment confirmation document
+
+## Invoice Creation Confirmation (2026-03-26)
+
+The pre-submit invoice page was previously too thin. It behaved like a plain entry form rather than a real invoice confirmation step.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-invoice-sheet.tsx`
+
+### What Changed
+
+- when the page is still in "create invoice" mode and has a source order:
+  - it now loads the sales-order detail first
+  - it shows an invoice-confirmation block before the form fields
+- the confirmation block includes:
+  - source order
+  - customer
+  - company
+  - contact and address snapshot
+  - order amount summary
+  - product summary grouped by item
+- grouped product summaries preserve original transaction UOMs
+  - for example: `合计 25 箱 + 9 件`
+- warehouse is intentionally not used as the main invoice summary dimension
+  - invoice confirmation should read closer to a customer-facing commercial document than an internal warehouse execution view
+
+### Why
+
+- mainstream invoicing flows usually give the operator one more chance to confirm:
+  - what order is being invoiced
+  - who the invoice is for
+  - what goods and amounts will appear
+- the page should feel like a proper "开票确认页", not only a place to type the order number and press create

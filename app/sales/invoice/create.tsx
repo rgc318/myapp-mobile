@@ -8,11 +8,14 @@ import { SalesInvoiceSheet } from '@/components/sales-invoice-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { getPaymentResultHandoff } from '@/lib/payment-result-handoff';
+import { buildQuantityComposition } from '@/lib/uom-display';
 import { useFeedback } from '@/providers/feedback-provider';
 import { createSalesInvoice } from '@/services/gateway';
 import {
   cancelPaymentEntryV2,
   cancelSalesInvoiceV2,
+  getSalesOrderDetailV2,
+  type SalesOrderDetailV2,
   getSalesInvoiceDetailV2,
   type SalesInvoiceDetailV2,
 } from '@/services/sales';
@@ -78,6 +81,36 @@ function buildInvoiceStatusHint(detail: SalesInvoiceDetailV2) {
   return '当前发票已经结清，若仍需回退单据，请先确认是否需要回退对应收款，再处理发票作废。';
 }
 
+function groupOrderItems(items: SalesOrderDetailV2['items']) {
+  const grouped = new Map<
+    string,
+    {
+      itemCode: string;
+      itemName: string;
+      totalAmount: number;
+      rows: SalesOrderDetailV2['items'];
+    }
+  >();
+
+  items.forEach((item) => {
+    const existing = grouped.get(item.itemCode);
+    if (existing) {
+      existing.rows.push(item);
+      existing.totalAmount += item.amount ?? 0;
+      return;
+    }
+
+    grouped.set(item.itemCode, {
+      itemCode: item.itemCode,
+      itemName: item.itemName || item.itemCode,
+      totalAmount: item.amount ?? 0,
+      rows: [item],
+    });
+  });
+
+  return Array.from(grouped.values());
+}
+
 export default function SalesInvoiceCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ sourceName?: string; salesInvoice?: string; notice?: string }>();
@@ -90,6 +123,8 @@ export default function SalesInvoiceCreateScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [detail, setDetail] = useState<SalesInvoiceDetailV2 | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [sourceOrderDetail, setSourceOrderDetail] = useState<SalesOrderDetailV2 | null>(null);
+  const [isLoadingSourceOrder, setIsLoadingSourceOrder] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [showPaymentRollbackDialog, setShowPaymentRollbackDialog] = useState(false);
@@ -112,6 +147,45 @@ export default function SalesInvoiceCreateScreen() {
       showSuccess(`已生成销售发票：${params.salesInvoice.trim()}`);
     }
   }, [lockedSourceName, params.notice, params.salesInvoice, showSuccess]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSourceOrderDetail() {
+      if (salesInvoiceName) {
+        setSourceOrderDetail(null);
+        return;
+      }
+
+      const trimmedSource = sourceName.trim();
+      if (!trimmedSource) {
+        setSourceOrderDetail(null);
+        return;
+      }
+
+      try {
+        setIsLoadingSourceOrder(true);
+        const nextDetail = await getSalesOrderDetailV2(trimmedSource);
+        if (isMounted) {
+          setSourceOrderDetail(nextDetail);
+        }
+      } catch {
+        if (isMounted) {
+          setSourceOrderDetail(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingSourceOrder(false);
+        }
+      }
+    }
+
+    void loadSourceOrderDetail();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [salesInvoiceName, sourceName]);
 
   const refreshPaymentNotice = useCallback(() => {
     if (!salesInvoiceName) {
@@ -319,6 +393,15 @@ export default function SalesInvoiceCreateScreen() {
           </View>
         }>
         <PreferenceSummary title="当前销售模式" modeLabel={preferences.salesFlowMode === 'quick' ? '快捷结算' : '分步处理'} />
+
+        {isLoadingSourceOrder ? (
+          <View style={styles.previewLoadingCard}>
+            <ActivityIndicator color="#2563EB" />
+            <ThemedText style={styles.previewLoadingText}>正在加载来源订单摘要...</ThemedText>
+          </View>
+        ) : sourceOrderDetail ? (
+          <InvoiceSourceSummary detail={sourceOrderDetail} />
+        ) : null}
 
         <View style={styles.formCard}>
           <View style={styles.fieldBlock}>
@@ -763,6 +846,91 @@ export default function SalesInvoiceCreateScreen() {
   );
 }
 
+function InvoiceSourceSummary({ detail }: { detail: SalesOrderDetailV2 }) {
+  const groupedItems = groupOrderItems(detail.items);
+
+  return (
+    <View style={styles.sectionCard}>
+      <ThemedText style={styles.sectionTitle} type="subtitle">
+        开票确认
+      </ThemedText>
+
+      <View style={styles.summaryGrid}>
+        <View style={styles.summaryCell}>
+          <ThemedText style={styles.summaryLabel}>来源订单</ThemedText>
+          <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+            {detail.name}
+          </ThemedText>
+        </View>
+        <View style={styles.summaryCell}>
+          <ThemedText style={styles.summaryLabel}>客户</ThemedText>
+          <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+            {detail.customer || '未配置'}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.summaryGrid}>
+        <View style={styles.summaryCell}>
+          <ThemedText style={styles.summaryLabel}>订单金额</ThemedText>
+          <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+            {formatCurrency(detail.grandTotal, detail.currency)}
+          </ThemedText>
+        </View>
+        <View style={styles.summaryCell}>
+          <ThemedText style={styles.summaryLabel}>未开票金额参考</ThemedText>
+          <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+            {formatCurrency(detail.grandTotal, detail.currency)}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.previewMetaCard}>
+        <View style={styles.row}>
+          <ThemedText style={styles.rowLabel}>公司</ThemedText>
+          <ThemedText style={styles.rowValue}>{detail.company || '未配置'}</ThemedText>
+        </View>
+        <View style={styles.row}>
+          <ThemedText style={styles.rowLabel}>收货联系人</ThemedText>
+          <ThemedText style={styles.rowValue}>{detail.contactDisplay || '未配置'}</ThemedText>
+        </View>
+        <View style={styles.rowBlock}>
+          <ThemedText style={styles.rowLabel}>收货地址</ThemedText>
+          <ThemedText style={styles.rowValue}>{detail.addressDisplay || '未配置收货地址'}</ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.previewGoodsCard}>
+        <View style={styles.previewGoodsHeader}>
+          <ThemedText style={styles.previewGoodsTitle} type="defaultSemiBold">
+            开票商品摘要
+          </ThemedText>
+          <ThemedText style={styles.previewGoodsHint}>按商品聚合展示，仓库信息不作为发票主视图展示。</ThemedText>
+        </View>
+
+        {groupedItems.map((item, index) => (
+          <View
+            key={`${item.itemCode}-${index}`}
+            style={[styles.previewItemRow, index > 0 ? styles.previewItemDivider : null]}>
+            <View style={styles.previewItemMain}>
+              <ThemedText style={styles.previewItemName} type="defaultSemiBold">
+                {item.itemName}
+              </ThemedText>
+              <ThemedText style={styles.previewItemMeta}>{`编码 ${item.itemCode}`}</ThemedText>
+              <ThemedText style={styles.previewItemSummary} type="defaultSemiBold">
+                {`合计 ${buildQuantityComposition(item.rows)}`}
+              </ThemedText>
+            </View>
+            <ThemedText style={styles.previewItemAmount} type="defaultSemiBold">
+              {formatCurrency(item.totalAmount, detail.currency)}
+            </ThemedText>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function ConfirmDialog({
   visible,
   title,
@@ -1166,6 +1334,86 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     flex: 1,
     fontSize: 15,
+    textAlign: 'right',
+  },
+  previewLoadingCard: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D7DEE7',
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+  },
+  previewLoadingText: {
+    color: '#64748B',
+    fontSize: 14,
+  },
+  previewMetaCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  previewGoodsCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 0,
+    overflow: 'hidden',
+  },
+  previewGoodsHeader: {
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  previewGoodsTitle: {
+    color: '#0F172A',
+    fontSize: 16,
+  },
+  previewGoodsHint: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  previewItemRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  previewItemDivider: {
+    borderTopColor: '#E2E8F0',
+    borderTopWidth: 1,
+  },
+  previewItemMain: {
+    flex: 1,
+    gap: 4,
+  },
+  previewItemName: {
+    color: '#0F172A',
+    fontSize: 16,
+  },
+  previewItemMeta: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  previewItemSummary: {
+    color: '#2563EB',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  previewItemAmount: {
+    color: '#B45309',
+    fontSize: 18,
+    paddingTop: 2,
     textAlign: 'right',
   },
   positiveValue: {

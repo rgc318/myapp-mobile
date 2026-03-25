@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { buildQuantityComposition } from '@/lib/uom-display';
 import type { SalesInvoiceDetailV2 } from '@/services/sales';
 
 function formatCurrency(value: number | null | undefined, currency = 'CNY') {
@@ -16,7 +17,63 @@ function formatCurrency(value: number | null | undefined, currency = 'CNY') {
   }).format(value);
 }
 
+function groupInvoiceItems(
+  items: SalesInvoiceDetailV2['items'],
+) {
+  const grouped = new Map<
+    string,
+    {
+      itemCode: string;
+      itemName: string;
+      totalAmount: number;
+      rows: SalesInvoiceDetailV2['items'];
+    }
+  >();
+
+  items.forEach((item) => {
+    const existing = grouped.get(item.itemCode);
+    if (existing) {
+      existing.rows.push(item);
+      existing.totalAmount += item.amount ?? 0;
+      return;
+    }
+
+    grouped.set(item.itemCode, {
+      itemCode: item.itemCode,
+      itemName: item.itemName,
+      totalAmount: item.amount ?? 0,
+      rows: [item],
+    });
+  });
+
+  return Array.from(grouped.values());
+}
+
+function buildInvoiceRateSummary(
+  items: SalesInvoiceDetailV2['items'],
+  currency: string,
+) {
+  const uniqueRates = Array.from(
+    new Set(
+      items
+        .map((item) => (typeof item.rate === 'number' && Number.isFinite(item.rate) ? item.rate : null))
+        .filter((value): value is number => value !== null),
+    ),
+  );
+  const uniqueUoms = Array.from(
+    new Set(items.map((item) => (typeof item.uom === 'string' ? item.uom.trim() : '')).filter(Boolean)),
+  );
+
+  if (uniqueRates.length === 1 && uniqueUoms.length === 1) {
+    return `${formatCurrency(uniqueRates[0], currency)} / ${formatDisplayUom(uniqueUoms[0])}`;
+  }
+
+  return '多单价/单位';
+}
+
 export function SalesInvoiceSheet({ detail }: { detail: SalesInvoiceDetailV2 }) {
+  const groupedItems = groupInvoiceItems(detail.items);
+
   return (
     <View style={styles.previewSheet}>
       <View style={styles.previewHeader}>
@@ -93,18 +150,27 @@ export function SalesInvoiceSheet({ detail }: { detail: SalesInvoiceDetailV2 }) 
         </ThemedText>
       </View>
 
-      {detail.items.map((item, index) => (
+      {groupedItems.map((item, index) => (
         <View key={`${item.itemCode}-${index}`} style={[styles.tableRow, index > 0 ? styles.tableDivider : null]}>
           <View style={[styles.tableCell, styles.tableCellName]}>
             <ThemedText style={styles.itemName} type="defaultSemiBold">
               {item.itemName}
             </ThemedText>
             <ThemedText style={styles.itemMeta}>{item.itemCode}</ThemedText>
+            {item.rows.length > 1 ? (
+              <ThemedText style={styles.itemSummary} type="defaultSemiBold">
+                {`合计 ${buildQuantityComposition(item.rows)}`}
+              </ThemedText>
+            ) : null}
           </View>
-          <ThemedText style={styles.tableCell}>{`${item.qty ?? '—'} ${item.uom ? formatDisplayUom(item.uom) : ''}`}</ThemedText>
-          <ThemedText style={styles.tableCell}>{formatCurrency(item.rate, detail.currency)}</ThemedText>
+          <ThemedText style={styles.tableCell}>
+            {item.rows.length > 1
+              ? buildQuantityComposition(item.rows)
+              : `${item.rows[0]?.qty ?? '—'} ${item.rows[0]?.uom ? formatDisplayUom(item.rows[0].uom) : ''}`}
+          </ThemedText>
+          <ThemedText style={styles.tableCell}>{buildInvoiceRateSummary(item.rows, detail.currency)}</ThemedText>
           <ThemedText style={[styles.tableCell, styles.tableCellAmount]}>
-            {formatCurrency(item.amount, detail.currency)}
+            {formatCurrency(item.totalAmount, detail.currency)}
           </ThemedText>
         </View>
       ))}
@@ -248,6 +314,11 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 12,
     marginTop: 4,
+  },
+  itemSummary: {
+    color: '#2563EB',
+    fontSize: 12,
+    marginTop: 6,
   },
   sheetFooter: {
     flexDirection: 'row',
