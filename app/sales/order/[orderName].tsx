@@ -13,7 +13,13 @@ import { formatCurrencyValue } from '@/lib/display-currency';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { getPaymentResultHandoff, type PaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { buildModeDefaults, normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
-import { convertQtyToStockQty, formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
+import { type UomConversion } from '@/lib/uom-conversion';
+import {
+  buildLineUnitSummary,
+  buildQuantityComposition,
+  buildQuantitySummary,
+  buildWarehouseStockDisplay,
+} from '@/lib/uom-display';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -114,72 +120,12 @@ function formatModeReference(
   return `${label} ${formatCurrencyValue(rate ?? null, currency)} / ${uom ? formatDisplayUom(uom) : '未设置单位'}`;
 }
 
-function buildLineUnitSummary(item: {
-  salesMode: SalesMode;
-  uom?: string | null;
-  stockUom?: string | null;
-}) {
-  const currentUom = item.uom ? formatDisplayUom(item.uom) : '未设置单位';
-  const stockUom = item.stockUom ? formatDisplayUom(item.stockUom) : '';
-  const modeLabel = item.salesMode === 'retail' ? '零售' : '批发';
-
-  if (stockUom && item.uom && item.uom !== item.stockUom) {
-    return `${modeLabel}录入：${currentUom}；库存按 ${stockUom} 自动换算`;
-  }
-
-  return `${modeLabel}录入：${currentUom}${stockUom ? `；库存单位 ${stockUom}` : ''}`;
-}
-
 function buildOrderQuantitySummary(items: { qty?: number | null; uom?: string | null }[]) {
   if (!items.length) {
     return '暂无商品明细';
   }
 
-  const uomSet = new Set(
-    items
-      .map((item) => (typeof item.uom === 'string' ? item.uom.trim() : ''))
-      .filter(Boolean),
-  );
-
-  if (uomSet.size === 1) {
-    const onlyUom = Array.from(uomSet)[0];
-    const totalQty = items.reduce((count, item) => count + (item.qty ?? 0), 0);
-    return `共 ${items.length} 行，录入数量 ${totalQty} ${formatDisplayUom(onlyUom)}`;
-  }
-
-  return `共 ${items.length} 行，存在多种单位，数量以各行显示为准`;
-}
-
-function buildWarehouseStockDisplay(options: {
-  warehouseStockQty?: number | null;
-  warehouseStockUom?: string | null;
-  qty: number;
-  uom?: string | null;
-  stockUom?: string | null;
-  uomConversions?: UomConversion[];
-}): { label: string; tone: 'default' | 'warning' | 'danger' } | null {
-  if (
-    typeof options.warehouseStockQty !== 'number' ||
-    !Number.isFinite(options.warehouseStockQty) ||
-    !options.warehouseStockUom
-  ) {
-    return null;
-  }
-
-  const reservedQty =
-    convertQtyToStockQty({
-      qty: options.qty,
-      uom: options.uom,
-      stockUom: options.stockUom ?? options.warehouseStockUom,
-      uomConversions: options.uomConversions,
-    }) ?? options.qty;
-  const remainingQty = Math.max(0, options.warehouseStockQty - reservedQty);
-  const tone = remainingQty <= 0 ? 'danger' : remainingQty <= 10 ? 'warning' : 'default';
-
-  return {
-    label: `库存剩余：${formatConvertedQty(remainingQty)} ${formatDisplayUom(options.warehouseStockUom)}`,
-    tone,
-  };
+  return `共 ${items.length} 行，${buildQuantitySummary(items)}`;
 }
 
 function getBusinessStatusLabel(detail: SalesOrderDetailV2 | null) {
@@ -1851,7 +1797,7 @@ export default function SalesOrderDetailScreen() {
                   itemCode={group.itemCode}
                   itemName={group.itemName}
                   key={group.itemCode}
-                  groupedSummaryLabel={`共 ${group.rows.length} 个仓库条目，合计 ${group.totalQty}`}
+                  groupedSummaryLabel={`共 ${group.rows.length} 个仓库条目，合计 ${buildQuantityComposition(group.rows.map(({ item }) => item))}`}
                   groupedLines={group.rows.map(({ item, index }) => {
                     if (isEditingItems) {
                       const editableItem = item as EditableOrderItem;

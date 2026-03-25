@@ -25,7 +25,13 @@ import {
   normalizeSalesMode,
   type SalesMode,
 } from '@/lib/sales-mode';
-import { convertQtyToStockQty, formatConvertedQty } from '@/lib/uom-conversion';
+import {
+  buildEntryToStockSummary,
+  buildQuantityComposition,
+  buildQuantitySummary,
+  buildStockReferenceSummary,
+  buildWarehouseStockDisplay,
+} from '@/lib/uom-display';
 import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
@@ -86,65 +92,6 @@ function formatModeReference(
   const formattedRate = typeof rate === 'number' ? `¥ ${formatMoney(rate)}` : '未配置';
   const formattedUom = uom ? formatDisplayUom(uom) : '未设置单位';
   return `${label} ${formattedRate} / ${formattedUom}`;
-}
-
-function formatDraftConversionSummary(item: SalesOrderDraftItem) {
-  const stockQty = convertQtyToStockQty({
-    qty: item.qty,
-    uom: item.uom,
-    stockUom: item.stockUom,
-    uomConversions: item.uomConversions,
-  });
-
-  if (stockQty == null || !item.stockUom) {
-    return null;
-  }
-
-  if (!item.uom || item.uom === item.stockUom) {
-    return `当前按 ${formatDisplayUom(item.stockUom)} 录入。`;
-  }
-
-  return `${item.qty} ${formatDisplayUom(item.uom)} 约等于 ${formatConvertedQty(stockQty)} ${formatDisplayUom(item.stockUom)}。`;
-}
-
-function formatDraftStockReference(item: SalesOrderDraftItem) {
-  if (typeof item.stockQty !== 'number' || !Number.isFinite(item.stockQty) || !item.stockUom) {
-    return null;
-  }
-
-  return `参考库存约 ${formatConvertedQty(item.stockQty)} ${formatDisplayUom(item.stockUom)}，仅作提醒。`;
-}
-
-function buildWarehouseStockDisplay(options: {
-  warehouseStockQty?: number | null;
-  warehouseStockUom?: string | null;
-  qty: number;
-  uom?: string | null;
-  stockUom?: string | null;
-  uomConversions?: SalesOrderDraftItem['uomConversions'];
-}): { label: string; tone: 'default' | 'warning' | 'danger' } | null {
-  if (
-    typeof options.warehouseStockQty !== 'number' ||
-    !Number.isFinite(options.warehouseStockQty) ||
-    !options.warehouseStockUom
-  ) {
-    return null;
-  }
-
-  const reservedQty =
-    convertQtyToStockQty({
-      qty: options.qty,
-      uom: options.uom,
-      stockUom: options.stockUom ?? options.warehouseStockUom,
-      uomConversions: options.uomConversions,
-    }) ?? options.qty;
-  const remainingQty = Math.max(0, options.warehouseStockQty - reservedQty);
-  const tone = remainingQty <= 0 ? 'danger' : remainingQty <= 10 ? 'warning' : 'default';
-
-  return {
-    label: `库存剩余：${formatConvertedQty(remainingQty)} ${formatDisplayUom(options.warehouseStockUom)}`,
-    tone,
-  };
 }
 
 function groupDraftItemsByProduct(items: SalesOrderDraftItem[]) {
@@ -691,6 +638,10 @@ export default function SalesOrderCreateScreen() {
     [draftItems],
   );
   const totalLineCount = draftItems.length;
+  const draftQuantitySummary = useMemo(
+    () => buildQuantitySummary(draftItems),
+    [draftItems],
+  );
   const groupedDraftItems = useMemo(
     () => groupDraftItemsByProduct(draftItems),
     [draftItems],
@@ -1112,7 +1063,7 @@ export default function SalesOrderCreateScreen() {
                     itemCode={group.itemCode}
                     itemName={group.itemName}
                     key={group.itemCode}
-                    groupedSummaryLabel={`共 ${group.rows.length} 个仓库条目，合计 ${group.totalQty}`}
+                    groupedSummaryLabel={`共 ${group.rows.length} 个仓库条目，合计 ${buildQuantityComposition(group.rows)}`}
                     groupedLines={group.rows.map((item) => {
                       const warehouseStockDisplay = buildWarehouseStockDisplay({
                         warehouseStockQty: item.warehouseStockQty,
@@ -1140,8 +1091,8 @@ export default function SalesOrderCreateScreen() {
                       ),
                       warehouseStockLabel: warehouseStockDisplay?.label ?? null,
                       warehouseStockTone: warehouseStockDisplay?.tone ?? 'default',
-                      conversionSummary: formatDraftConversionSummary(item),
-                      stockReferenceSummary: formatDraftStockReference(item),
+                      conversionSummary: buildEntryToStockSummary(item),
+                      stockReferenceSummary: buildStockReferenceSummary(item),
                       onChangeSalesMode: (nextMode) => {
                         const defaults = buildModeDefaults(item, nextMode);
                         restoreSalesOrderDraftItem({
@@ -1213,7 +1164,7 @@ export default function SalesOrderCreateScreen() {
 
           <View style={[styles.sectionFooter, { borderTopColor: borderColor }]}>
             <ThemedText style={styles.sectionFooterText}>
-              合计 已选 {totalQty} 项
+              {`合计已选 ${totalLineCount} 项，${draftQuantitySummary}`}
             </ThemedText>
             <ThemedText style={styles.sectionFooterAmount} type="defaultSemiBold">
               ¥ {formatMoney(goodsAmount)}
@@ -1367,7 +1318,7 @@ export default function SalesOrderCreateScreen() {
             </ThemedText>
           </View>
           <ThemedText style={styles.bottomSummaryPrimary} type="defaultSemiBold">
-            {`共 ${totalLineCount} 项，合计 ${totalQty} 件`}
+            {`共 ${totalLineCount} 项，${draftQuantitySummary}`}
           </ThemedText>
         </View>
         <View style={styles.bottomActions}>

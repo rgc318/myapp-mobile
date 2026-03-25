@@ -306,6 +306,82 @@ This round aligned the mobile product module with the backend rule that inventor
 - any default transaction UOM that differs from `stock_uom` must provide a conversion path back to `stock_uom`
 - when stock base is synced to wholesale or retail, only the opposite side should continue asking for explicit conversion input
 
+## Cross-Document UOM Display Rule (2026-03-25)
+
+After the backend inventory rule was confirmed again, frontend display logic also needs a stable shared rule:
+
+- system truth:
+  - inventory always settles in `stock_uom`
+- business-facing display:
+  - operators and customers may still read quantities in wholesale / retail transaction UOMs
+- frontend must not let every page invent its own wording for:
+  - line UOM summary
+  - quantity totals
+  - warehouse remaining stock
+  - entry-to-stock conversion hints
+
+### Shared Display Layer
+
+- a shared display helper was added:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/uom-display.ts`
+- it centralizes:
+  - line unit summary
+  - entry-to-stock conversion summary
+  - stock reference summary
+  - warehouse remaining stock display
+  - quantity-summary wording for grouped rows and page-level totals
+
+This avoids repeating slightly different logic in:
+
+- sales order create
+- sales order detail
+- later purchase order pages
+- later delivery / invoice / receipt detail pages
+
+### Document Granularity Rule
+
+Not every document should expose warehouse and UOM detail at the same level.
+
+- sales order:
+  - keep `item + warehouse` split lines
+  - this is an internal execution and checking document
+  - warehouse detail must remain visible for editing and fulfillment reasoning
+
+- delivery note:
+  - default recommendation is "product summary + warehouse detail retained"
+  - warehouse still matters for internal fulfillment
+  - customer-facing printable delivery views may hide warehouse as a later variant
+
+- sales invoice:
+  - should prefer customer-facing product aggregation
+  - warehouse is internal execution detail and should not be the main invoice row identity
+
+### Aggregation Rule
+
+- same product rows may only be safely merged into one formal display row when commercial meaning still matches
+- at minimum, merge candidates should keep the same:
+  - item
+  - UOM
+  - rate
+  - tax / discount semantics if those are part of the page
+
+- if UOM differs, do not force a mathematical regrouping into another unit
+  - example:
+    - keep `100 箱 + 50 瓶`
+    - do not rewrite it into `102 箱 2 瓶`
+
+The reason is:
+
+- stock conversion is for internal settlement
+- customer-facing quantity display should preserve the original transaction facts
+
+So:
+
+- internal stock reasoning:
+  - can convert to `stock_uom`
+- outward or customer-readable quantity summary:
+  - should preserve the original recorded transaction UOMs
+
 ### Why This Matters
 
 - it matches the backend validation added on 2026-03-25
@@ -3631,3 +3707,86 @@ Operators editing warehouse-level order rows needed a stock reference close to t
   - normal remaining stock uses neutral subdued text
   - low remaining stock uses warning color
   - zero remaining stock uses danger color
+
+## Shared UOM Display Layer (2026-03-25)
+
+After confirming that backend inventory settlement continues to use `stock_uom`, frontend wording also needed one shared rule instead of every page inventing its own quantity text.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/uom-display.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+
+### What Was Added
+
+- a shared display helper now centralizes:
+  - line-level business-UOM vs stock-UOM wording
+  - `X 箱约等于 Y 件` style conversion summaries
+  - warehouse remaining-stock display
+  - grouped quantity-summary wording
+
+- sales-order create and detail pages now call the same shared methods instead of carrying slightly different summary strings in each page file
+
+### Why
+
+- backend already settles inventory through `stock_uom`
+- frontend should therefore stay consistent about:
+  - what is business-facing quantity
+  - what is stock-facing quantity
+  - when to preserve original transaction UOMs instead of regrouping them
+
+## Readonly Warehouse Rows (2026-03-25)
+
+Order detail has two very different states:
+
+- edit state
+- readonly review state
+
+The readonly state should not look like an active editor.
+
+### File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-order-item-editor.tsx`
+
+### Fixes
+
+- grouped warehouse child rows now correctly pass `readOnly` through to the inner row renderer
+  - this removes the misleading mode switch and quantity stepper from readonly order-detail rows
+
+- readonly rows were tightened into a more scan-friendly one-line summary
+  - left side:
+    - `批发录入：箱`
+    - `零售录入：件`
+  - right side:
+    - `¥ 4800 x 12 箱`
+
+### Why
+
+- operators checking an existing order should not see controls that imply direct editing
+- readonly review is about confirmation, not pretending the row is still an active input form
+
+## Mixed-UOM Product Summary (2026-03-25)
+
+When the same product appears with multiple transaction UOMs, grouped headers should preserve the original recorded units instead of forcing a synthetic regrouping.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/uom-display.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+
+### Rule
+
+- mixed-UOM grouped headers now prefer:
+  - `合计 25 箱 + 9 件`
+- they no longer default to a vague warning-only summary for the grouped product header
+
+### Why
+
+- preserving original transaction UOMs is closer to what the operator and customer actually understand
+- frontend should not silently regroup:
+  - `100 箱 + 50 瓶`
+  into
+  - `102 箱 2 瓶`
+- stock conversion remains an internal settlement rule, not a reason to rewrite customer-facing quantity facts

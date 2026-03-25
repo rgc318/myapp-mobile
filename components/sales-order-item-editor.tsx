@@ -160,18 +160,26 @@ function WarehouseEntryEditor({
 
         {readOnly ? (
           <>
-            {conversionSummary ? <ThemedText style={styles.itemSubline}>{conversionSummary}</ThemedText> : null}
-            <View style={styles.readonlyMetricsRow}>
-              <ThemedText style={[styles.readonlyMetricValue, { color: warningColor }]} type="defaultSemiBold">
-                {priceText ? `¥ ${priceText}` : '—'}
-              </ThemedText>
-              <ThemedText style={styles.readonlyMetricMultiply}>x</ThemedText>
-              <ThemedText style={styles.readonlyMetricQty} type="defaultSemiBold">
-                {qty}
-              </ThemedText>
-              <ThemedText style={styles.readonlyMetricUom} type="defaultSemiBold">
-                {uom ? formatDisplayUom(uom) : '未设置'}
-              </ThemedText>
+            <View style={styles.readonlySummaryRow}>
+              {conversionSummary ? (
+                <ThemedText style={styles.readonlyModeSummary} numberOfLines={1} type="defaultSemiBold">
+                  {conversionSummary}
+                </ThemedText>
+              ) : (
+                <View style={styles.readonlySummarySpacer} />
+              )}
+              <View style={styles.readonlyMetricsRow}>
+                <ThemedText style={[styles.readonlyMetricValue, { color: warningColor }]} type="defaultSemiBold">
+                  {priceText ? `¥ ${priceText}` : '—'}
+                </ThemedText>
+                <ThemedText style={styles.readonlyMetricMultiply}>x</ThemedText>
+                <ThemedText style={styles.readonlyMetricQty} type="defaultSemiBold">
+                  {qty}
+                </ThemedText>
+                <ThemedText style={styles.readonlyMetricUom} type="defaultSemiBold">
+                  {uom ? formatDisplayUom(uom) : '未设置'}
+                </ThemedText>
+              </View>
             </View>
             {stockReferenceSummary ? <ThemedText style={styles.itemHintText}>{stockReferenceSummary}</ThemedText> : null}
           </>
@@ -353,6 +361,7 @@ export function SalesOrderItemEditor({
               onRemove={line.onRemove}
               priceText={line.priceText}
               qty={line.qty}
+              readOnly={line.readOnly}
               retailReferenceLabel={line.retailReferenceLabel}
               salesMode={line.salesMode}
               stockReferenceSummary={line.stockReferenceSummary}
@@ -381,6 +390,7 @@ export function SalesOrderItemEditor({
       onRemove={onRemove}
       priceText={priceText}
       qty={qty}
+      readOnly={false}
       retailReferenceLabel={retailReferenceLabel}
       salesMode={salesMode}
       stockReferenceSummary={stockReferenceSummary}
@@ -509,28 +519,43 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 12,
   },
+  readonlySummaryRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  readonlySummarySpacer: {
+    flex: 1,
+  },
+  readonlyModeSummary: {
+    color: '#475569',
+    flex: 1,
+    fontSize: 14,
+  },
   readonlyMetricsRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
+    gap: 8,
+    justifyContent: 'flex-end',
+    flexShrink: 0,
   },
   readonlyMetricValue: {
-    fontSize: 14,
+    fontSize: 18,
   },
   readonlyMetricMultiply: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
   },
   readonlyMetricQty: {
     color: '#2563EB',
-    fontSize: 15,
+    fontSize: 18,
   },
   readonlyMetricUom: {
     color: '#0F172A',
-    fontSize: 13,
+    fontSize: 16,
   },
   itemEditRow: {
     flexDirection: 'row',
