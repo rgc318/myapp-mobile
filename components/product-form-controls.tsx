@@ -10,6 +10,7 @@ export function ProductTextField({
   placeholder,
   multiline = false,
   labelColor,
+  required = false,
 }: {
   label: string;
   value: string;
@@ -17,15 +18,25 @@ export function ProductTextField({
   placeholder: string;
   multiline?: boolean;
   labelColor?: string;
+  required?: boolean;
 }) {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
 
   return (
     <View style={styles.fieldBlock}>
-      <ThemedText style={[styles.fieldLabel, labelColor ? { color: labelColor } : null]} type="defaultSemiBold">
-        {label}
-      </ThemedText>
+      {label ? (
+        <View style={styles.labelRow}>
+          <ThemedText style={[styles.fieldLabel, labelColor ? { color: labelColor } : null]} type="defaultSemiBold">
+            {label}
+          </ThemedText>
+          {required ? (
+            <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+              *
+            </ThemedText>
+          ) : null}
+        </View>
+      ) : null}
       <TextInput
         multiline={multiline}
         numberOfLines={multiline ? 4 : 1}
@@ -46,12 +57,14 @@ export function ProductSelectorField({
   placeholder = '请选择',
   actionLabel = '选择',
   onPress,
+  required = false,
 }: {
   label: string;
   value: string;
   placeholder?: string;
   actionLabel?: string;
   onPress: () => void;
+  required?: boolean;
 }) {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
@@ -59,9 +72,16 @@ export function ProductSelectorField({
 
   return (
     <View style={styles.fieldBlock}>
-      <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-        {label}
-      </ThemedText>
+      <View style={styles.labelRow}>
+        <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+          {label}
+        </ThemedText>
+        {required ? (
+          <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+            *
+          </ThemedText>
+        ) : null}
+      </View>
       <Pressable onPress={onPress} style={[styles.selectorField, { backgroundColor: surfaceMuted, borderColor }]}>
         <ThemedText numberOfLines={1} style={styles.selectorFieldValue} type="defaultSemiBold">
           {value || placeholder}
@@ -161,8 +181,18 @@ const styles = StyleSheet.create({
   fieldBlock: {
     gap: 8,
   },
+  labelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
   fieldLabel: {
     fontSize: 14,
+  },
+  requiredMark: {
+    color: '#DC2626',
+    fontSize: 15,
+    lineHeight: 18,
   },
   textInput: {
     borderRadius: 16,

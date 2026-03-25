@@ -1075,9 +1075,14 @@ export default function ProductDetailScreen() {
                   </View>
                   <View style={styles.unitEditorRow}>
                     <View style={styles.unitEditorCell}>
-                      <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                        库存基准单位
-                      </ThemedText>
+                      <View style={styles.labelRow}>
+                        <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                          库存基准单位
+                        </ThemedText>
+                        <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+                          *
+                        </ThemedText>
+                      </View>
                       <Pressable
                         onPress={() => handleOpenUomPicker('stock')}
                         style={[styles.selectorFieldCompact, { backgroundColor: surfaceMuted, borderColor }]}>
@@ -1123,9 +1128,16 @@ export default function ProductDetailScreen() {
                   <View style={styles.unitRuleList}>
                     {stockSyncMode !== 'wholesale' ? (
                       <View style={styles.unitRuleRow}>
-                        <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
-                          批发规则
-                        </ThemedText>
+                        <View style={styles.labelRow}>
+                          <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                            批发规则
+                          </ThemedText>
+                          {wholesaleNeedsFactor ? (
+                            <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+                              *
+                            </ThemedText>
+                          ) : null}
+                        </View>
                         <View style={styles.unitFormulaRow}>
                           <View style={styles.unitFormulaUnitCell}>
                             <Pressable
@@ -1166,9 +1178,16 @@ export default function ProductDetailScreen() {
                     ) : null}
                     {stockSyncMode !== 'retail' ? (
                       <View style={styles.unitRuleRow}>
-                        <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
-                          零售规则
-                        </ThemedText>
+                        <View style={styles.labelRow}>
+                          <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                            零售规则
+                          </ThemedText>
+                          {retailNeedsFactor ? (
+                            <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+                              *
+                            </ThemedText>
+                          ) : null}
+                        </View>
                         <View style={styles.unitFormulaRow}>
                           {stockSyncMode === 'wholesale' ? (
                             <View style={styles.unitFormulaUnitCell}>
@@ -1273,7 +1292,7 @@ export default function ProductDetailScreen() {
               </ThemedText>
               {isEditing ? (
                 <View style={styles.formBlock}>
-                  <DetailField label="商品名称" onChangeText={setDraftName} placeholder="输入商品名称" value={draftName} />
+                  <DetailField label="商品名称" onChangeText={setDraftName} placeholder="输入商品名称" required value={draftName} />
                   <View style={styles.rowFields}>
                     <View style={styles.rowField}>
                       <View style={styles.fieldBlock}>
@@ -1969,8 +1988,18 @@ const styles = StyleSheet.create({
   fieldBlock: {
     gap: 8,
   },
+  labelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
   fieldLabel: {
     fontSize: 14,
+  },
+  requiredMark: {
+    color: '#DC2626',
+    fontSize: 15,
+    lineHeight: 18,
   },
   textInput: {
     borderRadius: 16,

@@ -350,7 +350,7 @@ export default function ProductCreateScreen() {
           <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
             基础资料
           </ThemedText>
-          <ProductTextField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" value={itemName} />
+          <ProductTextField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" required value={itemName} />
           <ProductTextField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
@@ -382,9 +382,14 @@ export default function ProductCreateScreen() {
           </View>
           <View style={styles.unitEditorRow}>
             <View style={styles.unitEditorCell}>
-              <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                库存基准单位
-              </ThemedText>
+              <View style={styles.labelRow}>
+                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                  库存基准单位
+                </ThemedText>
+                <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+                  *
+                </ThemedText>
+              </View>
               <Pressable onPress={() => handleOpenUomPicker('stock')} style={styles.selectorFieldCompact}>
                 <View style={styles.selectorFieldCompactCopy}>
                   <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
@@ -422,9 +427,16 @@ export default function ProductCreateScreen() {
           <View style={styles.unitRuleList}>
             {stockSyncMode !== 'wholesale' ? (
               <View style={styles.unitRuleRow}>
-                <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
-                  批发规则
-                </ThemedText>
+                <View style={styles.labelRow}>
+                  <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                    批发规则
+                  </ThemedText>
+                  {wholesaleNeedsFactor ? (
+                    <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+                      *
+                    </ThemedText>
+                  ) : null}
+                </View>
                 <View style={styles.unitFormulaRow}>
                   <View style={styles.unitFormulaUnitCell}>
                     <Pressable onPress={() => handleOpenUomPicker('wholesale')} style={styles.selectorFieldCompact}>
@@ -462,9 +474,16 @@ export default function ProductCreateScreen() {
             ) : null}
             {stockSyncMode !== 'retail' ? (
               <View style={styles.unitRuleRow}>
-                <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
-                  零售规则
-                </ThemedText>
+                <View style={styles.labelRow}>
+                  <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                    零售规则
+                  </ThemedText>
+                  {retailNeedsFactor ? (
+                    <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+                      *
+                    </ThemedText>
+                  ) : null}
+                </View>
                 <View style={styles.unitFormulaRow}>
                   {stockSyncMode === 'wholesale' ? (
                     <View style={styles.unitFormulaUnitCell}>
@@ -627,6 +646,18 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 14,
+    marginBottom: 8,
+  },
+  labelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 8,
+  },
+  requiredMark: {
+    color: '#DC2626',
+    fontSize: 15,
+    lineHeight: 18,
     marginBottom: 8,
   },
   unitEditorRow: {

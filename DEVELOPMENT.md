@@ -284,6 +284,15 @@ This round aligned the mobile product module with the backend rule that inventor
   - formula preview text is used to keep the direction readable for operators, especially in wholesale-sync mode
   - create page and detail page now share the same sync-mode behavior so operators do not have to relearn unit rules between "new product" and "edit product"
 
+- required-field signaling was aligned across create and detail editors
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/product-form-controls.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+  - key required fields now show a red `*` directly in the field title before the operator starts typing
+  - conditional rule rows also show the same marker when the current sync mode means an explicit conversion is required
+  - this reduces trial-and-error on mobile and helps operators fill the minimum valid product data faster
+
 - a real backend constraint was confirmed during manual testing
   - once an item already has historical transactions under an existing unit system, backend validation may reject direct stock/default-UOM changes
   - the mobile frontend currently surfaces that backend validation message directly
