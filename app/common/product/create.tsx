@@ -33,9 +33,11 @@ export default function ProductCreateScreen() {
   const [nickname, setNickname] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [stockUom, setStockUom] = useState('Nos');
   const [wholesaleDefaultUom, setWholesaleDefaultUom] = useState('Box');
   const [retailDefaultUom, setRetailDefaultUom] = useState('Nos');
   const [wholesaleConversionFactor, setWholesaleConversionFactor] = useState('12');
+  const [retailConversionFactor, setRetailConversionFactor] = useState('1');
   const [standardRate, setStandardRate] = useState('');
   const [wholesaleRate, setWholesaleRate] = useState('');
   const [retailRate, setRetailRate] = useState('');
@@ -46,7 +48,7 @@ export default function ProductCreateScreen() {
   const [masterPickerQuery, setMasterPickerQuery] = useState('');
   const [masterPickerOptions, setMasterPickerOptions] = useState<string[]>([]);
   const [uomPickerVisible, setUomPickerVisible] = useState(false);
-  const [uomPickerTarget, setUomPickerTarget] = useState<'wholesale' | 'retail' | null>(null);
+  const [uomPickerTarget, setUomPickerTarget] = useState<'stock' | 'wholesale' | 'retail' | null>(null);
   const [uomPickerQuery, setUomPickerQuery] = useState('');
   const [uomOptions, setUomOptions] = useState<string[]>([]);
 
@@ -140,19 +142,33 @@ export default function ProductCreateScreen() {
 
     try {
       setIsSaving(true);
+      const trimmedStockUom = stockUom.trim();
+      if (!trimmedStockUom) {
+        throw new Error('请先填写库存基准单位。');
+      }
+
       const trimmedRetailUom = retailDefaultUom.trim();
       if (!trimmedRetailUom) {
-        throw new Error('请先填写零售基准单位。');
+        throw new Error('请先填写零售默认成交单位。');
       }
 
       const trimmedWholesaleUom = wholesaleDefaultUom.trim();
       const wholesaleFactor = toNumberOrNull(wholesaleConversionFactor);
       if (
         trimmedWholesaleUom &&
-        trimmedWholesaleUom !== trimmedRetailUom &&
+        trimmedWholesaleUom !== trimmedStockUom &&
         (wholesaleFactor == null || wholesaleFactor <= 0)
       ) {
-        throw new Error('请填写有效的批发换算系数。');
+        throw new Error('请填写有效的批发单位换算系数。');
+      }
+
+      const retailFactor = toNumberOrNull(retailConversionFactor);
+      if (
+        trimmedRetailUom &&
+        trimmedRetailUom !== trimmedStockUom &&
+        (retailFactor == null || retailFactor <= 0)
+      ) {
+        throw new Error('请填写有效的零售单位换算系数。');
       }
 
       const created = await createProduct({
@@ -164,16 +180,24 @@ export default function ProductCreateScreen() {
         nickname: nickname.trim() || undefined,
         description: description.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
-        stockUom: trimmedRetailUom,
+        stockUom: trimmedStockUom,
         wholesaleDefaultUom: trimmedWholesaleUom || undefined,
         retailDefaultUom: trimmedRetailUom,
         uomConversions: [
-          { uom: trimmedRetailUom, conversionFactor: 1 },
+          { uom: trimmedStockUom, conversionFactor: 1 },
           ...(trimmedWholesaleUom
             ? [
                 {
                   uom: trimmedWholesaleUom,
-                  conversionFactor: trimmedWholesaleUom === trimmedRetailUom ? 1 : (wholesaleFactor as number),
+                  conversionFactor: trimmedWholesaleUom === trimmedStockUom ? 1 : (wholesaleFactor as number),
+                },
+              ]
+            : []),
+          ...(trimmedRetailUom
+            ? [
+                {
+                  uom: trimmedRetailUom,
+                  conversionFactor: trimmedRetailUom === trimmedStockUom ? 1 : (retailFactor as number),
                 },
               ]
             : []),
@@ -220,13 +244,17 @@ export default function ProductCreateScreen() {
     setMasterPickerQuery('');
   };
 
-  const handleOpenUomPicker = (target: 'wholesale' | 'retail') => {
+  const handleOpenUomPicker = (target: 'stock' | 'wholesale' | 'retail') => {
     setUomPickerTarget(target);
     setUomPickerQuery('');
     setUomPickerVisible(true);
   };
 
   const handleSelectUom = (value: string) => {
+    if (uomPickerTarget === 'stock') {
+      setStockUom(value);
+    }
+
     if (uomPickerTarget === 'wholesale') {
       setWholesaleDefaultUom(value);
     }
@@ -242,14 +270,15 @@ export default function ProductCreateScreen() {
 
   const wholesaleNeedsFactor =
     Boolean(wholesaleDefaultUom.trim()) &&
-    Boolean(retailDefaultUom.trim()) &&
-    wholesaleDefaultUom.trim() !== retailDefaultUom.trim();
+    Boolean(stockUom.trim()) &&
+    wholesaleDefaultUom.trim() !== stockUom.trim();
+  const retailNeedsFactor = Boolean(retailDefaultUom.trim()) && Boolean(stockUom.trim()) && retailDefaultUom.trim() !== stockUom.trim();
 
   return (
     <AppShell
       compactHeader
       contentCard={false}
-      description="录入商品基础资料、多价格和默认批发/零售单位。"
+      description="录入商品基础资料、多价格、库存基准单位和默认成交单位。"
       footer={
         <View style={styles.footerBar}>
           <Pressable onPress={() => router.replace('/common/products')} style={styles.footerSecondary}>
@@ -293,19 +322,20 @@ export default function ProductCreateScreen() {
             价格与成交单位
           </ThemedText>
           <ThemedText style={styles.sectionHint}>
-            先选零售单位，再设置批发单位和换算关系。创建后库存默认按零售单位记账。
+            先确定库存基准单位，再配置批发、零售默认成交单位以及到库存基准单位的换算关系。
           </ThemedText>
+          <ProductSelectorField label="库存基准单位" onPress={() => handleOpenUomPicker('stock')} value={formatDisplayUom(stockUom)} />
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
               <ProductSelectorField
-                label="批发成交单位"
+                label="批发默认成交单位"
                 onPress={() => handleOpenUomPicker('wholesale')}
                 value={formatDisplayUom(wholesaleDefaultUom)}
               />
             </View>
             <View style={styles.rowField}>
               <ProductSelectorField
-                label="零售成交单位"
+                label="零售默认成交单位"
                 onPress={() => handleOpenUomPicker('retail')}
                 value={formatDisplayUom(retailDefaultUom)}
               />
@@ -316,32 +346,44 @@ export default function ProductCreateScreen() {
               <ProductTextField
                 label={
                   wholesaleNeedsFactor
-                    ? `换算系数（1 ${formatDisplayUom(wholesaleDefaultUom || '批发')} = ? ${formatDisplayUom(retailDefaultUom || '零售')}）`
-                    : '换算系数'
+                    ? `批发换算（1 ${formatDisplayUom(wholesaleDefaultUom || '批发')} = ? ${formatDisplayUom(stockUom || '库存基准')})`
+                    : '批发换算'
                 }
                 onChangeText={setWholesaleConversionFactor}
-                placeholder={wholesaleNeedsFactor ? '例如 12' : '与零售单位一致时自动按 1'}
+                placeholder={wholesaleNeedsFactor ? '例如 12' : '与库存基准单位一致时自动按 1'}
                 value={wholesaleNeedsFactor ? wholesaleConversionFactor : '1'}
               />
             </View>
             <View style={styles.rowField}>
-              <ProductTextField label="标准售价" onChangeText={setStandardRate} placeholder="例如 99" value={standardRate} />
+              <ProductTextField
+                label={retailNeedsFactor ? `零售换算（1 ${formatDisplayUom(retailDefaultUom || '零售')} = ? ${formatDisplayUom(stockUom || '库存基准')})` : '零售换算'}
+                onChangeText={setRetailConversionFactor}
+                placeholder={retailNeedsFactor ? '例如 1' : '与库存基准单位一致时自动按 1'}
+                value={retailNeedsFactor ? retailConversionFactor : '1'}
+              />
             </View>
           </View>
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
+              <ProductTextField label="标准售价" onChangeText={setStandardRate} placeholder="例如 99" value={standardRate} />
+            </View>
+            <View style={styles.rowField}>
               <ProductTextField label="批发价" onChangeText={setWholesaleRate} placeholder="例如 68" value={wholesaleRate} />
             </View>
+          </View>
+          <View style={styles.rowFields}>
             <View style={styles.rowField}>
               <ProductTextField label="零售价" onChangeText={setRetailRate} placeholder="例如 9.9" value={retailRate} />
             </View>
+            <View style={styles.rowField}>
+              <ProductTextField
+                label="默认采购价"
+                onChangeText={setStandardBuyingRate}
+                placeholder="例如 55（默认按批发采购口径）"
+                value={standardBuyingRate}
+              />
+            </View>
           </View>
-          <ProductTextField
-            label="默认采购价"
-            onChangeText={setStandardBuyingRate}
-            placeholder="例如 55（默认按批发采购口径）"
-            value={standardBuyingRate}
-          />
         </View>
       </ScrollView>
       <ProductPickerSheet
@@ -372,8 +414,8 @@ export default function ProductCreateScreen() {
         options={uomOptions}
         placeholder="搜索单位名称"
         query={uomPickerQuery}
-        selectedValue={uomPickerTarget === 'wholesale' ? wholesaleDefaultUom : retailDefaultUom}
-        title={uomPickerTarget === 'wholesale' ? '选择批发单位' : '选择零售单位'}
+        selectedValue={uomPickerTarget === 'stock' ? stockUom : uomPickerTarget === 'wholesale' ? wholesaleDefaultUom : retailDefaultUom}
+        title={uomPickerTarget === 'stock' ? '选择库存基准单位' : uomPickerTarget === 'wholesale' ? '选择批发单位' : '选择零售单位'}
         visible={uomPickerVisible}
       />
     </AppShell>

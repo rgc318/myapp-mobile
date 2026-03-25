@@ -96,6 +96,8 @@ export default function ProductDetailScreen() {
   const [draftWholesaleDefaultUom, setDraftWholesaleDefaultUom] = useState('');
   const [draftRetailDefaultUom, setDraftRetailDefaultUom] = useState('');
   const [draftWholesaleConversionFactor, setDraftWholesaleConversionFactor] = useState('');
+  const [draftRetailConversionFactor, setDraftRetailConversionFactor] = useState('');
+  const [stockSyncMode, setStockSyncMode] = useState<'manual' | 'wholesale' | 'retail'>('manual');
   const [draftWarehouseStockQty, setDraftWarehouseStockQty] = useState('');
   const [draftWarehouseStockUom, setDraftWarehouseStockUom] = useState('');
 
@@ -111,7 +113,7 @@ export default function ProductDetailScreen() {
     setDraftWholesaleRate(next.priceSummary?.wholesaleRate != null ? String(next.priceSummary.wholesaleRate) : '');
     setDraftRetailRate(next.priceSummary?.retailRate != null ? String(next.priceSummary.retailRate) : '');
     setDraftBuyingRate(next.priceSummary?.standardBuyingRate != null ? String(next.priceSummary.standardBuyingRate) : '');
-    setDraftStockUom(next.retailDefaultUom || next.stockUom || '');
+    setDraftStockUom(next.stockUom || next.retailDefaultUom || '');
     setDraftWholesaleDefaultUom(next.wholesaleDefaultUom || '');
     setDraftRetailDefaultUom(next.retailDefaultUom || '');
 
@@ -122,7 +124,19 @@ export default function ProductDetailScreen() {
         : conversionMap.get(next.wholesaleDefaultUom || '') ?? null;
 
     setDraftWholesaleConversionFactor(formatFactor(wholesaleFactor));
-    setDraftWarehouseStockUom(next.retailDefaultUom || next.stockUom || next.wholesaleDefaultUom || '');
+    const retailFactor =
+      next.retailDefaultUom && next.retailDefaultUom === next.stockUom
+        ? 1
+        : conversionMap.get(next.retailDefaultUom || '') ?? null;
+    setDraftRetailConversionFactor(formatFactor(retailFactor));
+    if (next.stockUom && next.stockUom === next.wholesaleDefaultUom) {
+      setStockSyncMode('wholesale');
+    } else if (next.stockUom && next.stockUom === next.retailDefaultUom) {
+      setStockSyncMode('retail');
+    } else {
+      setStockSyncMode('manual');
+    }
+    setDraftWarehouseStockUom(next.stockUom || next.retailDefaultUom || next.wholesaleDefaultUom || '');
   };
 
   const warehouseOptions = useMemo(() => {
@@ -196,6 +210,44 @@ export default function ProductDetailScreen() {
   const wholesaleUomDisplay = draftWholesaleDefaultUom.trim();
   const retailUomDisplay = draftRetailDefaultUom.trim();
   const currentDisplayStockUom = isEditing ? stockUomDisplay : (detail?.stockUom ?? '');
+  const ruleStockUom = isEditing ? stockUomDisplay : (detail?.stockUom ?? '');
+  const ruleWholesaleUom = isEditing ? wholesaleUomDisplay : (detail?.wholesaleDefaultUom ?? '');
+  const ruleRetailUom = isEditing ? retailUomDisplay : (detail?.retailDefaultUom ?? '');
+
+  const wholesaleFormulaPreview = useMemo(() => {
+    if (!wholesaleUomDisplay || !stockUomDisplay) {
+      return '';
+    }
+    return `1 ${formatDisplayUom(wholesaleUomDisplay)} = ${draftWholesaleConversionFactor || '？'} ${formatDisplayUom(stockUomDisplay)}`;
+  }, [draftWholesaleConversionFactor, stockUomDisplay, wholesaleUomDisplay]);
+
+  const retailFormulaPreview = useMemo(() => {
+    if (!retailUomDisplay || !stockUomDisplay) {
+      return '';
+    }
+    if (stockSyncMode === 'wholesale') {
+      return `1 ${formatDisplayUom(stockUomDisplay)} = ${draftRetailConversionFactor || '？'} ${formatDisplayUom(retailUomDisplay)}`;
+    }
+    if (stockSyncMode === 'retail') {
+      return `1 ${formatDisplayUom(retailUomDisplay)} = 1 ${formatDisplayUom(stockUomDisplay)}`;
+    }
+    return `1 ${formatDisplayUom(retailUomDisplay)} = ${draftRetailConversionFactor || '？'} ${formatDisplayUom(stockUomDisplay)}`;
+  }, [draftRetailConversionFactor, retailUomDisplay, stockSyncMode, stockUomDisplay]);
+
+  useEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+
+    if (stockSyncMode === 'wholesale' && wholesaleUomDisplay && draftStockUom !== wholesaleUomDisplay) {
+      setDraftStockUom(wholesaleUomDisplay);
+      return;
+    }
+
+    if (stockSyncMode === 'retail' && retailUomDisplay && draftStockUom !== retailUomDisplay) {
+      setDraftStockUom(retailUomDisplay);
+    }
+  }, [draftStockUom, isEditing, retailUomDisplay, stockSyncMode, wholesaleUomDisplay]);
 
   const inventoryDelta = useMemo(() => {
     const inputQty = toNumberOrNull(draftWarehouseStockQty);
@@ -215,9 +267,9 @@ export default function ProductDetailScreen() {
   }, [currentDisplayStockUom, detail?.uomConversions, draftWarehouseStockQty, draftWarehouseStockUom, selectedWarehouseQty]);
 
   const inventoryInputUomOptions = useMemo(() => {
-    const values = [draftWholesaleDefaultUom.trim(), draftRetailDefaultUom.trim() || currentDisplayStockUom].filter(Boolean);
+    const values = [draftStockUom.trim(), draftWholesaleDefaultUom.trim(), draftRetailDefaultUom.trim() || currentDisplayStockUom].filter(Boolean);
     return Array.from(new Set(values));
-  }, [currentDisplayStockUom, draftRetailDefaultUom, draftWholesaleDefaultUom]);
+  }, [currentDisplayStockUom, draftRetailDefaultUom, draftStockUom, draftWholesaleDefaultUom]);
 
   const inventoryTargetSummary = useMemo(() => {
     const inputQty = toNumberOrNull(draftWarehouseStockQty);
@@ -306,6 +358,7 @@ export default function ProductDetailScreen() {
   }, [uomOptions, uomSearchQuery]);
 
   const wholesaleNeedsFactor = Boolean(wholesaleUomDisplay && stockUomDisplay && wholesaleUomDisplay !== stockUomDisplay);
+  const retailNeedsFactor = Boolean(retailUomDisplay && stockUomDisplay && retailUomDisplay !== stockUomDisplay);
 
   const uomConversionRows = useMemo(() => {
     if (!detail) {
@@ -493,14 +546,19 @@ export default function ProductDetailScreen() {
         throw new Error('请先选择零售成交单位。');
       }
 
-      const trimmedStockUom = trimmedRetailUom;
+      const trimmedStockUom = draftStockUom.trim();
       if (!trimmedStockUom) {
         throw new Error('请先选择库存基准单位。');
       }
 
       const wholesaleFactor = toNumberOrNull(draftWholesaleConversionFactor);
       if (wholesaleNeedsFactor && (wholesaleFactor == null || wholesaleFactor <= 0)) {
-        throw new Error('请填写有效的批发换算系数。');
+        throw new Error('请填写有效的批发单位换算系数。');
+      }
+
+      const retailFactor = toNumberOrNull(draftRetailConversionFactor);
+      if (retailNeedsFactor && (retailFactor == null || retailFactor <= 0)) {
+        throw new Error('请填写有效的零售单位换算系数。');
       }
 
       const uomConversions = [
@@ -517,7 +575,12 @@ export default function ProductDetailScreen() {
           ? [
               {
                 uom: retailUomDisplay,
-                conversionFactor: 1,
+                conversionFactor:
+                  retailUomDisplay === trimmedStockUom
+                    ? 1
+                    : stockSyncMode === 'wholesale'
+                      ? 1 / (retailFactor as number)
+                      : (retailFactor as number),
               },
             ]
           : []),
@@ -590,7 +653,7 @@ export default function ProductDetailScreen() {
     }
   };
 
-  const handleOpenUomPicker = (target: 'wholesale' | 'retail') => {
+  const handleOpenUomPicker = (target: 'stock' | 'wholesale' | 'retail') => {
     setUomPickerTarget(target);
     setUomSearchQuery('');
     setUomPickerVisible(true);
@@ -602,19 +665,49 @@ export default function ProductDetailScreen() {
     setMasterPickerVisible(true);
   };
 
+  const applyStockSyncMode = (mode: 'manual' | 'wholesale' | 'retail') => {
+    setStockSyncMode(mode);
+
+    if (mode === 'wholesale' && draftWholesaleDefaultUom.trim()) {
+      const nextStock = draftWholesaleDefaultUom.trim();
+      setDraftStockUom(nextStock);
+      setDraftWholesaleConversionFactor('1');
+      setDraftRetailConversionFactor(draftRetailDefaultUom.trim() && draftRetailDefaultUom.trim() !== nextStock ? '' : '1');
+      return;
+    }
+
+    if (mode === 'retail' && draftRetailDefaultUom.trim()) {
+      const nextStock = draftRetailDefaultUom.trim();
+      setDraftStockUom(nextStock);
+      setDraftRetailConversionFactor('1');
+      setDraftWholesaleConversionFactor(draftWholesaleDefaultUom.trim() && draftWholesaleDefaultUom.trim() !== nextStock ? '' : '1');
+    }
+  };
+
   const handleSelectUom = (uom: string) => {
     if (uomPickerTarget === 'wholesale') {
       setDraftWholesaleDefaultUom(uom);
+      if (stockSyncMode === 'wholesale') {
+        setDraftStockUom(uom);
+        setDraftWholesaleConversionFactor('1');
+        setDraftRetailConversionFactor(draftRetailDefaultUom.trim() && draftRetailDefaultUom.trim() !== uom ? '' : '1');
+      }
     }
 
     if (uomPickerTarget === 'retail') {
       setDraftRetailDefaultUom(uom);
-      setDraftStockUom(uom);
+      if (stockSyncMode === 'retail') {
+        setDraftStockUom(uom);
+        setDraftRetailConversionFactor('1');
+        setDraftWholesaleConversionFactor(draftWholesaleDefaultUom.trim() && draftWholesaleDefaultUom.trim() !== uom ? '' : '1');
+      }
     }
 
     if (uomPickerTarget === 'stock') {
       setDraftStockUom(uom);
-      setDraftRetailDefaultUom(uom);
+      setStockSyncMode('manual');
+      setDraftWholesaleConversionFactor(draftWholesaleDefaultUom.trim() && draftWholesaleDefaultUom.trim() !== uom ? '' : '1');
+      setDraftRetailConversionFactor(draftRetailDefaultUom.trim() && draftRetailDefaultUom.trim() !== uom ? '' : '1');
     }
 
     setUomPickerVisible(false);
@@ -863,49 +956,55 @@ export default function ProductDetailScreen() {
                   价格与成交单位
                 </ThemedText>
                 <ThemedText style={styles.sectionHint}>
-                  先确定零售单位，再配置批发单位和换算关系。当前页面按零售单位作为库存记账口径。
+                  先确定库存基准单位，再配置批发、零售默认成交单位以及到库存基准单位的换算关系。
                 </ThemedText>
               </View>
               {uomConversionRows.length ? (
                 <View style={[styles.unitRelationCard, { backgroundColor: surfaceMuted }]}>
                   <ThemedText style={styles.unitRelationTitle} type="defaultSemiBold">
-                    单位换算
+                    单位规则
                   </ThemedText>
                   <View style={styles.unitFlowRow}>
                     <View style={styles.unitFlowCell}>
-                      <ThemedText style={styles.unitFlowLabel}>批发</ThemedText>
+                      <ThemedText style={styles.unitFlowLabel}>库存基准</ThemedText>
                       <ThemedText style={styles.unitFlowValue} type="defaultSemiBold">
-                        {formatDisplayUom(detail.wholesaleDefaultUom)}
+                        {formatDisplayUom(ruleStockUom)}
                       </ThemedText>
                     </View>
                     <View style={styles.unitFlowCenter}>
-                      <ThemedText style={styles.unitFlowLabel}>换算</ThemedText>
+                      <ThemedText style={styles.unitFlowLabel}>批发默认</ThemedText>
                       <ThemedText style={styles.unitFlowValue} type="defaultSemiBold">
-                        {wholesaleNeedsFactor && detail.wholesaleDefaultUom
-                          ? `1 ${formatDisplayUom(detail.wholesaleDefaultUom)} = ${draftWholesaleConversionFactor || '未配置'} ${formatDisplayUom(detail.retailDefaultUom || detail.stockUom)}`
-                          : `与${formatDisplayUom(detail.retailDefaultUom || detail.stockUom)}一致`}
+                        {ruleWholesaleUom
+                          ? wholesaleNeedsFactor
+                            ? `1 ${formatDisplayUom(ruleWholesaleUom)} = ${draftWholesaleConversionFactor || '未配置'} ${formatDisplayUom(ruleStockUom)}`
+                            : `${formatDisplayUom(ruleWholesaleUom)}（与库存基准一致）`
+                          : '未配置'}
                       </ThemedText>
                     </View>
                     <View style={styles.unitFlowCell}>
-                      <ThemedText style={styles.unitFlowLabel}>零售</ThemedText>
+                      <ThemedText style={styles.unitFlowLabel}>零售默认</ThemedText>
                       <ThemedText style={styles.unitFlowValue} type="defaultSemiBold">
-                        {formatDisplayUom(detail.retailDefaultUom || detail.stockUom)}
+                        {ruleRetailUom
+                          ? retailNeedsFactor
+                            ? `1 ${formatDisplayUom(ruleRetailUom)} = ${draftRetailConversionFactor || '未配置'} ${formatDisplayUom(ruleStockUom)}`
+                            : `${formatDisplayUom(ruleRetailUom)}（与库存基准一致）`
+                          : '未配置'}
                       </ThemedText>
                     </View>
                   </View>
                   <ThemedText style={styles.unitRelationMeta}>
-                    库存按 {formatDisplayUom(detail.retailDefaultUom || detail.stockUom)} 记账。
+                    库存始终按 {formatDisplayUom(ruleStockUom)} 记账，批发和零售只决定默认成交单位。
                   </ThemedText>
                 </View>
               ) : null}
               {isEditing ? (
                 <View style={styles.formBlock}>
                   <View style={[styles.inlineInfoCard, { backgroundColor: surfaceMuted }]}>
-                    <ThemedText style={styles.inlineInfoLabel}>库存记账单位</ThemedText>
+                    <ThemedText style={styles.inlineInfoLabel}>库存基准单位</ThemedText>
                     <ThemedText style={styles.inlineInfoValue} type="defaultSemiBold">
-                      {formatDisplayUom(draftRetailDefaultUom || draftStockUom || detail.stockUom)}
+                      {formatDisplayUom(draftStockUom || detail.stockUom)}
                     </ThemedText>
-                    <ThemedText style={styles.inlineInfoHint}>当前按零售单位作为库存口径，操作上更直观。</ThemedText>
+                    <ThemedText style={styles.inlineInfoHint}>库存统一按这个单位结算，批发和零售默认单位都要能换算到这里。</ThemedText>
                   </View>
                   <View style={[styles.priceFocusBand, { backgroundColor: surfaceMuted }]}>
                     <View style={styles.priceFocusBandRow}>
@@ -977,14 +1076,14 @@ export default function ProductDetailScreen() {
                   <View style={styles.unitEditorRow}>
                     <View style={styles.unitEditorCell}>
                       <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                        批发单位
+                        库存基准单位
                       </ThemedText>
                       <Pressable
-                        onPress={() => handleOpenUomPicker('wholesale')}
+                        onPress={() => handleOpenUomPicker('stock')}
                         style={[styles.selectorFieldCompact, { backgroundColor: surfaceMuted, borderColor }]}>
                         <View style={styles.selectorFieldCompactCopy}>
                           <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                            {draftWholesaleDefaultUom ? formatDisplayUom(draftWholesaleDefaultUom) : '请选择'}
+                            {draftStockUom ? formatDisplayUom(draftStockUom) : '请选择'}
                           </ThemedText>
                         </View>
                         <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
@@ -992,35 +1091,147 @@ export default function ProductDetailScreen() {
                         </ThemedText>
                       </Pressable>
                     </View>
-                    <View style={styles.unitEditorCenter}>
-                      <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                        换算系数
-                      </ThemedText>
-                      <TextInput
-                        onChangeText={setDraftWholesaleConversionFactor}
-                        placeholder={wholesaleNeedsFactor ? '例如 12' : '同单位自动为 1'}
-                        placeholderTextColor="rgba(31,42,55,0.38)"
-                        style={[styles.textInput, { backgroundColor: surfaceMuted, borderColor }]}
-                        value={wholesaleNeedsFactor ? draftWholesaleConversionFactor : '1'}
-                      />
-                    </View>
-                    <View style={styles.unitEditorCell}>
-                      <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                        零售单位
-                      </ThemedText>
-                      <Pressable
-                        onPress={() => handleOpenUomPicker('retail')}
-                        style={[styles.selectorFieldCompact, { backgroundColor: surfaceMuted, borderColor }]}>
-                        <View style={styles.selectorFieldCompactCopy}>
-                          <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                            {draftRetailDefaultUom ? formatDisplayUom(draftRetailDefaultUom) : '请选择'}
+                  </View>
+                  <View style={styles.syncModeRow}>
+                    {[
+                      { key: 'manual', label: '手动指定' },
+                      { key: 'wholesale', label: '与批发单位同步' },
+                      { key: 'retail', label: '与零售单位同步' },
+                    ].map((option) => {
+                      const active = stockSyncMode === option.key;
+                      return (
+                        <Pressable
+                          key={option.key}
+                          onPress={() => applyStockSyncMode(option.key as 'manual' | 'wholesale' | 'retail')}
+                          style={[
+                            styles.syncModeChip,
+                            {
+                              backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted,
+                              borderColor: active ? tintColor : borderColor,
+                            },
+                          ]}>
+                          <ThemedText style={[styles.syncModeChipText, active ? { color: tintColor } : null]} type="defaultSemiBold">
+                            {option.label}
                           </ThemedText>
-                        </View>
-                        <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                          选择
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <ThemedText style={styles.unitEditorHint}>
+                    选择同步后，库存基准单位会跟随对应默认成交单位变化；批发、零售两行都按“1 当前单位 = ? 库存基准单位”填写。
+                  </ThemedText>
+                  <View style={styles.unitRuleList}>
+                    {stockSyncMode !== 'wholesale' ? (
+                      <View style={styles.unitRuleRow}>
+                        <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                          批发规则
                         </ThemedText>
-                      </Pressable>
-                    </View>
+                        <View style={styles.unitFormulaRow}>
+                          <View style={styles.unitFormulaUnitCell}>
+                            <Pressable
+                              onPress={() => handleOpenUomPicker('wholesale')}
+                              style={[styles.selectorFieldCompact, { backgroundColor: surfaceMuted, borderColor }]}>
+                              <View style={styles.selectorFieldCompactCopy}>
+                                <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                                  {draftWholesaleDefaultUom ? formatDisplayUom(draftWholesaleDefaultUom) : '请选择'}
+                                </ThemedText>
+                              </View>
+                              <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                                选择
+                              </ThemedText>
+                            </Pressable>
+                          </View>
+                          <ThemedText style={styles.unitFormulaOperator} type="defaultSemiBold">
+                            =
+                          </ThemedText>
+                          <View style={styles.unitFormulaFactorCell}>
+                            <TextInput
+                              onChangeText={setDraftWholesaleConversionFactor}
+                              placeholder={wholesaleNeedsFactor ? '例如 12' : '1'}
+                              placeholderTextColor="rgba(31,42,55,0.38)"
+                              style={[styles.textInput, { backgroundColor: surfaceMuted, borderColor }]}
+                              value={wholesaleNeedsFactor ? draftWholesaleConversionFactor : '1'}
+                            />
+                          </View>
+                          <View style={styles.unitFormulaTargetCell}>
+                            <View style={[styles.staticField, { backgroundColor: surfaceMuted, borderColor }]}>
+                              <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                                {formatDisplayUom(draftStockUom || detail.stockUom)}
+                              </ThemedText>
+                            </View>
+                          </View>
+                        </View>
+                        <ThemedText style={styles.unitFormulaPreview}>{wholesaleFormulaPreview}</ThemedText>
+                      </View>
+                    ) : null}
+                    {stockSyncMode !== 'retail' ? (
+                      <View style={styles.unitRuleRow}>
+                        <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                          零售规则
+                        </ThemedText>
+                        <View style={styles.unitFormulaRow}>
+                          {stockSyncMode === 'wholesale' ? (
+                            <View style={styles.unitFormulaUnitCell}>
+                              <View style={[styles.staticField, { backgroundColor: surfaceMuted, borderColor }]}>
+                                <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                                  {formatDisplayUom(draftStockUom || detail.stockUom)}
+                                </ThemedText>
+                              </View>
+                            </View>
+                          ) : (
+                            <View style={styles.unitFormulaUnitCell}>
+                              <Pressable
+                                onPress={() => handleOpenUomPicker('retail')}
+                                style={[styles.selectorFieldCompact, { backgroundColor: surfaceMuted, borderColor }]}>
+                                <View style={styles.selectorFieldCompactCopy}>
+                                  <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                                    {draftRetailDefaultUom ? formatDisplayUom(draftRetailDefaultUom) : '请选择'}
+                                  </ThemedText>
+                                </View>
+                                <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                                  选择
+                                </ThemedText>
+                              </Pressable>
+                            </View>
+                          )}
+                          <ThemedText style={styles.unitFormulaOperator} type="defaultSemiBold">
+                            =
+                          </ThemedText>
+                          <View style={styles.unitFormulaFactorCell}>
+                            <TextInput
+                              onChangeText={setDraftRetailConversionFactor}
+                              placeholder={retailNeedsFactor ? '例如 1' : '1'}
+                              placeholderTextColor="rgba(31,42,55,0.38)"
+                              style={[styles.textInput, { backgroundColor: surfaceMuted, borderColor }]}
+                              value={retailNeedsFactor ? draftRetailConversionFactor : '1'}
+                            />
+                          </View>
+                          <View style={styles.unitFormulaTargetCell}>
+                            {stockSyncMode === 'wholesale' ? (
+                              <Pressable
+                                onPress={() => handleOpenUomPicker('retail')}
+                                style={[styles.selectorFieldCompact, { backgroundColor: surfaceMuted, borderColor }]}>
+                                <View style={styles.selectorFieldCompactCopy}>
+                                  <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                                    {draftRetailDefaultUom ? formatDisplayUom(draftRetailDefaultUom) : '请选择'}
+                                  </ThemedText>
+                                </View>
+                                <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                                  选择
+                                </ThemedText>
+                              </Pressable>
+                            ) : (
+                              <View style={[styles.staticField, { backgroundColor: surfaceMuted, borderColor }]}>
+                                <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                                  {formatDisplayUom(draftStockUom || detail.stockUom)}
+                                </ThemedText>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <ThemedText style={styles.unitFormulaPreview}>{retailFormulaPreview}</ThemedText>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
               ) : (
@@ -1036,14 +1247,14 @@ export default function ProductDetailScreen() {
                     <ThemedText style={styles.priceValue} type="defaultSemiBold">
                       {formatMoney(detail.priceSummary?.wholesaleRate)}
                     </ThemedText>
-                    <ThemedText style={styles.priceMeta}>成交单位 {formatDisplayUom(detail.wholesaleDefaultUom)}</ThemedText>
+                    <ThemedText style={styles.priceMeta}>默认成交单位 {formatDisplayUom(detail.wholesaleDefaultUom)}</ThemedText>
                   </View>
                   <View style={[styles.priceCard, { backgroundColor: surfaceMuted }]}>
                     <ThemedText style={styles.priceLabel}>零售价</ThemedText>
                     <ThemedText style={styles.priceValue} type="defaultSemiBold">
                       {formatMoney(detail.priceSummary?.retailRate)}
                     </ThemedText>
-                    <ThemedText style={styles.priceMeta}>成交单位 {formatDisplayUom(detail.retailDefaultUom)}</ThemedText>
+                    <ThemedText style={styles.priceMeta}>默认成交单位 {formatDisplayUom(detail.retailDefaultUom)}</ThemedText>
                   </View>
                   <View style={[styles.priceCard, { backgroundColor: surfaceMuted }]}>
                     <ThemedText style={styles.priceLabel}>默认采购价</ThemedText>
@@ -1414,6 +1625,7 @@ export default function ProductDetailScreen() {
                   </ThemedText>
                   {filteredUomOptions.map((uom) => {
                     const active =
+                      (uomPickerTarget === 'stock' && uom === draftStockUom) ||
                       (uomPickerTarget === 'wholesale' && uom === draftWholesaleDefaultUom) ||
                       (uomPickerTarget === 'retail' && uom === draftRetailDefaultUom);
                     const fromItem = (detail?.allUoms ?? []).includes(uom) || detail?.stockUom === uom;
@@ -1827,17 +2039,67 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   unitEditorRow: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
     gap: 10,
   },
   unitEditorCell: {
-    flex: 1,
     gap: 8,
   },
   unitEditorCenter: {
-    flex: 0.9,
     gap: 8,
+  },
+  syncModeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  syncModeChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  syncModeChipText: {
+    fontSize: 13,
+  },
+  unitEditorHint: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  unitRuleList: {
+    gap: 12,
+  },
+  unitRuleRow: {
+    gap: 10,
+  },
+  unitRuleLabel: {
+    fontSize: 14,
+  },
+  unitFormulaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  unitFormulaUnitCell: {
+    flex: 1.15,
+  },
+  unitFormulaOperator: {
+    fontSize: 18,
+    lineHeight: 22,
+    minWidth: 16,
+    textAlign: 'center',
+  },
+  unitFormulaFactorCell: {
+    flex: 0.72,
+  },
+  unitFormulaTargetCell: {
+    flex: 0.78,
+  },
+  unitFormulaPreview: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
   },
   inventoryRows: {
     gap: 10,

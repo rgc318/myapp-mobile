@@ -239,6 +239,68 @@ This round turned the mobile product flow from "search-only helper pages" into a
 
 - "delete" is still handled as enable / disable, not physical removal
 
+## Product UOM Alignment (2026-03-25)
+
+This round aligned the mobile product module with the backend rule that inventory is always settled in `stock_uom`, while wholesale / retail only define default business-facing transaction UOMs.
+
+### Completed
+
+- product create page no longer assumes "retail UOM = inventory UOM"
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+  - now supports separate input for:
+    - stock base UOM
+    - wholesale default transaction UOM
+    - retail default transaction UOM
+    - wholesale-to-stock conversion
+    - retail-to-stock conversion
+
+- product detail edit page now preserves and edits `stockUom` as an independent field
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+  - save flow no longer silently rewrites stock base UOM back to retail UOM
+  - both wholesale and retail conversion factors are now validated against the current stock base UOM before save
+  - stock-base editing now also supports:
+    - `manual`
+    - `sync with wholesale`
+    - `sync with retail`
+  - in sync modes, the editor hides the redundant rule row and only keeps the side that still needs explicit conversion input
+  - rule rows were refactored into formula-like single-line layouts instead of the earlier three-block stacked presentation
+
+- product detail read-only messaging was updated
+  - inventory wording now makes it explicit that:
+    - inventory truth = `stock_uom`
+    - wholesale / retail = default transaction UOMs
+  - the old "inventory defaults to retail UOM" wording was removed
+
+- product detail rule summary now follows draft values in edit mode
+  - changing stock base UOM / wholesale UOM / retail UOM immediately updates the rule summary instead of continuing to show stale `detail.*` values
+
+- sync-mode safety was tightened
+  - switching stock-base sync mode no longer blindly keeps old factors that belonged to the previous base UOM
+  - the remaining editable side is reset to a re-confirm state when needed
+  - formula preview text is used to keep the direction readable for operators, especially in wholesale-sync mode
+
+- a real backend constraint was confirmed during manual testing
+  - once an item already has historical transactions under an existing unit system, backend validation may reject direct stock/default-UOM changes
+  - the mobile frontend currently surfaces that backend validation message directly
+  - this is a business-safety restriction, not a frontend-only bug
+
+### Resulting Frontend Rule
+
+- `stock_uom` is the inventory truth
+- `wholesale_default_uom` is only the default wholesale transaction UOM
+- `retail_default_uom` is only the default retail transaction UOM
+- any default transaction UOM that differs from `stock_uom` must provide a conversion path back to `stock_uom`
+- when stock base is synced to wholesale or retail, only the opposite side should continue asking for explicit conversion input
+
+### Why This Matters
+
+- it matches the backend validation added on 2026-03-25
+- it prevents the mobile UI from teaching operators the wrong unit mental model
+- it gives the order module a cleaner source of truth for later inventory / remaining-stock display refinements
+- it avoids letting the mobile editor silently generate misleading conversions after stock-base mode changes
+
 ## Sales Order Edit Polish (2026-03-24)
 
 This round focused on reducing confusion in the mobile sales-order detail page after backend UOM conversion and stock validation were tightened.
