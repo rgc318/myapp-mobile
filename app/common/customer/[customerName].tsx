@@ -77,7 +77,7 @@ export default function CustomerDetailScreen() {
     setCity(next?.defaultAddress?.city ?? '');
     setCounty(next?.defaultAddress?.county ?? '');
     setState(next?.defaultAddress?.state ?? '');
-    setCountry(next?.defaultAddress?.country ?? 'China');
+    setCountry(next?.defaultAddress?.country ?? '');
     setPincode(next?.defaultAddress?.pincode ?? '');
     setAddressPhone(next?.defaultAddress?.phone ?? '');
     setAddressEmail(next?.defaultAddress?.email ?? '');
@@ -324,6 +324,12 @@ export default function CustomerDetailScreen() {
                 styles.statusChip,
                 { backgroundColor: detail?.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)' },
               ]}>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: detail?.disabled ? danger : success },
+                ]}
+              />
               <ThemedText
                 style={[styles.statusChipText, { color: detail?.disabled ? danger : success }]}
                 type="defaultSemiBold">
@@ -613,6 +619,7 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   heroTopRow: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
@@ -630,12 +637,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   statusChip: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  statusDot: {
+    borderRadius: 999,
+    height: 8,
+    width: 8,
   },
   statusChipText: {
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 18,
   },
   heroMetricsRow: {
     flexDirection: 'row',

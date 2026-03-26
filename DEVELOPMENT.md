@@ -259,6 +259,42 @@ This round aligned the mobile product module with the backend rule that inventor
 
 - product detail edit page now preserves and edits `stockUom` as an independent field
 
+## Customer Module UX And Address Submission Fixes (2026-03-26)
+
+This round focused on making customer management forms safer to submit and reducing accidental address-validation failures from the mobile frontend.
+
+### Completed
+
+- customer create/edit forms no longer treat the default country placeholder as a real address payload
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customer/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customer/[customerName].tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/customers.ts`
+  - result:
+    - creating a customer with only `customer_name` is now supported cleanly from mobile
+    - frontend no longer sends `default_address` just because `country` had a default display value
+
+- customer address payload construction is now stricter
+  - address payload is only submitted when the user has entered meaningful address content
+  - partial address input is blocked earlier with a clearer frontend error instead of relying on backend `Address` validation noise
+  - current minimum rule for frontend submission:
+    - `address_line1`
+    - `city`
+    - `country`
+
+- customer list quick action card received a small alignment pass
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customers.tsx`
+  - result:
+    - icon and text block spacing was adjusted
+    - subtitle visibility is still configurable in the component without changing page structure
+
+### Why This Was Needed
+
+- backend customer APIs already allow customer creation without an address
+- mobile frontend previously made it too easy to accidentally send a half-filled address object
+- that mismatch surfaced as ERPNext `Address` validation errors such as missing `city`
+
 ## UOM Module Frontend (2026-03-26)
 
 This round added a lightweight UOM master-data module for mobile, following the same "small but business-important" pattern as the product workbench.
@@ -328,7 +364,8 @@ This round added a lightweight customer master-data module for mobile so sales, 
   - supports:
     - keyword search by customer name / code / mobile / email
     - enabled status filter
-    - default contact / address summary display
+    - lightweight search-result cards with only name / code / customer group / enabled status
+    - enabled status fixed to the top-right corner of the card
     - quick entry into detail / edit
 
 - formal customer create page was added
@@ -381,6 +418,8 @@ This round added a lightweight customer master-data module for mobile so sales, 
 - customer defaults remain "future order suggestions", not document snapshot truth
 - order / delivery / invoice snapshot fields still belong to the document itself
 - mobile customer module is intentionally business-master-data focused, not a CRM pipeline module
+- customer list cards should stay lightweight
+  - contact, address, and default price list belong to detail view instead of search-result cards
   - file:
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
   - save flow no longer silently rewrites stock base UOM back to retail UOM

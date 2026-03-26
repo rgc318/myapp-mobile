@@ -82,6 +82,81 @@ type SaveCustomerPayload = {
   disabled?: boolean;
 };
 
+function normalizeOptionalText(value: string | null | undefined) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function buildDefaultContactPayload(payload: SaveCustomerPayload['defaultContact']) {
+  if (!payload) {
+    return undefined;
+  }
+
+  const displayName = normalizeOptionalText(payload.displayName);
+  const firstName = normalizeOptionalText(payload.firstName);
+  const lastName = normalizeOptionalText(payload.lastName);
+  const phone = normalizeOptionalText(payload.phone);
+  const email = normalizeOptionalText(payload.email);
+
+  if (!displayName && !firstName && !lastName && !phone && !email) {
+    return undefined;
+  }
+
+  return {
+    display_name: displayName,
+    first_name: firstName,
+    last_name: lastName,
+    phone,
+    email,
+  };
+}
+
+function buildDefaultAddressPayload(payload: SaveCustomerPayload['defaultAddress']) {
+  if (!payload) {
+    return undefined;
+  }
+
+  const addressLine1 = normalizeOptionalText(payload.addressLine1);
+  const addressLine2 = normalizeOptionalText(payload.addressLine2);
+  const city = normalizeOptionalText(payload.city);
+  const county = normalizeOptionalText(payload.county);
+  const state = normalizeOptionalText(payload.state);
+  const country = normalizeOptionalText(payload.country);
+  const pincode = normalizeOptionalText(payload.pincode);
+  const email = normalizeOptionalText(payload.email);
+  const phone = normalizeOptionalText(payload.phone);
+  const addressType = normalizeOptionalText(payload.addressType);
+
+  const hasMeaningfulAddressInput = Boolean(
+    addressLine1 || addressLine2 || city || county || state || pincode || email || phone,
+  );
+
+  if (!hasMeaningfulAddressInput) {
+    return undefined;
+  }
+
+  if (!addressLine1 || !city || !country) {
+    throw new Error('填写默认地址时，请至少补全地址行 1、城市和国家。');
+  }
+
+  return {
+    address_line1: addressLine1,
+    address_line2: addressLine2,
+    city,
+    county,
+    state,
+    country,
+    pincode,
+    email,
+    phone,
+    address_type: addressType,
+  };
+}
+
 function toOptionalNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -231,29 +306,8 @@ export async function createCustomer(payload: SaveCustomerPayload): Promise<Cust
     default_currency: payload.defaultCurrency,
     default_price_list: payload.defaultPriceList,
     remarks: payload.remarks,
-    default_contact: payload.defaultContact
-      ? {
-          display_name: payload.defaultContact.displayName,
-          first_name: payload.defaultContact.firstName,
-          last_name: payload.defaultContact.lastName,
-          phone: payload.defaultContact.phone,
-          email: payload.defaultContact.email,
-        }
-      : undefined,
-    default_address: payload.defaultAddress
-      ? {
-          address_line1: payload.defaultAddress.addressLine1,
-          address_line2: payload.defaultAddress.addressLine2,
-          city: payload.defaultAddress.city,
-          county: payload.defaultAddress.county,
-          state: payload.defaultAddress.state,
-          country: payload.defaultAddress.country,
-          pincode: payload.defaultAddress.pincode,
-          email: payload.defaultAddress.email,
-          phone: payload.defaultAddress.phone,
-          address_type: payload.defaultAddress.addressType,
-        }
-      : undefined,
+    default_contact: buildDefaultContactPayload(payload.defaultContact),
+    default_address: buildDefaultAddressPayload(payload.defaultAddress),
     disabled: payload.disabled ? 1 : 0,
   });
 
@@ -274,29 +328,8 @@ export async function saveCustomer(customer: string, payload: Omit<SaveCustomerP
     default_currency: payload.defaultCurrency,
     default_price_list: payload.defaultPriceList,
     remarks: payload.remarks,
-    default_contact: payload.defaultContact
-      ? {
-          display_name: payload.defaultContact.displayName,
-          first_name: payload.defaultContact.firstName,
-          last_name: payload.defaultContact.lastName,
-          phone: payload.defaultContact.phone,
-          email: payload.defaultContact.email,
-        }
-      : undefined,
-    default_address: payload.defaultAddress
-      ? {
-          address_line1: payload.defaultAddress.addressLine1,
-          address_line2: payload.defaultAddress.addressLine2,
-          city: payload.defaultAddress.city,
-          county: payload.defaultAddress.county,
-          state: payload.defaultAddress.state,
-          country: payload.defaultAddress.country,
-          pincode: payload.defaultAddress.pincode,
-          email: payload.defaultAddress.email,
-          phone: payload.defaultAddress.phone,
-          address_type: payload.defaultAddress.addressType,
-        }
-      : undefined,
+    default_contact: buildDefaultContactPayload(payload.defaultContact),
+    default_address: buildDefaultAddressPayload(payload.defaultAddress),
     disabled: payload.disabled == null ? undefined : payload.disabled ? 1 : 0,
   });
 

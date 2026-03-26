@@ -19,7 +19,7 @@ function QuickActionTile({
   href: Href;
   icon: string;
   label: string;
-  description: string;
+  description?: string;
 }) {
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
@@ -35,7 +35,7 @@ function QuickActionTile({
         <ThemedText style={styles.quickActionLabel} type="defaultSemiBold">
           {label}
         </ThemedText>
-        <ThemedText style={styles.quickActionDescription}>{description}</ThemedText>
+        {description ? <ThemedText style={styles.quickActionDescription}>{description}</ThemedText> : null}
       </View>
     </Link>
   );
@@ -46,7 +46,6 @@ function CustomerCard({ item }: { item: CustomerDetail }) {
   const borderColor = useThemeColor({}, 'border');
   const success = useThemeColor({}, 'success');
   const danger = useThemeColor({}, 'danger');
-  const accentSoft = useThemeColor({}, 'accentSoft');
   const tintColor = useThemeColor({}, 'tint');
 
   return (
@@ -59,8 +58,10 @@ function CustomerCard({ item }: { item: CustomerDetail }) {
             {item.displayName || item.customerName || item.name}
           </ThemedText>
           <ThemedText style={styles.cardMeta}>编码 {item.name}</ThemedText>
+          <ThemedText numberOfLines={1} style={[styles.cardGroupMeta, { color: tintColor }]} type="defaultSemiBold">
+            {item.customerGroup || '未设置客户分组'}
+          </ThemedText>
         </View>
-
         <View
           style={[
             styles.statusChip,
@@ -70,37 +71,6 @@ function CustomerCard({ item }: { item: CustomerDetail }) {
             style={[styles.statusChipText, { color: item.disabled ? danger : success }]}
             type="defaultSemiBold">
             {item.disabled ? '已停用' : '启用中'}
-          </ThemedText>
-        </View>
-      </View>
-
-      <View style={styles.infoGrid}>
-        <View style={[styles.infoChip, { backgroundColor: accentSoft }]}>
-          <ThemedText style={styles.infoChipLabel}>客户分组</ThemedText>
-          <ThemedText style={[styles.infoChipValue, { color: tintColor }]} type="defaultSemiBold">
-            {item.customerGroup || '未设置'}
-          </ThemedText>
-        </View>
-        <View style={[styles.infoChip, { backgroundColor: accentSoft }]}>
-          <ThemedText style={styles.infoChipLabel}>默认价格表</ThemedText>
-          <ThemedText style={[styles.infoChipValue, { color: tintColor }]} type="defaultSemiBold">
-            {item.defaultPriceList || '未设置'}
-          </ThemedText>
-        </View>
-      </View>
-
-      <View style={styles.summaryRow}>
-        <View style={styles.summaryCol}>
-          <ThemedText style={styles.summaryLabel}>默认联系人</ThemedText>
-          <ThemedText style={styles.summaryValue} type="defaultSemiBold">
-            {item.defaultContact?.displayName || '未设置'}
-          </ThemedText>
-          <ThemedText style={styles.summaryMeta}>{item.defaultContact?.phone || item.mobileNo || '暂无电话'}</ThemedText>
-        </View>
-        <View style={styles.summaryCol}>
-          <ThemedText style={styles.summaryLabel}>默认地址</ThemedText>
-          <ThemedText numberOfLines={3} style={styles.summaryValue} type="defaultSemiBold">
-            {item.defaultAddress?.addressDisplay || item.defaultAddress?.addressLine1 || '未设置'}
           </ThemedText>
         </View>
       </View>
@@ -247,11 +217,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   quickActionTile: {
+    alignItems: 'center',
     borderRadius: 22,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 14,
-    minHeight: 94,
+    minHeight: 92,
     padding: 18,
     textDecorationLine: 'none',
   },
@@ -260,16 +230,21 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     height: 44,
     justifyContent: 'center',
+    marginTop: 3,
     width: 44,
   },
   quickActionCopy: {
     flex: 1,
-    gap: 4,
+    gap: 2,
+    justifyContent: 'center',
+    marginLeft: 10,
   },
   quickActionLabel: {
     fontSize: 17,
+    lineHeight: 22,
   },
   quickActionDescription: {
+    lineHeight: 20,
     opacity: 0.72,
   },
   searchPanel: {
@@ -352,69 +327,37 @@ const styles = StyleSheet.create({
     textDecorationLine: 'none',
   },
   cardTopRow: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
     justifyContent: 'space-between',
   },
   cardMainCopy: {
     flex: 1,
-    gap: 6,
+    gap: 5,
   },
   cardTitle: {
-    fontSize: 20,
-    lineHeight: 26,
+    flexShrink: 1,
+    fontSize: 18,
+    lineHeight: 24,
   },
   cardMeta: {
     color: '#64748B',
     fontSize: 14,
   },
+  cardGroupMeta: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
   statusChip: {
+    alignSelf: 'flex-start',
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    marginTop: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   statusChipText: {
-    fontSize: 13,
-  },
-  infoGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  infoChip: {
-    borderRadius: 18,
-    flex: 1,
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  infoChipLabel: {
-    color: '#64748B',
-    fontSize: 13,
-  },
-  infoChipValue: {
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  summaryCol: {
-    flex: 1,
-    gap: 4,
-  },
-  summaryLabel: {
-    color: '#64748B',
-    fontSize: 13,
-  },
-  summaryValue: {
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  summaryMeta: {
-    color: '#64748B',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
   },
   emptyCard: {
     alignItems: 'center',

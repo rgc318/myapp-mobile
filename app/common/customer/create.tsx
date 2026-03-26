@@ -30,7 +30,7 @@ export default function CustomerCreateScreen() {
   const [city, setCity] = useState('');
   const [county, setCounty] = useState('');
   const [state, setState] = useState('');
-  const [country, setCountry] = useState('China');
+  const [country, setCountry] = useState('');
   const [pincode, setPincode] = useState('');
   const [addressPhone, setAddressPhone] = useState('');
   const [addressEmail, setAddressEmail] = useState('');
