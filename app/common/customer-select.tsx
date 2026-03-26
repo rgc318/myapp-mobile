@@ -1,7 +1,5 @@
-import { AppShell } from '@/components/app-shell';
+import { Redirect } from 'expo-router';
 
 export default function CustomerSelectScreen() {
-  return (
-    <AppShell title="客户选择" description="客户选择页占位，后续为销售下单与收款提供客户选择能力。" />
-  );
+  return <Redirect href="/common/customers" />;
 }

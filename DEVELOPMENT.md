@@ -258,6 +258,129 @@ This round aligned the mobile product module with the backend rule that inventor
   - save logic now follows the same conversion semantics as detail edit, including the reversed readable retail rule when stock base is synced to wholesale
 
 - product detail edit page now preserves and edits `stockUom` as an independent field
+
+## UOM Module Frontend (2026-03-26)
+
+This round added a lightweight UOM master-data module for mobile, following the same "small but business-important" pattern as the product workbench.
+
+### Completed
+
+- formal UOM list page was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/uoms.tsx`
+  - supports:
+    - keyword search by name / code / symbol
+    - enabled status filter
+    - whole-number rule filter
+    - quick entry into detail / edit
+
+- formal UOM create page was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/uom/create.tsx`
+  - supports:
+    - UOM name
+    - symbol
+    - description
+    - whole-number rule
+    - enabled state
+
+- formal UOM detail / edit page was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/uom/[uomName].tsx`
+  - supports:
+    - usage summary display
+    - symbol / description edit
+    - enabled / disabled toggle
+    - whole-number rule edit
+    - delete with backend protection awareness
+
+- service layer was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/uoms.ts`
+  - now supports:
+    - `fetchUoms()`
+    - `fetchUomDetail()`
+    - `createUom()`
+    - `saveUom()`
+    - `setUomDisabled()`
+    - `deleteUom()`
+
+- home entry was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+  - homepage shortcuts now include a `单位` entry
+
+### Current UOM Module Boundaries
+
+- mobile only supports a lightweight business-facing UOM master-data experience
+- rename is intentionally not exposed in frontend because backend does not support direct rename
+- delete remains guarded by backend reference checks; frontend only surfaces the result more clearly
+
+## Customer Module Frontend (2026-03-26)
+
+This round added a lightweight customer master-data module for mobile so sales, invoicing and payment flows no longer depend only on ad-hoc customer lookup.
+
+### Completed
+
+- formal customer list page was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customers.tsx`
+  - supports:
+    - keyword search by customer name / code / mobile / email
+    - enabled status filter
+    - default contact / address summary display
+    - quick entry into detail / edit
+
+- formal customer create page was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customer/create.tsx`
+  - supports:
+    - customer basic data
+    - customer type
+    - customer group / territory
+    - default currency / default price list
+    - default contact
+    - default address
+
+- formal customer detail / edit page was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customer/[customerName].tsx`
+  - supports:
+    - customer overview
+    - default contact / address summary
+    - basic data edit
+    - default contact / address edit
+    - enabled / disabled toggle
+
+- customer service layer was expanded
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/customers.ts`
+  - now supports:
+    - `fetchCustomers()`
+    - `fetchCustomerDetail()`
+    - `createCustomer()`
+    - `saveCustomer()`
+    - `setCustomerDisabled()`
+  - existing helpers remain available for sales order flow:
+    - `searchCustomers()`
+    - `customerExists()`
+    - `fetchCustomerSalesContext()`
+
+- legacy customer select placeholder was removed
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customer-select.tsx`
+  - now redirects into the formal customer module instead of staying as a placeholder page
+
+- home entry was added
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+  - homepage shortcuts now include a `客户` entry
+
+### Current Customer Module Boundaries
+
+- customer defaults remain "future order suggestions", not document snapshot truth
+- order / delivery / invoice snapshot fields still belong to the document itself
+- mobile customer module is intentionally business-master-data focused, not a CRM pipeline module
   - file:
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
   - save flow no longer silently rewrites stock base UOM back to retail UOM

@@ -12,7 +12,14 @@ import { useAuth } from '@/providers/auth-provider';
 type Shortcut = {
   href: Href;
   label: string;
-  icon: 'cart.fill' | 'shippingbox.fill' | 'doc.text.fill' | 'person.fill' | 'gearshape.fill' | 'magnifyingglass';
+  icon:
+    | 'cart.fill'
+    | 'shippingbox.fill'
+    | 'doc.text.fill'
+    | 'person.fill'
+    | 'gearshape.fill'
+    | 'magnifyingglass'
+    | 'ruler.fill';
 };
 
 function ShortcutItem({ item }: { item: Shortcut }) {
@@ -64,6 +71,8 @@ export default function HomeScreen() {
   const shortcuts: Shortcut[] = [
     ...(canUseSales ? [{ href: '/sales/order/create' as Href, label: '销售', icon: 'cart.fill' as const }] : []),
     { href: '/common/products', label: '商品', icon: 'magnifyingglass' },
+    { href: '/common/customers', label: '客户', icon: 'building.2.fill' },
+    { href: '/common/uoms', label: '单位', icon: 'ruler.fill' },
     { href: '/settings', label: '设置', icon: 'gearshape.fill' },
     ...(canUsePurchase ? [{ href: '/purchase/order/create' as Href, label: '进货', icon: 'shippingbox.fill' as const }] : []),
     { href: '/(tabs)/docs', label: '对账', icon: 'doc.text.fill' },

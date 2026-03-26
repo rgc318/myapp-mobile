@@ -30,6 +30,7 @@ const MAPPING = {
   'cart.fill.badge.plus': 'add-shopping-cart',
   'barcode.viewfinder': 'qr-code-scanner',
   photo: 'photo',
+  'ruler.fill': 'straighten',
 } as IconMapping;
 
 /**
