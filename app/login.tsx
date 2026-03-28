@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { loadStoredUsername } from '@/lib/auth-storage';
@@ -44,10 +45,11 @@ export default function LoginScreen() {
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      style={{ backgroundColor }}>
-      <View style={[styles.heroSection, { backgroundColor: accentSoft }]}>
+    <SafeAreaView edges={['top']} style={{ backgroundColor, flex: 1 }}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        style={{ backgroundColor }}>
+        <View style={[styles.heroSection, { backgroundColor: accentSoft }]}>
         <View style={[styles.heroBadge, { backgroundColor: surface }]}>
           <ThemedText style={[styles.heroBadgeText, { color: tintColor }]}>RGC FLOW</ThemedText>
         </View>
@@ -141,8 +143,9 @@ export default function LoginScreen() {
         <View style={styles.tipsBlock}>
           <ThemedText style={styles.tipText}>登录后将复用 ERPNext session，无需重复认证。</ThemedText>
         </View>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

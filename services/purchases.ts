@@ -78,6 +78,22 @@ export type CreatePurchaseOrderPayload = {
   remarks?: string | null;
 };
 
+export type UpdatePurchaseOrderPayload = {
+  orderName: string;
+  transactionDate?: string | null;
+  scheduleDate?: string | null;
+  supplierRef?: string | null;
+  remarks?: string | null;
+};
+
+export type UpdatePurchaseOrderItemsPayload = {
+  orderName: string;
+  company?: string | null;
+  scheduleDate?: string | null;
+  defaultWarehouse?: string | null;
+  items: PurchaseOrderItemInput[];
+};
+
 export type PurchaseOrderDetail = {
   name: string;
   documentStatus: string;
@@ -602,6 +618,42 @@ export async function submitPurchaseOrder(payload: CreatePurchaseOrderPayload) {
   return typeof data?.purchase_order === 'string' ? data.purchase_order : '';
 }
 
+export async function updatePurchaseOrder(payload: UpdatePurchaseOrderPayload) {
+  const data = await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.update_purchase_order_v2', {
+    order_name: payload.orderName.trim(),
+    transaction_date: normalizeOptionalText(payload.transactionDate ?? undefined),
+    schedule_date: normalizeOptionalText(payload.scheduleDate ?? undefined),
+    supplier_ref: normalizeOptionalText(payload.supplierRef ?? undefined),
+    remarks: normalizeOptionalText(payload.remarks ?? undefined),
+  });
+
+  return typeof data?.purchase_order === 'string' ? data.purchase_order : payload.orderName.trim();
+}
+
+export async function updatePurchaseOrderItems(payload: UpdatePurchaseOrderItemsPayload) {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.update_purchase_order_items_v2', {
+    order_name: payload.orderName.trim(),
+    company: normalizeOptionalText(payload.company ?? undefined),
+    schedule_date: normalizeOptionalText(payload.scheduleDate ?? undefined),
+    default_warehouse: normalizeOptionalText(payload.defaultWarehouse ?? undefined),
+    items: payload.items
+      .map((item) => ({
+        item_code: item.itemCode.trim(),
+        qty: item.qty,
+        warehouse: normalizeOptionalText(item.warehouse),
+        uom: normalizeOptionalText(item.uom),
+        price: typeof item.price === 'number' ? item.price : undefined,
+      }))
+      .filter((item) => item.item_code && item.qty > 0),
+  });
+
+  return {
+    orderName: typeof data?.purchase_order === 'string' ? data.purchase_order : payload.orderName.trim(),
+    sourceOrderName:
+      typeof data?.source_purchase_order === 'string' ? data.source_purchase_order : payload.orderName.trim(),
+  };
+}
+
 export async function submitPurchaseReceipt(payload: {
   orderName: string;
   postingDate?: string;
@@ -739,8 +791,16 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
     completionStatus: typeof completion.status === 'string' ? completion.status : '',
     canReceive: Boolean(actions.can_receive_purchase_order),
     canCreateInvoice: Boolean(actions.can_create_purchase_invoice),
-    canUpdate: false,
-    canCancel: false,
+    canUpdate:
+      (typeof data.document_status === 'string' ? data.document_status : '') !== 'cancelled',
+    canCancel:
+      (typeof data.document_status === 'string' ? data.document_status : '') === 'submitted' &&
+      !(
+        Array.isArray(references.purchase_receipts) && references.purchase_receipts.length
+      ) &&
+      !(
+        Array.isArray(references.purchase_invoices) && references.purchase_invoices.length
+      ),
     latestPaymentEntry: typeof references.latest_payment_entry === 'string' ? references.latest_payment_entry : '',
     purchaseReceipts: Array.isArray(references.purchase_receipts)
       ? references.purchase_receipts.map((value: unknown) => String(value ?? '')).filter(Boolean)

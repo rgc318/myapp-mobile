@@ -2,7 +2,9 @@ import type { Href } from 'expo-router';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
@@ -379,7 +381,9 @@ export default function PurchaseTabScreen() {
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: background }]}>
+    <SafeAreaView edges={[]} style={[styles.screen, { backgroundColor: background }]}>
+      <MobilePageHeader title="采购" />
+
       <ScrollView contentContainerStyle={styles.container}>
         <View style={[styles.heroStage, { borderColor }]}>
           <View style={styles.heroGlowWrap} pointerEvents="none">
@@ -718,7 +722,7 @@ export default function PurchaseTabScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -730,7 +734,7 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 18,
     paddingBottom: 40,
-    paddingTop: 12,
+    paddingTop: 8,
   },
   heroStage: {
     backgroundColor: '#F7FBFF',

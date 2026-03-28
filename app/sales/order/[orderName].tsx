@@ -2,7 +2,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { MobilePageHeader } from '@/components/mobile-page-header';
 import { SalesOrderItemEditor } from '@/components/sales-order-item-editor';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -1506,43 +1508,38 @@ export default function SalesOrderDetailScreen() {
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              requestLeaveConfirmation(() => returnToSalesHome());
-            }}
-            style={styles.topIconButton}>
-            <IconSymbol color="#0F172A" name="chevron.left" size={22} />
-          </Pressable>
-          <ThemedText style={styles.pageTitle} type="title">
-            销售单详情
-          </ThemedText>
-          {isEditingAnySection ? (
-            <View style={styles.topActionPlaceholder} />
+    <SafeAreaView edges={[]} style={[styles.screen, { backgroundColor: background }]}>
+      <MobilePageHeader
+        onBack={() => {
+          requestLeaveConfirmation(() => returnToSalesHome());
+        }}
+        rightAction={
+          isEditingAnySection ? (
+            <View style={styles.headerActionPlaceholder} />
           ) : (
             <Pressable
               accessibilityRole="button"
               disabled={workflowAction.disabled}
               onPress={workflowAction.onPress}
               style={[
-                styles.topActionButton,
-                workflowAction.tone === 'primary' ? styles.topActionPrimaryButton : styles.topActionGhostButton,
-                workflowAction.tone === 'ghost' ? { borderColor } : null,
-              ]}
-            >
+                styles.headerActionButton,
+                workflowAction.tone === 'primary' ? styles.headerActionPrimaryButton : styles.headerActionGhostButton,
+              ]}>
               <ThemedText
-                style={workflowAction.tone === 'primary' ? styles.topActionPrimaryText : styles.topActionGhostText}
-                type="defaultSemiBold"
-              >
+                numberOfLines={1}
+                style={workflowAction.tone === 'primary' ? styles.headerActionPrimaryText : styles.headerActionGhostText}
+                type="defaultSemiBold">
                 {workflowAction.label}
               </ThemedText>
             </Pressable>
-          )}
-        </View>
+          )
+        }
+        sideWidth={96}
+        showBack
+        title="销售单详情"
+      />
 
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.quickNavWrap}>
           <WorkflowQuickNav
             compact
@@ -2157,7 +2154,7 @@ export default function SalesOrderDetailScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -2169,44 +2166,31 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingBottom: 112,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 8,
   },
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 48,
+  headerActionPlaceholder: {
+    width: 96,
   },
-  topIconButton: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  topActionPlaceholder: {
-    width: 72,
-  },
-  topActionButton: {
+  headerActionButton: {
     alignItems: 'center',
     borderRadius: 999,
-    borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 36,
-    minWidth: 72,
-    paddingHorizontal: 14,
+    minHeight: 32,
+    minWidth: 64,
+    paddingHorizontal: 10,
   },
-  topActionGhostButton: {
-    backgroundColor: '#FFFFFF',
+  headerActionGhostButton: {
+    backgroundColor: 'transparent',
   },
-  topActionPrimaryButton: {
+  headerActionPrimaryButton: {
     backgroundColor: '#2563EB',
     borderColor: '#2563EB',
   },
-  topActionGhostText: {
-    color: '#0F172A',
-    fontSize: 13,
+  headerActionGhostText: {
+    color: '#2563EB',
+    fontSize: 16,
   },
-  topActionPrimaryText: {
+  headerActionPrimaryText: {
     color: '#FFFFFF',
     fontSize: 13,
   },

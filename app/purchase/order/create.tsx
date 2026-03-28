@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LinkOptionInput } from '@/components/link-option-input';
+import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
@@ -15,8 +16,10 @@ import { formatDisplayUom } from '@/lib/display-uom';
 import {
   clearPurchaseOrderDraft,
   getPurchaseOrderDraft,
+  getPurchaseOrderDraftForm,
   removePurchaseOrderDraftItem,
   replacePurchaseOrderDraft,
+  updatePurchaseOrderDraftForm,
   type PurchaseOrderDraftItem,
 } from '@/lib/purchase-order-draft';
 import { convertQtyToStockQty, formatConvertedQty } from '@/lib/uom-conversion';
@@ -77,23 +80,33 @@ function getAvailableUoms(item: PurchaseOrderDraftItem) {
 
 export default function PurchaseOrderCreateScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const isFocused = useIsFocused();
-  const { supplier: supplierParam } = useLocalSearchParams<{ supplier?: string }>();
+  const { supplier: supplierParam, returnTo } = useLocalSearchParams<{ supplier?: string; returnTo?: string }>();
   const preferences = getAppPreferences();
   const { showError, showSuccess } = useFeedback();
+  const initialDraftForm = getPurchaseOrderDraftForm();
+  const today = new Date().toISOString().slice(0, 10);
 
-  const [supplier, setSupplier] = useState(typeof supplierParam === 'string' ? supplierParam : '');
-  const [company, setCompany] = useState(preferences.defaultCompany);
-  const [remarks, setRemarks] = useState('');
-  const [supplierRef, setSupplierRef] = useState('');
-  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
-  const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().slice(0, 10));
+  const [supplier, setSupplier] = useState(
+    typeof supplierParam === 'string' && supplierParam.trim() ? supplierParam : initialDraftForm.supplier,
+  );
+  const [company, setCompany] = useState(initialDraftForm.company || preferences.defaultCompany);
+  const [remarks, setRemarks] = useState(initialDraftForm.remarks);
+  const [supplierRef, setSupplierRef] = useState(initialDraftForm.supplierRef);
+  const [transactionDate, setTransactionDate] = useState(
+    initialDraftForm.transactionDate || today,
+  );
+  const [scheduleDate, setScheduleDate] = useState(
+    initialDraftForm.scheduleDate || today,
+  );
   const [draftItems, setDraftItems] = useState<PurchaseOrderDraftItem[]>(() => getPurchaseOrderDraft());
   const [supplierContext, setSupplierContext] = useState<SupplierPurchaseContext | null>(null);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [supplierError, setSupplierError] = useState('');
   const [companyError, setCompanyError] = useState('');
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{ itemId: string; field: 'warehouse' | 'uom' } | null>(null);
   const [pickerQuery, setPickerQuery] = useState('');
@@ -104,6 +117,8 @@ export default function PurchaseOrderCreateScreen() {
   const itemsSectionYRef = useRef(0);
   const hydratedDraftKeysRef = useRef<Record<string, true>>({});
   const warehouseCompanyCacheRef = useRef<Record<string, string | null>>({});
+  const allowLeaveRef = useRef(false);
+  const pendingNavigationActionRef = useRef<any>(null);
 
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
@@ -121,8 +136,28 @@ export default function PurchaseOrderCreateScreen() {
   useEffect(() => {
     if (isFocused) {
       setDraftItems(getPurchaseOrderDraft());
+      const nextDraftForm = getPurchaseOrderDraftForm();
+      setSupplier(
+        typeof supplierParam === 'string' && supplierParam.trim() ? supplierParam.trim() : nextDraftForm.supplier,
+      );
+      setCompany(nextDraftForm.company || preferences.defaultCompany);
+      setRemarks(nextDraftForm.remarks);
+      setSupplierRef(nextDraftForm.supplierRef);
+      setTransactionDate(nextDraftForm.transactionDate || today);
+      setScheduleDate(nextDraftForm.scheduleDate || today);
     }
-  }, [isFocused]);
+  }, [isFocused, preferences.defaultCompany, supplierParam, today]);
+
+  useEffect(() => {
+    updatePurchaseOrderDraftForm({
+      supplier,
+      company,
+      remarks,
+      supplierRef,
+      transactionDate,
+      scheduleDate,
+    });
+  }, [company, remarks, scheduleDate, supplier, supplierRef, transactionDate]);
 
   useEffect(() => {
     const activeKeys = new Set(
@@ -450,12 +485,39 @@ export default function PurchaseOrderCreateScreen() {
 
   const itemCount = validItems.length;
   const totalQty = validItems.reduce((sum, item) => sum + item.qty, 0);
+  const hasDraftContent = useMemo(
+    () =>
+      Boolean(
+        supplier.trim() ||
+          (company.trim() && company.trim() !== preferences.defaultCompany.trim()) ||
+          remarks.trim() ||
+          supplierRef.trim() ||
+          transactionDate !== today ||
+          scheduleDate !== today ||
+          draftItems.length,
+      ),
+    [company, draftItems.length, preferences.defaultCompany, remarks, scheduleDate, supplier, supplierRef, today, transactionDate],
+  );
 
   const scrollToSection = (y: number) => {
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ y: Math.max(y - 16, 0), animated: true });
     });
   };
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (allowLeaveRef.current || !hasDraftContent || isSubmitting) {
+        return;
+      }
+
+      event.preventDefault();
+      pendingNavigationActionRef.current = event.data.action;
+      setShowLeaveConfirm(true);
+    });
+
+    return unsubscribe;
+  }, [hasDraftContent, isSubmitting, navigation]);
 
   const handleItemChange = (itemId: string, field: keyof PurchaseOrderDraftItem, value: string) => {
     setDraftItems((currentItems) => {
@@ -604,6 +666,8 @@ export default function PurchaseOrderCreateScreen() {
 
       showSuccess(`采购订单 ${orderName} 已创建。`);
       clearPurchaseOrderDraft();
+      allowLeaveRef.current = true;
+      setDraftItems([]);
       router.replace({
         pathname: '/purchase/order/[orderName]',
         params: { orderName },
@@ -616,21 +680,21 @@ export default function PurchaseOrderCreateScreen() {
   };
 
   const returnToPurchaseHome = () => {
-    router.replace('/(tabs)/purchase');
+    const target = typeof returnTo === 'string' && returnTo.trim() ? returnTo : '/(tabs)/purchase';
+    router.replace(target as never);
   };
 
   return (
-    <View style={styles.page}>
-      <ScrollView contentContainerStyle={styles.scrollContent} ref={scrollRef}>
-        <View style={styles.topBar}>
-          <Pressable onPress={returnToPurchaseHome} style={styles.iconCircle}>
-            <IconSymbol color="#111827" name="chevron.left" size={20} />
-          </Pressable>
-
-          <ThemedText style={styles.topTitle} type="title">
-            采购下单
-          </ThemedText>
-
+    <SafeAreaView edges={[]} style={styles.page}>
+      <MobilePageHeader
+        onBack={() => {
+          if (hasDraftContent && !allowLeaveRef.current && !isSubmitting) {
+            setShowLeaveConfirm(true);
+            return;
+          }
+          returnToPurchaseHome();
+        }}
+        rightAction={
           <Pressable
             onPress={() =>
               router.push({
@@ -638,24 +702,20 @@ export default function PurchaseOrderCreateScreen() {
                 params: { returnTo: '/purchase/order/create' },
               })
             }
-            style={styles.topAction}>
+            style={styles.headerAction}>
             <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
               选供应商
             </ThemedText>
           </Pressable>
-        </View>
+        }
+        showBack
+        title="采购下单"
+      />
 
-        <View style={styles.quickNavWrap}>
-          <WorkflowQuickNav compact />
-        </View>
-
+      <ScrollView contentContainerStyle={styles.scrollContent} ref={scrollRef}>
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.heroHeader}>
             <View style={styles.heroCopy}>
-              <ThemedText style={styles.heroEyebrow}>PURCHASE ORDER</ThemedText>
-              <ThemedText style={styles.heroTitle} type="title">
-                新建采购订单
-              </ThemedText>
               <ThemedText style={styles.heroSubtitle}>
                 先完成主体信息，再录入采购商品和入库分配。
               </ThemedText>
@@ -1204,7 +1264,53 @@ export default function PurchaseOrderCreateScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowLeaveConfirm(false)}
+        transparent
+        visible={showLeaveConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              离开当前采购单？
+            </ThemedText>
+            <ThemedText style={styles.dialogText}>
+              当前填写内容已经暂存为草稿。离开后可以稍后继续编辑，但本次内容还没有正式提交为采购订单。
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => {
+                  pendingNavigationActionRef.current = null;
+                  setShowLeaveConfirm(false);
+                }}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  继续填写
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowLeaveConfirm(false);
+                  const pendingAction = pendingNavigationActionRef.current;
+                  pendingNavigationActionRef.current = null;
+                  allowLeaveRef.current = true;
+                  if (pendingAction) {
+                    navigation.dispatch(pendingAction);
+                  } else {
+                    returnToPurchaseHome();
+                  }
+                }}
+                style={[styles.dialogButton, styles.dialogPrimaryButton, { backgroundColor: tintColor }]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  离开页面
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -1215,29 +1321,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     gap: 12,
     paddingHorizontal: 12,
-    paddingTop: 14,
+    paddingTop: 8,
     paddingBottom: 12,
   },
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  iconCircle: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  topTitle: {
-    fontSize: 18,
-  },
-  topAction: {
+  headerAction: {
     alignItems: 'flex-end',
     minWidth: 72,
-  },
-  quickNavWrap: {
-    marginBottom: 2,
   },
   heroCard: {
     borderRadius: 24,
@@ -1254,15 +1343,6 @@ const styles = StyleSheet.create({
   heroCopy: {
     flex: 1,
     gap: 6,
-  },
-  heroEyebrow: {
-    color: '#2563EB',
-    fontSize: 12,
-    letterSpacing: 1.2,
-  },
-  heroTitle: {
-    fontSize: 30,
-    lineHeight: 36,
   },
   heroSubtitle: {
     color: '#475569',
@@ -1683,5 +1763,53 @@ const styles = StyleSheet.create({
     color: '#71859D',
     fontSize: 13,
     lineHeight: 18,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15,23,42,0.28)',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  dialogCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    padding: 20,
+    width: '100%',
+  },
+  dialogTitle: {
+    fontSize: 18,
+  },
+  dialogText: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  dialogButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  dialogGhostButton: {
+    borderWidth: 1,
+  },
+  dialogPrimaryButton: {
+    borderWidth: 0,
+  },
+  dialogGhostText: {
+    color: '#0F172A',
+    fontSize: 14,
+  },
+  dialogPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
   },
 });

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LinkOptionInput } from '@/components/link-option-input';
+import { MobilePageHeader } from '@/components/mobile-page-header';
 import { SalesOrderItemEditor } from '@/components/sales-order-item-editor';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
@@ -257,6 +258,7 @@ function SummaryRow({
 
 export default function SalesOrderCreateScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const navigation = useNavigation();
   const preferences = getAppPreferences();
   const { profile } = useAuth();
@@ -874,51 +876,42 @@ export default function SalesOrderCreateScreen() {
         ? dangerColor
         : '#6B7280';
   const returnToSalesHome = () => {
-    router.replace('/(tabs)/sales');
+    const target = typeof returnTo === 'string' && returnTo.trim() ? returnTo : '/(tabs)/sales';
+    router.replace(target as never);
   };
 
   return (
-    <View style={[styles.page, { backgroundColor: background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} ref={scrollRef}>
-        <View style={styles.topBar}>
-          <Pressable
-            onPress={() => {
-              if (hasDraftContent && !allowLeaveRef.current && !isSubmitting) {
-                setShowLeaveConfirm(true);
-                return;
-              }
-              returnToSalesHome();
-            }}
-            style={styles.iconCircle}>
-            <IconSymbol color="#111827" name="chevron.left" size={20} />
-          </Pressable>
-
-          <ThemedText style={styles.topTitle} type="title">
-            销售单
-          </ThemedText>
-
+    <SafeAreaView edges={[]} style={[styles.page, { backgroundColor: background }]}>
+      <MobilePageHeader
+        onBack={() => {
+          if (hasDraftContent && !allowLeaveRef.current && !isSubmitting) {
+            setShowLeaveConfirm(true);
+            return;
+          }
+          returnToSalesHome();
+        }}
+        rightAction={
           <Pressable
             onPress={() => setStatusMessage('AI 开单功能开发中。', 'info')}
-            style={styles.aiTrigger}>
+            style={styles.headerAction}>
             <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
               AI开单
             </ThemedText>
           </Pressable>
-        </View>
+        }
+        showBack
+        title="销售单"
+      />
 
-        <View style={styles.quickNavWrap}>
-          <WorkflowQuickNav compact />
-        </View>
-
+      <ScrollView contentContainerStyle={styles.scrollContent} ref={scrollRef}>
         <View
           onLayout={(event) => {
             customerSectionYRef.current = event.nativeEvent.layout.y;
           }}
           style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.heroHeader}>
-            <View>
-              <ThemedText type="title">销售单</ThemedText>
-              <ThemedText style={styles.heroSubtitle}>销售单工作台</ThemedText>
+            <View style={styles.heroHeaderCopy}>
+              <ThemedText style={styles.heroSubtitle}>录入客户、模式和商品后即可保存或快速开单。</ThemedText>
             </View>
             <View style={[styles.statusPill, { backgroundColor: accentSoft }]}>
               <ThemedText
@@ -1478,7 +1471,7 @@ export default function SalesOrderCreateScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1488,30 +1481,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 12,
-    paddingTop: 14,
+    paddingTop: 8,
     paddingBottom: 12,
     gap: 12,
   },
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  iconCircle: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  topTitle: {
-    fontSize: 18,
-  },
-  aiTrigger: {
+  headerAction: {
     alignItems: 'flex-end',
     minWidth: 56,
-  },
-  quickNavWrap: {
-    marginBottom: 2,
   },
   heroCard: {
     borderRadius: 22,
@@ -1523,6 +1499,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  heroHeaderCopy: {
+    flex: 1,
+    paddingRight: 12,
   },
   heroSubtitle: {
     color: '#5F6B7A',

@@ -3,6 +3,7 @@ import type { Href } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
@@ -34,7 +35,8 @@ export function AppShell({
   footer,
 }: AppShellProps) {
   const segments = useSegments();
-  const showWorkflowQuickNav = segments[0] !== '(tabs)';
+  const isTabRoot = segments[0] === '(tabs)';
+  const showWorkflowQuickNav = !isTabRoot;
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
@@ -42,13 +44,14 @@ export function AppShell({
 
   return (
     <View style={[styles.screen, { backgroundColor: useThemeColor({}, 'background') }]}>
+      <MobilePageHeader showBack={!isTabRoot} title={title} />
+
       <ScrollView contentContainerStyle={styles.container}>
         <ThemedView
           lightColor={surfaceMuted}
           darkColor={surfaceMuted}
           style={[compactHeader ? styles.headerCompact : styles.header, { borderColor }]}>
           <ThemedText style={[styles.eyebrow, { color: tintColor }]}>RGC WHOLESALE FLOW</ThemedText>
-          <ThemedText type="title">{title}</ThemedText>
           <ThemedText style={styles.description}>{description}</ThemedText>
         </ThemedView>
 
@@ -93,11 +96,12 @@ const styles = StyleSheet.create({
     gap: 18,
     padding: 18,
     paddingBottom: 48,
+    paddingTop: 14,
   },
   header: {
     borderRadius: 28,
     borderWidth: 1,
-    gap: 12,
+    gap: 10,
     padding: 22,
   },
   headerCompact: {

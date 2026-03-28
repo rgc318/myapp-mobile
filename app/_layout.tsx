@@ -3,6 +3,7 @@ import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -52,16 +53,17 @@ function RootNavigation() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+      <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ title: '登录', headerShadowVisible: false }} />
-        <Stack.Screen name="account-info" options={{ title: '账号信息', headerShadowVisible: false }} />
-        <Stack.Screen name="settings" options={{ title: '设置', headerShadowVisible: false }} />
-        <Stack.Screen name="system-info" options={{ title: '系统信息', headerShadowVisible: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="account-info" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
+        <Stack.Screen name="system-info" options={{ headerShown: false }} />
         <Stack.Screen name="sales/order/create" options={{ headerShown: false }} />
         <Stack.Screen name="sales/order/[orderName]" options={{ headerShown: false }} />
+        <Stack.Screen name="purchase/order/create" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
@@ -70,10 +72,12 @@ function RootNavigation() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <FeedbackProvider>
-        <RootNavigation />
-      </FeedbackProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <FeedbackProvider>
+          <RootNavigation />
+        </FeedbackProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

@@ -2102,6 +2102,152 @@ Recommended response:
 2. use `--tunnel` only as fallback when LAN is truly unavailable
 3. if tunnel fails, continue debugging LAN exposure instead of assuming the app bundle is broken
 
+## Unified Top Navigation And Safe Area (2026-03-29)
+
+The mobile app now has a shared top navigation/header layer instead of letting each page improvise its own spacing against the phone status bar.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/mobile-page-header.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/app-shell.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/_layout.tsx`
+
+### What Changed
+
+- a reusable `MobilePageHeader` was added
+  - supports:
+    - centered title
+    - left back button
+    - optional right-side action
+    - safe-area-aware top spacing
+- `SafeAreaProvider` is now mounted at app root
+- stack-native headers are now hidden so they do not fight with the custom mobile header
+- `AppShell` pages now inherit the shared top header automatically
+
+### Why
+
+- most modern mobile apps use:
+  - fixed bottom tab bar
+  - fixed top navigation bar
+  - content body below that navigation bar
+- the previous implementation let some pages start directly at the top edge
+  - on full-screen phones, content could visually collide with the system status bar / cutout area
+
+### Current Rule
+
+- keep the shared top header for:
+  - detail pages
+  - create/edit pages
+  - settings/account/system pages
+  - list pages that benefit from a stable title/action area
+- do not force the shared top header on:
+  - login page
+  - dashboard/home page
+  - lightweight success / transition pages
+  - modal / preview pages that want a more custom presentation
+
+## Header Exceptions (2026-03-29)
+
+Not every page should look like a standard CRUD/detail screen.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/login.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/modal.tsx`
+
+### What Changed
+
+- login page now keeps only safe-area handling
+  - no shared top bar
+- home/dashboard page now keeps only safe-area handling
+  - no shared top bar
+- modal keeps its own lightweight presentation
+
+### Why
+
+- login is a focused entry surface, not a drill-down business page
+- dashboard/home usually works better as a branded top section rather than a generic title bar
+- forcing the same top header everywhere made these pages look heavier instead of more native
+
+## Safe Area Color Matching (2026-03-29)
+
+Safe-area padding should not accidentally reveal the wrong background color.
+
+### File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+
+### What Changed
+
+- the top safe area on home now uses the same orange surface as the hero section
+- the main body below it still returns to white
+- only the top region is color-extended; the lower page no longer inherits the orange background
+
+### Why
+
+- a safe area should visually belong to the section it extends
+- earlier, the top status-bar region and the hero region did not match
+- then the whole page was over-corrected and the bottom also turned orange
+- the current implementation keeps:
+  - orange at the top
+  - white in the body
+
+## Source-Aware Back Navigation On Create Pages (2026-03-29)
+
+Create pages should return to where the user came from when that source is known.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+
+### What Changed
+
+- sales-order create page now accepts `returnTo`
+- purchase-order create page now accepts `returnTo`
+- dashboard entry points now pass `returnTo=/(tabs)` when opening:
+  - sales create
+  - purchase create
+- when `returnTo` is present:
+  - back returns to the source page
+- when `returnTo` is absent:
+  - the page still falls back to its module home
+
+### Why
+
+- previously, create pages always returned to:
+  - sales tab
+  - or purchase tab
+- that was acceptable when users always entered from the module itself
+- but it felt wrong when entering from dashboard shortcuts
+
+### Draft Safety
+
+- the new back behavior does not bypass existing draft guards
+- create pages still use the original leave-confirmation flow before actually navigating away
+
+## Sales Order Detail Header Action Cleanup (2026-03-29)
+
+The top-right workflow action on sales-order detail should behave like a secondary navigation action, not a heavy primary button.
+
+### File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+
+### What Changed
+
+- view-type actions such as `查看发票` / `查看发货单` were reduced from boxed button styling to a lighter text-style top action
+- the header now allows a wider right-side action slot when a page needs it
+- this keeps large text readable without wrapping into two lines
+
+### Why
+
+- `查看...` is usually a secondary action in a mobile title bar
+- strong filled or boxed buttons are better reserved for main workflow progression
+- without a wider header action slot, large action labels could wrap and look broken
+
 ### Common packaging failures already seen in this project
 
 1. Java not found

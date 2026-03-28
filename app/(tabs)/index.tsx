@@ -2,6 +2,7 @@ import { Link, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -55,7 +56,6 @@ export default function HomeScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
-  const background = useThemeColor({}, 'background');
 
   const canUseSales =
     roles.length === 0 ||
@@ -69,12 +69,28 @@ export default function HomeScreen() {
     );
 
   const shortcuts: Shortcut[] = [
-    ...(canUseSales ? [{ href: '/sales/order/create' as Href, label: '销售', icon: 'cart.fill' as const }] : []),
+    ...(canUseSales
+      ? [
+          {
+            href: { pathname: '/sales/order/create', params: { returnTo: '/(tabs)' } } as Href,
+            label: '销售',
+            icon: 'cart.fill' as const,
+          },
+        ]
+      : []),
     { href: '/common/products', label: '商品', icon: 'magnifyingglass' },
     { href: '/common/customers', label: '客户', icon: 'building.2.fill' },
     { href: '/common/uoms', label: '单位', icon: 'ruler.fill' },
     { href: '/settings', label: '设置', icon: 'gearshape.fill' },
-    ...(canUsePurchase ? [{ href: '/purchase/order/create' as Href, label: '进货', icon: 'shippingbox.fill' as const }] : []),
+    ...(canUsePurchase
+      ? [
+          {
+            href: { pathname: '/purchase/order/create', params: { returnTo: '/(tabs)' } } as Href,
+            label: '进货',
+            icon: 'shippingbox.fill' as const,
+          },
+        ]
+      : []),
     { href: '/(tabs)/docs', label: '对账', icon: 'doc.text.fill' },
     { href: '/(tabs)/me', label: '我的', icon: 'person.fill' },
   ];
@@ -85,79 +101,88 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={[styles.page, { backgroundColor: background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <View style={styles.heroOverlay} />
-          <View style={styles.heroTop}>
-            <View>
-              <ThemedText style={styles.heroQuestion}>有订单要处理？</ThemedText>
-              <ThemedText style={styles.heroSubline}>
-                {profile?.fullName || profile?.username || '当前操作员'}
-              </ThemedText>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <View style={styles.page}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.hero}>
+            <View style={styles.heroOverlay} />
+            <View style={styles.heroTop}>
+              <View>
+                <ThemedText style={styles.heroQuestion}>有订单要处理？</ThemedText>
+                <ThemedText style={styles.heroSubline}>
+                  {profile?.fullName || profile?.username || '当前操作员'}
+                </ThemedText>
+              </View>
+              <Pressable style={styles.heroChip}>
+                <ThemedText style={styles.heroChipText}>去处理</ThemedText>
+              </Pressable>
             </View>
-            <Pressable style={styles.heroChip}>
-              <ThemedText style={styles.heroChipText}>去处理</ThemedText>
-            </Pressable>
           </View>
-        </View>
 
-        <View style={[styles.statsPanel, { backgroundColor: surface, borderColor }]}>
-          <View style={styles.statsHeader}>
-            <ThemedText type="defaultSemiBold">关键数据</ThemedText>
-            <ThemedText style={styles.statsDate}>更新于 {new Date().toISOString().slice(0, 10)}</ThemedText>
+          <View style={[styles.statsPanel, { backgroundColor: surface, borderColor }]}>
+            <View style={styles.statsHeader}>
+              <ThemedText type="defaultSemiBold">关键数据</ThemedText>
+              <ThemedText style={styles.statsDate}>更新于 {new Date().toISOString().slice(0, 10)}</ThemedText>
+            </View>
+            <View style={styles.statsGrid}>
+              <StatCard label="默认公司" value={preferences.defaultCompany} />
+              <StatCard label="默认仓库" value={preferences.defaultWarehouse} />
+            </View>
           </View>
-          <View style={styles.statsGrid}>
-            <StatCard label="默认公司" value={preferences.defaultCompany} />
-            <StatCard label="默认仓库" value={preferences.defaultWarehouse} />
-          </View>
-        </View>
 
-        <View style={styles.primaryActions}>
-          {canUseSales ? (
-            <Link href="/sales/order/create" style={[styles.primaryCard, styles.primaryCardStrong]}>
-              <ThemedText style={styles.primaryCardText}>销售开单</ThemedText>
+          <View style={styles.primaryActions}>
+            {canUseSales ? (
+              <Link
+                href={{ pathname: '/sales/order/create', params: { returnTo: '/(tabs)' } }}
+                style={[styles.primaryCard, styles.primaryCardStrong]}>
+                <ThemedText style={styles.primaryCardText}>销售开单</ThemedText>
+              </Link>
+            ) : null}
+            <Link href="/common/products" style={[styles.primaryCard, styles.primaryCardSoft]}>
+              <ThemedText style={styles.primaryCardText}>商品管理</ThemedText>
             </Link>
-          ) : null}
-          <Link href="/common/products" style={[styles.primaryCard, styles.primaryCardSoft]}>
-            <ThemedText style={styles.primaryCardText}>商品管理</ThemedText>
-          </Link>
-        </View>
+          </View>
 
-        <View style={[styles.searchBar, { backgroundColor: surface, borderColor }]}>
-          <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
-          <TextInput
-            onChangeText={setSearchText}
-            onSubmitEditing={handleSearch}
-            placeholder="搜索商品 / 仓库 / 订单"
-            placeholderTextColor="rgba(31,42,55,0.45)"
-            style={styles.searchInput}
-            value={searchText}
-          />
-        </View>
+          <View style={[styles.searchBar, { backgroundColor: surface, borderColor }]}>
+            <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
+            <TextInput
+              onChangeText={setSearchText}
+              onSubmitEditing={handleSearch}
+              placeholder="搜索商品 / 仓库 / 订单"
+              placeholderTextColor="rgba(31,42,55,0.45)"
+              style={styles.searchInput}
+              value={searchText}
+            />
+          </View>
 
-        <View style={styles.shortcutGrid}>
-          {shortcuts.map((item) => (
-            <ShortcutItem item={item} key={item.label} />
-          ))}
-        </View>
+          <View style={styles.shortcutGrid}>
+            {shortcuts.map((item) => (
+              <ShortcutItem item={item} key={item.label} />
+            ))}
+          </View>
 
-        <View style={[styles.noticeBar, { backgroundColor: surface, borderColor }]}>
-          <ThemedText style={styles.noticeText}>
-            销售模式：{preferences.salesFlowMode === 'quick' ? '快捷结算' : '分步处理'} / 采购模式：
-            {preferences.purchaseFlowMode === 'immediate' ? '收货并结算' : '收货后结算'}
-          </ThemedText>
-          <Link href="/settings" style={styles.noticeAction}>
-            <ThemedText style={styles.noticeActionText}>立即设置</ThemedText>
-          </Link>
-        </View>
-      </ScrollView>
-    </View>
+          <View style={[styles.noticeBar, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.noticeText}>
+              销售模式：{preferences.salesFlowMode === 'quick' ? '快捷结算' : '分步处理'} / 采购模式：
+              {preferences.purchaseFlowMode === 'immediate' ? '收货并结算' : '收货后结算'}
+            </ThemedText>
+            <Link href="/settings" style={styles.noticeAction}>
+              <ThemedText style={styles.noticeActionText}>立即设置</ThemedText>
+            </Link>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   page: {
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+  },
+  safeArea: {
+    backgroundColor: '#F97316',
     flex: 1,
   },
   content: {
