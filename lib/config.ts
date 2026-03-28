@@ -6,7 +6,7 @@ const API_BASE_URL_KEY = 'myapp-mobile.api-base-url';
 let memoryOverride: string | null = null;
 
 function getDefaultApiBaseUrl() {
-  return envBaseUrl || (Platform.OS === 'web' ? 'http://localhost:8080' : 'http://192.168.31.63:18081');
+  return envBaseUrl || (Platform.OS === 'web' ? 'http://localhost:8080' : 'http://.31.63:18081');
 }
 
 function canUseWebStorage() {

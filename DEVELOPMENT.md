@@ -295,6 +295,209 @@ This round focused on making customer management forms safer to submit and reduc
 - mobile frontend previously made it too easy to accidentally send a half-filled address object
 - that mismatch surfaced as ERPNext `Address` validation errors such as missing `city`
 
+## Purchase Module Design Baseline (2026-03-26)
+
+This round reviewed the current backend purchase documents and compared them with the already-landed sales v2 chain.
+
+### Current Backend Reality
+
+Backend purchase write-path APIs are already available:
+
+- `myapp.api.gateway.create_purchase_order`
+- `myapp.api.gateway.receive_purchase_order`
+- `myapp.api.gateway.create_purchase_invoice`
+- `myapp.api.gateway.create_purchase_invoice_from_receipt`
+- `myapp.api.gateway.record_supplier_payment`
+- `myapp.api.gateway.process_purchase_return`
+
+Backend design and handoff documents confirm that these purchase actions already support:
+
+- real HTTP validation
+- `request_id` idempotency
+- partial receiving
+- partial invoicing from receipt
+- partial purchase return from receipt
+- price override checks around `Buying Settings.maintain_same_rate`
+
+### Why Purchase Still Needs More Custom Interfaces
+
+Sales v2 is not only using write APIs. It also depends on frontend-oriented aggregation interfaces such as:
+
+- `get_sales_order_detail`
+- `get_sales_order_status_summary`
+- `get_delivery_note_detail_v2`
+- `get_sales_invoice_detail_v2`
+- `get_customer_sales_context`
+- `quick_create_order_v2`
+- `quick_cancel_order_v2`
+
+Those interfaces were added because the frontend should not reconstruct business state by manually stitching together raw ERPNext documents.
+
+Purchase has now reached the same architectural point.
+
+If mobile purchase pages only call the current write APIs, the frontend will still need to guess or recompute:
+
+- whether a purchase order is fully received
+- whether it is partially invoiced
+- whether payment is completed
+- whether receipt or invoice can still be cancelled or returned
+- which next action should be exposed to the user
+
+That is the same problem the sales aggregation layer was created to solve.
+
+### Recommended Purchase Interfaces To Add
+
+First-priority aggregation/detail interfaces:
+
+- `get_purchase_order_detail_v2`
+  - for purchase-order detail page
+  - for receive-confirmation page
+  - for purchase-invoice confirmation page
+- `get_purchase_order_status_summary`
+  - for purchase list cards and status badges
+- `get_purchase_receipt_detail_v2`
+  - for receipt detail page
+  - for return-confirmation page
+- `get_purchase_invoice_detail_v2`
+  - for purchase-invoice detail page
+  - for supplier-payment confirmation page
+
+Second-priority supplier context/master-data interfaces:
+
+- `get_supplier_purchase_context`
+  - purchase equivalent of `get_customer_sales_context`
+  - should aggregate supplier basics, default contact, default address, and suggested defaults such as company / warehouse / currency
+- `list_suppliers_v2`
+- `get_supplier_detail_v2`
+
+Third-priority purchase action interfaces:
+
+- `cancel_purchase_order_v2`
+- `cancel_purchase_receipt_v2`
+- `cancel_purchase_invoice_v2`
+- `cancel_supplier_payment_v2`
+
+Optional later-stage convenience interfaces:
+
+- `quick_create_purchase_flow_v2`
+- `update_purchase_order_v2`
+- `update_purchase_order_items_v2`
+
+### Mobile Planning Implication
+
+The purchase module should follow the same layered strategy as sales:
+
+1. use the existing purchase write APIs as the workflow action layer
+2. add purchase aggregation/detail APIs as the page data layer
+3. only then complete the mobile purchase pages end-to-end
+
+Recommended mobile page order:
+
+1. purchase order create page
+2. purchase order detail page
+3. receiving confirmation page
+4. purchase receipt detail page
+5. purchase invoice confirmation / detail page
+6. supplier payment page
+7. purchase return page
+
+### Working Rule
+
+For purchase workflows, mobile should prefer backend-computed business semantics over raw ERPNext field assembly.
+
+In practice this means:
+
+- detail pages should consume purchase aggregation interfaces
+- list pages should consume purchase status-summary interfaces
+- action buttons should follow backend-returned allowed actions and hints
+- frontend should avoid inferring purchase completion, invoicing, or payment state from raw DocType fields alone
+
+## Purchase Frontend First Usable Flow (2026-03-28)
+
+This round moved the mobile purchase module from "placeholder-level pages" into a first usable workflow set.
+
+### Completed
+
+- formal purchase workbench was added and aligned to the current mobile system language
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/purchase.tsx`
+  - supports:
+    - purchase entry and workbench overview
+    - purchase order summary cards
+    - purchase workflow shortcuts
+
+- supplier selection page was added for purchase flows
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/supplier-select.tsx`
+  - supports:
+    - supplier search
+    - return-to-flow selection
+    - reuse by purchase order creation
+
+- purchase order create page was rebuilt into a real grouped-entry workflow
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/item-search.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/purchase-order-draft.ts`
+  - supports:
+    - supplier + company + date + remarks entry
+    - product search page feeding a persistent purchase draft
+    - grouped item display by product instead of flat repeated rows
+    - multiple warehouse rows under the same product group
+    - image / total stock / warehouse stock / projected stock display
+    - manual purchase-price override per warehouse row
+    - UOM selection from product-aware options
+    - supplier context display after item entry
+    - submit-time scroll-to-first-invalid-section behavior similar to sales order create
+
+- purchase order detail page was upgraded to consume backend aggregated order data
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/[orderName].tsx`
+  - supports:
+    - business status display
+    - item summary
+    - related receipt / invoice / payment references
+    - next-action entry points
+
+- downstream purchase action pages were moved beyond placeholders
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/receipt/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/invoice/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/payment/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/return/create.tsx`
+  - result:
+    - purchase receiving, supplier invoice, supplier payment, and purchase return pages now connect to the current purchase service layer instead of remaining static placeholders
+
+- purchase service layer was formalized
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+  - now supports:
+    - supplier search / detail / context
+    - purchase order creation
+    - purchase order / receipt / invoice detail reads
+    - receiving / invoice / payment / return submission helpers
+    - company-scoped warehouse search
+
+### Important Current Rules
+
+- purchase `company` means the internal company on our side, not the supplier
+- selected warehouses must belong to the same internal company as the purchase order
+- warehouse pickers on purchase pages now prefer company-scoped options instead of waiting for backend rejection at submit time
+- if the company changes and existing warehouse rows no longer match that company, the frontend clears those warehouse values and requires reselection
+
+### Current UX Direction
+
+- product search page is responsible for selecting products and quick quantity entry
+- warehouse splitting remains in the purchase order draft page, not in the search page
+- one product group may contain multiple warehouse rows
+- final payload is still expanded into backend-compatible purchase order item rows
+
+### Current Boundaries
+
+- purchase item entry now follows a grouped pattern, but the warehouse-row editor has not yet been extracted into a shared internal component
+- company-aware warehouse filtering currently exists in purchase flows; other warehouse pickers in unrelated modules may still use generic link search
+- purchase order update / edit-after-create behavior still needs future refinement if we later expose a richer in-place editing workflow on the detail page
+
 ## UOM Module Frontend (2026-03-26)
 
 This round added a lightweight UOM master-data module for mobile, following the same "small but business-important" pattern as the product workbench.
