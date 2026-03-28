@@ -1863,6 +1863,9 @@ Current standalone proxy files:
   - `/home/rgc318/python-project/frappe_docker/dev/nginx/mobile-proxy.conf`
 - static probe page:
   - `/home/rgc318/python-project/frappe_docker/dev/nginx/probe.html`
+- devcontainer startup:
+  - `.devcontainer/docker-compose.yml` now includes `mobile-proxy`
+  - `.devcontainer/devcontainer.json` now includes `mobile-proxy` in `runServices`
 
 Current standalone proxy responsibilities:
 
@@ -1931,6 +1934,51 @@ In this environment:
 - `18081`
   - LAN-facing Windows bridge
 
+### Keep Expo and Windows bridge on different ports
+
+One important pitfall observed in this environment:
+
+- do not let Windows `portproxy` and Expo/Metro fight for the same `8081`
+- if Windows is already listening on `8081`, Expo may show:
+  - `Port 8081 is being used by another process`
+- in mirrored WSL setups on this machine, port conflicts were easy to trigger when a Windows bridge was added on the same port that Metro wanted to use
+
+Recommended split:
+
+- Expo / Metro stays on:
+  - `8081`
+- Windows LAN bridge for the frontend should use a different listen port, for example:
+  - `18082 -> 8081`
+- Windows LAN bridge for the backend keeps:
+  - `18081 -> 18080`
+
+This avoids a very common failure mode:
+
+- frontend starts on `8082` unexpectedly
+- browser / phone still tries to reach `8081`
+- debugging becomes confusing because some requests hit the old bridge and some hit the new Metro port
+
+Practical rule:
+
+- never create `8081 -> 8081` Windows `portproxy` for Expo in this environment
+- keep frontend and backend LAN bridges on separate explicit ports
+
+### Recommended LAN URL pairing
+
+When testing from another LAN device, the safest pairing on this machine is:
+
+- frontend web preview / Metro web entry:
+  - `http://192.168.31.63:18082`
+- backend ERPNext bridge:
+  - `http://192.168.31.63:18081`
+
+Do not mix:
+
+- frontend via LAN origin
+- backend via `localhost`
+
+That combination can look half-working but still fail later due to origin/session separation.
+
 ### Recommended verification sequence for this setup
 
 1. verify standalone nginx itself
@@ -1941,6 +1989,16 @@ In this environment:
    - `http://192.168.31.63:18081`
 4. configure the mobile app base URL to:
    - `http://192.168.31.63:18081`
+
+If frontend LAN preview is also used:
+
+5. verify frontend LAN entry
+   - `http://192.168.31.63:18082`
+6. verify frontend and backend are paired consistently
+   - frontend origin:
+     - `http://192.168.31.63:18082`
+   - backend base URL:
+     - `http://192.168.31.63:18081`
 
 ### Proxy-related testing caution
 
@@ -1977,6 +2035,72 @@ Rebuild is only necessary when:
 
 - the backend base URL is hardcoded into a non-editable release build
 - native Android/iOS capabilities or packaging config changed
+
+Operational note from recent testing:
+
+- after changing backend base URL or switching from localhost to LAN bridge
+  - Expo Go / development client may still keep old runtime state
+- if the phone continues to report:
+  - `无法连接后端`
+  - or login/session behavior still reflects the old address
+- fully close and reopen the mobile app before assuming the bridge is still broken
+
+In this environment, restarting the phone app was enough to make a previously updated LAN backend URL start working correctly.
+
+### Localhost and LAN do not share browser session state
+
+Observed behavior:
+
+- login could succeed on `localhost`
+- the same account could still appear unauthenticated on the LAN frontend origin
+
+Reason:
+
+- `http://localhost:8081`
+- and `http://192.168.31.63:18082`
+
+are different browser origins.
+
+Therefore:
+
+- browser local storage is not shared between them
+- cached backend URL is not shared between them
+- session/cors behavior must be validated separately for each origin
+
+If LAN login appears broken while localhost login works:
+
+1. verify backend `allow_cors` includes the current frontend LAN origin
+2. verify the LAN frontend is pointing to the LAN backend bridge, not `localhost`
+3. retry from a clean app/browser session after reopening the app or refreshing the web origin
+
+### Current CORS requirement for local + LAN preview
+
+For the current setup, backend `allow_cors` should include at least:
+
+- `http://localhost:8081`
+- `http://192.168.31.63:18082`
+
+This is especially important for local web preview and LAN-exposed web preview to coexist during the same development cycle.
+
+### Tunnel failure note
+
+`npx expo start --tunnel` can still fail even when the project code is fine.
+
+Observed CLI error:
+
+- `CommandError: failed to start tunnel`
+- `remote gone away`
+
+Meaning:
+
+- this is usually an Expo/ngrok/network path issue
+- not a business-code issue
+
+Recommended response:
+
+1. prefer LAN first when the machine can already expose the frontend successfully
+2. use `--tunnel` only as fallback when LAN is truly unavailable
+3. if tunnel fails, continue debugging LAN exposure instead of assuming the app bundle is broken
 
 ### Common packaging failures already seen in this project
 
