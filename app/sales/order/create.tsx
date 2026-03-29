@@ -644,6 +644,29 @@ export default function SalesOrderCreateScreen() {
     () => buildQuantitySummary(draftItems),
     [draftItems],
   );
+  const bottomQuantitySummary = useMemo(() => {
+    if (!draftItems.length) {
+      return '暂无商品明细';
+    }
+
+    const normalizedUoms = Array.from(
+      new Set(
+        draftItems
+          .map((item) => (typeof item.uom === 'string' ? item.uom.trim() : ''))
+          .filter(Boolean),
+      ),
+    );
+
+    if (normalizedUoms.length <= 1) {
+      const totalQty = draftItems.reduce((sum, item) => sum + item.qty, 0);
+      const onlyUom = normalizedUoms[0];
+      return onlyUom
+        ? `共 ${totalLineCount} 项 · ${totalQty} ${formatDisplayUom(onlyUom)}`
+        : `共 ${totalLineCount} 项`;
+    }
+
+    return `共 ${totalLineCount} 项 · ${normalizedUoms.length} 种单位`;
+  }, [draftItems, totalLineCount]);
   const groupedDraftItems = useMemo(
     () => groupDraftItemsByProduct(draftItems),
     [draftItems],
@@ -984,27 +1007,11 @@ export default function SalesOrderCreateScreen() {
             <View style={[styles.quickActionIcon, { backgroundColor: accentSoft }]}>
               <IconSymbol color={tintColor} name="cart.fill.badge.plus" size={18} />
             </View>
-            <View>
+            <View style={styles.quickActionCopy}>
               <ThemedText style={styles.quickActionLabel} type="defaultSemiBold">
                 选择商品
               </ThemedText>
-                <ThemedText style={styles.quickActionHint}>进入商品搜索页选择</ThemedText>
-            </View>
-          </Pressable>
-
-          <View style={[styles.quickActionDivider, { backgroundColor: borderColor }]} />
-
-          <Pressable
-            onPress={() => setStatusMessage('扫码添加功能开发中。', 'info')}
-            style={styles.quickActionButton}>
-            <View style={[styles.quickActionIcon, { backgroundColor: accentSoft }]}>
-              <IconSymbol color={tintColor} name="barcode.viewfinder" size={18} />
-            </View>
-            <View>
-              <ThemedText style={styles.quickActionLabel} type="defaultSemiBold">
-                扫码添加
-              </ThemedText>
-              <ThemedText style={styles.quickActionHint}>预留扫码入口</ThemedText>
+              <ThemedText style={styles.quickActionHint}>进入商品搜索页选择，也可在页内扫码添加</ThemedText>
             </View>
           </Pressable>
         </View>
@@ -1150,7 +1157,7 @@ export default function SalesOrderCreateScreen() {
                 还没有销售商品
               </ThemedText>
               <ThemedText style={styles.validationText}>
-                请先通过“选择商品”或“扫码添加”把本单要卖的商品加入进来，再继续保存或快速开单。
+                请先通过“选择商品”进入搜索页，把本单要卖的商品加入进来；需要时也可在搜索页内扫码添加。
               </ThemedText>
             </View>
           ) : null}
@@ -1302,16 +1309,14 @@ export default function SalesOrderCreateScreen() {
 
       <View style={[styles.bottomBar, { backgroundColor: surface, borderTopColor: borderColor }]}>
         <View style={styles.bottomInfoBlock}>
-          <View style={styles.bottomAmountRow}>
-            <ThemedText style={styles.bottomAmountLabel} type="defaultSemiBold">
-              订单金额:
-            </ThemedText>
-            <ThemedText style={styles.bottomPrimaryAmount} type="defaultSemiBold">
-              ¥ {formatMoney(receivableAmount)} 元
-            </ThemedText>
-          </View>
+          <ThemedText style={styles.bottomAmountLabel} type="defaultSemiBold">
+            订单总额
+          </ThemedText>
+          <ThemedText style={styles.bottomPrimaryAmount} type="defaultSemiBold">
+            ¥ {formatMoney(receivableAmount)}
+          </ThemedText>
           <ThemedText style={styles.bottomSummaryPrimary} type="defaultSemiBold">
-            {`共 ${totalLineCount} 项，${draftQuantitySummary}`}
+            {bottomQuantitySummary}
           </ThemedText>
         </View>
         <View style={styles.bottomActions}>
@@ -1600,12 +1605,15 @@ const styles = StyleSheet.create({
   },
   quickActionButton: {
     alignItems: 'center',
-    flex: 1,
     flexDirection: 'row',
     gap: 10,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     minHeight: 76,
     paddingHorizontal: 12,
+  },
+  quickActionCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   quickActionIcon: {
     alignItems: 'center',
@@ -1876,41 +1884,33 @@ const styles = StyleSheet.create({
     height: 124,
   },
   bottomBar: {
-    alignItems: 'center',
     borderTopWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   bottomInfoBlock: {
-    flex: 1,
-    marginRight: 12,
-  },
-  bottomAmountRow: {
-    alignItems: 'baseline',
-    flexDirection: 'row',
+    gap: 2,
   },
   bottomSummaryPrimary: {
-    color: '#0F172A',
-    fontSize: 15,
-    marginTop: 2,
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
   },
   bottomAmountLabel: {
     color: '#9A3412',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
-    marginRight: 6,
   },
   bottomPrimaryAmount: {
     color: '#C97A1E',
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: '700',
   },
   bottomActions: {
     flexDirection: 'row',
     gap: 10,
-    marginLeft: 'auto',
   },
   dialogBackdrop: {
     alignItems: 'center',
@@ -1985,9 +1985,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 16,
     borderWidth: 1,
+    flex: 1,
     justifyContent: 'center',
     minHeight: 48,
-    minWidth: 72,
     paddingHorizontal: 16,
   },
   secondaryButtonText: {
@@ -1996,9 +1996,9 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: 'center',
     borderRadius: 16,
+    flex: 1,
     justifyContent: 'center',
     minHeight: 48,
-    minWidth: 78,
     paddingHorizontal: 18,
   },
   primaryButtonText: {

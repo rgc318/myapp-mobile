@@ -155,7 +155,7 @@ function ResultRow({
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const selectedWarehouseName = selectedWarehouse || item.warehouse || '未指定仓库';
   const selectedWarehouseStockText = formatWarehouseStockLabel(item, selectedWarehouse || item.warehouse);
-  const showTotalSelectedHint = totalSelectedQty > 0;
+  const showTotalSelectedHint = totalSelectedQty > 0 && totalSelectedQty !== selectedQty;
 
   return (
     <Pressable onPress={() => onOpenDetail(item)} style={[styles.resultRow, { backgroundColor: surface, borderColor }]}>
@@ -190,10 +190,12 @@ function ResultRow({
           {isOrderMode ? (
             <View style={styles.inlineActionColumn}>
               {showTotalSelectedHint ? (
-                <View style={[styles.selectionPill, { backgroundColor: surfaceMuted }]}>
-                  <ThemedText style={styles.selectionPillLabel}>已加</ThemedText>
-                  <ThemedText style={[styles.selectionPillValue, { color: tintColor }]} type="defaultSemiBold">
-                    {totalSelectedQty}
+                <View style={styles.selectionPill}>
+                  <ThemedText style={styles.selectionPillText} type="defaultSemiBold">
+                    总已加{' '}
+                    <ThemedText style={[styles.selectionPillValue, { color: tintColor }]} type="defaultSemiBold">
+                      {totalSelectedQty}
+                    </ThemedText>
                   </ThemedText>
                 </View>
               ) : null}
@@ -473,15 +475,7 @@ export default function ProductSearchScreen() {
     [draftItems],
   );
   const loadWarehouseOptions = async (text: string) => {
-    const options = await searchLinkOptions('Warehouse', text, ['warehouse_name']);
-    return [
-      {
-        label: '全部仓库',
-        value: '',
-        description: '不限制仓库，搜索所有仓库的商品库存',
-      },
-      ...options,
-    ];
+    return searchLinkOptions('Warehouse', text, ['warehouse_name']);
   };
 
   const handleSearch = async (rawQuery?: string) => {
@@ -537,7 +531,7 @@ export default function ProductSearchScreen() {
       setResults(items);
       setMessage(
         items.length
-          ? `${nextQuery ? `\u5171\u627e\u5230 ${items.length} \u4e2a\u5546\u54c1。` : `\u5df2\u8f7d\u5165 ${items.length} \u4e2a\u5546\u54c1。`}${warehouseFilter.trim() ? ` 当前按仓库 ${warehouseFilter.trim()} 搜索。` : ''}${inStockOnly ? ' 仅显示有库存结果。' : ''}${!nextQuery ? ' 可继续输入关键词缩小范围。' : ''}`
+          ? `${nextQuery ? `找到 ${items.length} 个商品` : `已载入 ${items.length} 个商品`}${warehouseFilter.trim() ? ` · 仓库 ${warehouseFilter.trim()}` : ''}${inStockOnly ? ' · 仅看有库存' : ''}`
           : '\u6ca1\u6709\u627e\u5230\u5339\u914d\u5546\u54c1\u3002',
       );
     } catch (error) {
@@ -614,6 +608,10 @@ export default function ProductSearchScreen() {
     } finally {
       setIsCreatingProduct(false);
     }
+  };
+
+  const handleScanEntry = () => {
+    setMessage('扫码添加入口已收进当前页，后续会在这里直接调用摄像头扫码加入订单。');
   };
 
 
@@ -768,67 +766,86 @@ export default function ProductSearchScreen() {
       }
       title={isOrderMode ? '\u5546\u54c1\u641c\u7d22' : '\u5546\u54c1\u67e5\u8be2'}>
       <View style={[styles.searchCard, { backgroundColor: surface, borderColor }]}>
-        <View style={[styles.searchInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
-          <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
-          <TextInput
-            autoCorrect={false}
-            onChangeText={setQuery}
-            onSubmitEditing={() => void handleSearch()}
-            placeholder={'\u641c\u7d22\u5546\u54c1\u7f16\u7801\u3001\u6761\u7801\u6216\u5173\u952e\u8bcd'}
-            placeholderTextColor="rgba(31,42,55,0.45)"
-            style={styles.searchInput}
-            value={query}
-          />
+        <View style={styles.searchTopRow}>
+          <View style={[styles.searchInputWrap, styles.searchInputWrapExpanded, { backgroundColor: surfaceMuted, borderColor }]}>
+            <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
+            <TextInput
+              autoCorrect={false}
+              onChangeText={setQuery}
+              onSubmitEditing={() => void handleSearch()}
+              placeholder={'\u641c\u7d22\u5546\u54c1\u7f16\u7801\u3001\u6761\u7801\u6216\u5173\u952e\u8bcd'}
+              placeholderTextColor="rgba(31,42,55,0.45)"
+              style={styles.searchInput}
+              value={query}
+            />
+          </View>
+
+          {isOrderMode ? (
+            <Pressable onPress={handleScanEntry} style={[styles.scanEntryButton, { backgroundColor: surfaceMuted, borderColor }]}>
+              <IconSymbol color={tintColor} name="barcode.viewfinder" size={18} />
+              <ThemedText style={styles.scanEntryLabel} type="defaultSemiBold">
+                扫码
+              </ThemedText>
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.searchFilterRow}>
           <View style={styles.searchFilterField}>
             <LinkOptionInput
               label="仓库过滤"
+              inputActionText="切换"
               loadOptions={loadWarehouseOptions}
               onChangeText={setWarehouseFilter}
               onOptionSelect={setWarehouseFilter}
-              placeholder="请输入或搜索仓库"
+              placeholder="留空默认全部仓库"
               value={warehouseFilter}
             />
           </View>
 
           <View style={styles.filterActionsColumn}>
-            <Pressable
-              onPress={() => setWarehouseFilter('')}
-              style={[
-                styles.toggleChip,
-                {
-                  backgroundColor: warehouseFilter.trim() ? surfaceMuted : tintColor,
-                  borderColor: warehouseFilter.trim() ? borderColor : tintColor,
-                },
-              ]}>
-              <ThemedText
-                style={[styles.toggleChipText, warehouseFilter.trim() ? null : styles.toggleChipTextActive]}
-                type="defaultSemiBold">
-                全部仓库
-              </ThemedText>
-            </Pressable>
+            {warehouseFilter.trim() ? (
+              <Pressable
+                onPress={() => setWarehouseFilter('')}
+                style={[styles.toggleChip, { backgroundColor: surfaceMuted, borderColor }]}>
+                <ThemedText style={styles.toggleChipText} type="defaultSemiBold">
+                  清空仓库选项
+                </ThemedText>
+              </Pressable>
+            ) : null}
 
             <Pressable
               onPress={() => setInStockOnly((current) => !current)}
-              style={[
-                styles.toggleChip,
-                {
-                  backgroundColor: inStockOnly ? tintColor : surfaceMuted,
-                  borderColor: inStockOnly ? tintColor : borderColor,
-                },
-              ]}>
-              <ThemedText
-                style={[styles.toggleChipText, inStockOnly ? styles.toggleChipTextActive : null]}
-                type="defaultSemiBold">
-                {inStockOnly ? '仅看有库存' : '包含无库存'}
-              </ThemedText>
+              style={[styles.stockToggleRow, { backgroundColor: surfaceMuted, borderColor }]}>
+              <View style={styles.stockToggleCopy}>
+                <ThemedText style={styles.stockToggleLabel} type="defaultSemiBold">
+                  仅看有库存
+                </ThemedText>
+                <ThemedText style={styles.stockToggleHint}>
+                  {inStockOnly ? '开启后隐藏无库存商品' : '关闭后显示所有商品'}
+                </ThemedText>
+              </View>
+              <View
+                style={[
+                  styles.stockToggleTrack,
+                  { backgroundColor: inStockOnly ? tintColor : '#CBD5E1' },
+                ]}>
+                <View
+                  style={[
+                    styles.stockToggleThumb,
+                    inStockOnly ? styles.stockToggleThumbOn : styles.stockToggleThumbOff,
+                  ]}
+                />
+              </View>
             </Pressable>
           </View>
         </View>
 
-        <ThemedText style={styles.searchHintText}>支持编码、名称、条码与描述搜索。</ThemedText>
+        <ThemedText style={styles.searchHintText}>
+          {isOrderMode
+            ? '支持编码、名称、条码与描述搜索；仓库留空默认搜索全部仓库，也可直接扫码添加。'
+            : '支持编码、名称、条码与描述搜索；仓库留空默认搜索全部仓库。'}
+        </ThemedText>
 
         <Pressable onPress={() => void handleSearch()} style={[styles.searchButton, { backgroundColor: tintColor }]}>
           <ThemedText style={styles.searchButtonText} type="defaultSemiBold">
@@ -839,8 +856,8 @@ export default function ProductSearchScreen() {
 
       <View style={styles.resultList}>
         {message ? (
-          <View style={[styles.inlineNotice, { backgroundColor: surface, borderColor }]}>
-            <ThemedText style={styles.metaText}>{message}</ThemedText>
+          <View style={[styles.inlineNotice, { backgroundColor: surfaceMuted }]}>
+            <ThemedText style={styles.inlineNoticeText}>{message}</ThemedText>
           </View>
         ) : null}
 
@@ -1082,16 +1099,23 @@ export default function ProductSearchScreen() {
                           ? formatDisplayUom(warehousePickerItem?.stockUom || warehousePickerItem?.uom || '')
                           : ''}
                       </ThemedText>
-                      <ThemedText style={styles.modalWarehouseMeta}>
-                        {warehouseAddedQty > 0 ? `当前仓库已加入数 ${warehouseAddedQty}` : '当前仓库未加入'}
-                      </ThemedText>
                       {stockRow.company ? (
                         <ThemedText style={styles.modalWarehouseMeta}>{stockRow.company}</ThemedText>
                       ) : null}
                     </View>
-                    <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                      {active ? '当前' : '选择'}
-                    </ThemedText>
+                    <View style={styles.modalWarehouseAside}>
+                      <View style={styles.modalWarehouseQtyBlock}>
+                        <ThemedText style={styles.modalWarehouseQtyLabel}>已加</ThemedText>
+                        <ThemedText style={[styles.modalWarehouseQtyValue, { color: tintColor }]} type="defaultSemiBold">
+                          {warehouseAddedQty}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.modalWarehouseActionBlock}>
+                        <ThemedText style={[styles.modalWarehouseAction, { color: tintColor }]} type="defaultSemiBold">
+                          {active ? '当前' : '选择'}
+                        </ThemedText>
+                      </View>
+                    </View>
                   </Pressable>
                 );
               })}
@@ -1112,6 +1136,11 @@ const styles = StyleSheet.create({
     padding: 14,
     zIndex: 40,
   },
+  searchTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
   searchInputWrap: {
     alignItems: 'center',
     borderRadius: 16,
@@ -1121,16 +1150,30 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: 14,
   },
+  searchInputWrapExpanded: {
+    flex: 1,
+  },
   searchInput: {
     flex: 1,
     fontSize: 15,
     minHeight: 38,
     paddingVertical: 0,
   },
+  scanEntryButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 2,
+    justifyContent: 'center',
+    minHeight: 52,
+    width: 72,
+  },
+  scanEntryLabel: {
+    color: '#0F172A',
+    fontSize: 11,
+  },
   searchFilterRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     zIndex: 60,
   },
   inlineFilterInputWrap: {
@@ -1166,20 +1209,60 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 40,
-    minWidth: 104,
+    minWidth: 96,
     paddingHorizontal: 10,
   },
   toggleChipText: {
     color: '#334155',
     fontSize: 13,
   },
-  toggleChipTextActive: {
-    color: '#FFF',
+  stockToggleRow: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  stockToggleCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  stockToggleLabel: {
+    color: '#0F172A',
+    fontSize: 14,
+  },
+  stockToggleHint: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  stockToggleTrack: {
+    borderRadius: 999,
+    height: 28,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    width: 50,
+  },
+  stockToggleThumb: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    height: 22,
+    width: 22,
+  },
+  stockToggleThumbOn: {
+    alignSelf: 'flex-end',
+  },
+  stockToggleThumbOff: {
+    alignSelf: 'flex-start',
   },
   searchHintText: {
     color: '#64748B',
     fontSize: 12,
     lineHeight: 16,
+    marginTop: -2,
   },
   searchButton: {
     alignItems: 'center',
@@ -1241,10 +1324,14 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   inlineNotice: {
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  inlineNoticeText: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 19,
   },
   resultList: {
     gap: 12,
@@ -1416,21 +1503,17 @@ const styles = StyleSheet.create({
     minWidth: 108,
   },
   selectionPill: {
-    alignItems: 'center',
+    alignItems: 'flex-end',
     alignSelf: 'flex-end',
-    borderRadius: 999,
-    flexDirection: 'row',
-    gap: 6,
-    minHeight: 28,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    justifyContent: 'center',
+    minHeight: 20,
   },
-  selectionPillLabel: {
+  selectionPillText: {
     color: '#64748B',
-    fontSize: 11,
+    fontSize: 13,
   },
   selectionPillValue: {
-    fontSize: 13,
+    fontSize: 18,
   },
   actionCurrentValue: {
     color: '#64748B',
@@ -1661,6 +1744,38 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
     minWidth: 0,
+  },
+  modalWarehouseAside: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 0,
+    gap: 20,
+    justifyContent: 'flex-end',
+    marginLeft: 12,
+    minWidth: 132,
+  },
+  modalWarehouseQtyBlock: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'flex-end',
+    minWidth: 64,
+  },
+  modalWarehouseQtyLabel: {
+    color: '#94A3B8',
+    fontSize: 12,
+  },
+  modalWarehouseQtyValue: {
+    fontSize: 30,
+    lineHeight: 32,
+  },
+  modalWarehouseActionBlock: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: 42,
+  },
+  modalWarehouseAction: {
+    fontSize: 18,
   },
   modalWarehouseMeta: {
     color: '#64748B',

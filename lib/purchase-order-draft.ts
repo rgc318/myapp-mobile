@@ -13,6 +13,7 @@ export type PurchaseOrderDraftItem = {
   itemCode: string;
   itemName: string;
   imageUrl?: string | null;
+  standardBuyingRate?: number | null;
   qty: string;
   price: string;
   warehouse: string;
@@ -53,6 +54,7 @@ function normalizeDraftItem(item: Partial<PurchaseOrderDraftItem>) {
     itemCode: typeof item.itemCode === 'string' ? item.itemCode : '',
     itemName: typeof item.itemName === 'string' ? item.itemName : typeof item.itemCode === 'string' ? item.itemCode : '',
     imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
+    standardBuyingRate: normalizeOptionalNumber(item.standardBuyingRate),
     qty: typeof item.qty === 'string' ? item.qty : '1',
     price: typeof item.price === 'string' ? item.price : '',
     warehouse: typeof item.warehouse === 'string' ? item.warehouse : '',

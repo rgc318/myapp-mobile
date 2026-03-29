@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -54,12 +54,30 @@ function buildDraftId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const DRAFT_METADATA_VERSION = 'purchase-buying-rate-v1';
+
+function buildDraftMetadataKey(itemId: string, company: string, warehouse: string) {
+  return `${DRAFT_METADATA_VERSION}::${itemId}::${company.trim()}::${warehouse.trim()}`;
+}
+
 function formatQty(value: number | null | undefined) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '—';
   }
 
   return formatConvertedQty(value);
+}
+
+function formatMoney(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '—';
+  }
+
+  return new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency: 'CNY',
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function getAvailableUoms(item: PurchaseOrderDraftItem) {
@@ -107,6 +125,9 @@ export default function PurchaseOrderCreateScreen() {
   const [supplierError, setSupplierError] = useState('');
   const [companyError, setCompanyError] = useState('');
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
+  const [showSupplierDetails, setShowSupplierDetails] = useState(false);
+  const [expandedItemRows, setExpandedItemRows] = useState<Record<string, boolean>>({});
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{ itemId: string; field: 'warehouse' | 'uom' } | null>(null);
   const [pickerQuery, setPickerQuery] = useState('');
@@ -124,7 +145,6 @@ export default function PurchaseOrderCreateScreen() {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
-  const successColor = useThemeColor({}, 'success');
 
   useEffect(() => {
     if (typeof supplierParam === 'string' && supplierParam.trim()) {
@@ -163,7 +183,7 @@ export default function PurchaseOrderCreateScreen() {
     const activeKeys = new Set(
       draftItems
         .filter((item) => item.itemCode)
-        .map((item) => `${item.id}::${company.trim()}::${item.warehouse.trim()}`),
+        .map((item) => buildDraftMetadataKey(item.id, company, item.warehouse)),
     );
 
     Object.keys(hydratedDraftKeysRef.current).forEach((key) => {
@@ -175,12 +195,13 @@ export default function PurchaseOrderCreateScreen() {
     const missingMetadataItems = draftItems.filter(
       (item) =>
         item.itemCode &&
-        !hydratedDraftKeysRef.current[`${item.id}::${company.trim()}::${item.warehouse.trim()}`] &&
+        !hydratedDraftKeysRef.current[buildDraftMetadataKey(item.id, company, item.warehouse)] &&
         (!item.stockUom ||
           !item.allUoms?.length ||
           typeof item.totalQty !== 'number' ||
           !item.warehouseStockDetails?.length ||
-          !item.imageUrl),
+          !item.imageUrl ||
+          typeof item.standardBuyingRate !== 'number'),
     );
 
     if (!missingMetadataItems.length) {
@@ -190,7 +211,7 @@ export default function PurchaseOrderCreateScreen() {
     let active = true;
 
     missingMetadataItems.forEach((item) => {
-      hydratedDraftKeysRef.current[`${item.id}::${company.trim()}::${item.warehouse.trim()}`] = true;
+      hydratedDraftKeysRef.current[buildDraftMetadataKey(item.id, company, item.warehouse)] = true;
     });
 
     void Promise.all(
@@ -229,6 +250,10 @@ export default function PurchaseOrderCreateScreen() {
             ...item,
             imageUrl: item.imageUrl || detail.imageUrl || null,
             stockUom: item.stockUom || detail.stockUom || null,
+            standardBuyingRate:
+              typeof item.standardBuyingRate === 'number'
+                ? item.standardBuyingRate
+                : detail.priceSummary?.standardBuyingRate ?? null,
             totalQty: typeof detail.totalQty === 'number' ? detail.totalQty : item.totalQty ?? null,
             allUoms: item.allUoms?.length ? item.allUoms : detail.allUoms,
             uomConversions: item.uomConversions?.length ? item.uomConversions : detail.uomConversions,
@@ -409,7 +434,7 @@ export default function PurchaseOrderCreateScreen() {
               label: formatDisplayUom(uom),
               value: uom,
               description:
-                pickerItem.stockUom && uom === pickerItem.stockUom ? `${uom} · 库存单位` : `${uom} · 商品单位`,
+                pickerItem.stockUom && uom === pickerItem.stockUom ? `${uom} · 基准单位（默认）` : `${uom} · 可选采购单位`,
             }));
 
           nextOptions = localOptions.length
@@ -527,6 +552,26 @@ export default function PurchaseOrderCreateScreen() {
     });
   };
 
+  const handleAdjustItemQty = (itemId: string, delta: number) => {
+    setDraftItems((currentItems) => {
+      const nextItems = currentItems.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+
+        const currentQty = Number(item.qty);
+        const safeQty = Number.isFinite(currentQty) ? currentQty : 0;
+        const nextQty = Math.max(safeQty + delta, 1);
+        return {
+          ...item,
+          qty: String(nextQty),
+        };
+      });
+      replacePurchaseOrderDraft(nextItems);
+      return nextItems;
+    });
+  };
+
   const handleAddItem = () => {
     router.push({
       pathname: '/purchase/order/item-search',
@@ -540,6 +585,11 @@ export default function PurchaseOrderCreateScreen() {
   const handleRemoveItem = (itemId: string) => {
     removePurchaseOrderDraftItem(itemId);
     setDraftItems(getPurchaseOrderDraft());
+    setExpandedItemRows((current) => {
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
   };
 
   const closePicker = () => {
@@ -565,18 +615,19 @@ export default function PurchaseOrderCreateScreen() {
   };
 
   const handleAddWarehouseRow = (rows: PurchaseOrderDraftItem[]) => {
+    const nextId = buildDraftId();
     const baseRow = rows[0];
     const nextItems = [
       ...draftItems,
       {
-        id: buildDraftId(),
+        id: nextId,
         itemCode: baseRow.itemCode,
         itemName: baseRow.itemName,
         imageUrl: baseRow.imageUrl ?? null,
         qty: '1',
         price: baseRow.price,
         warehouse: supplierContext?.suggestions.warehouse || preferences.defaultWarehouse || '',
-        uom: baseRow.uom,
+        uom: baseRow.stockUom || baseRow.uom,
         stockUom: baseRow.stockUom ?? null,
         totalQty: baseRow.totalQty ?? null,
         allUoms: baseRow.allUoms ?? [],
@@ -586,6 +637,7 @@ export default function PurchaseOrderCreateScreen() {
     ];
     replacePurchaseOrderDraft(nextItems);
     setDraftItems(nextItems);
+    setExpandedItemRows((current) => ({ ...current, [nextId]: true }));
   };
 
   const handleSubmit = async () => {
@@ -694,86 +746,30 @@ export default function PurchaseOrderCreateScreen() {
           }
           returnToPurchaseHome();
         }}
-        rightAction={
-          <Pressable
-            onPress={() =>
-              router.push({
-                pathname: '/common/supplier-select',
-                params: { returnTo: '/purchase/order/create' },
-              })
-            }
-            style={styles.headerAction}>
-            <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-              选供应商
-            </ThemedText>
-          </Pressable>
-        }
         showBack
         title="采购下单"
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} ref={scrollRef}>
-        <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
-          <View style={styles.heroHeader}>
-            <View style={styles.heroCopy}>
-              <ThemedText style={styles.heroSubtitle}>
-                先完成主体信息，再录入采购商品和入库分配。
-              </ThemedText>
-            </View>
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: '/common/supplier-select',
-                  params: { returnTo: '/purchase/order/create' },
-                })
-              }
-              style={[styles.heroAction, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={[styles.heroActionText, { color: tintColor }]} type="defaultSemiBold">
-                选供应商
-              </ThemedText>
-            </Pressable>
-          </View>
-
-          <View style={styles.heroStatGrid}>
-            <View style={[styles.metricCard, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.metricLabel}>有效明细</ThemedText>
-              <ThemedText style={styles.metricValue} type="defaultSemiBold">
-                {itemCount}
-              </ThemedText>
-            </View>
-            <View style={[styles.metricCard, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.metricLabel}>计划采购数量</ThemedText>
-              <ThemedText style={styles.metricValue} type="defaultSemiBold">
-                {totalQty}
-              </ThemedText>
-            </View>
-            <View style={[styles.metricCard, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.metricLabel}>计划到货</ThemedText>
-              <ThemedText style={styles.metricValueSmall} type="defaultSemiBold">
-                {scheduleDate || '未设置'}
-              </ThemedText>
-            </View>
-          </View>
-
-          <ThemedText style={styles.heroSummaryText}>
-            {supplier.trim()
-              ? `当前供应商 ${supplier.trim()}，公司 ${company.trim() || '未填写'}。`
-              : '先在下方选择供应商和公司，再继续录入采购商品。'}
-          </ThemedText>
-        </View>
-
         <View
           onLayout={(event) => {
             basicSectionYRef.current = event.nativeEvent.layout.y;
           }}
           style={[styles.card, styles.itemsCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.cardHeader}>
-            <ThemedText style={styles.cardTitle} type="defaultSemiBold">
-              基本信息
-            </ThemedText>
-            <ThemedText style={[styles.sectionHint, { color: tintColor }]} type="defaultSemiBold">
-              先定主体
-            </ThemedText>
+            <View style={styles.cardHeaderCopy}>
+              <ThemedText style={styles.cardTitle} type="defaultSemiBold">
+                主体信息
+              </ThemedText>
+              <ThemedText style={styles.sectionBody}>
+                先确认供应商、公司和计划到货时间，再继续添加采购商品。
+              </ThemedText>
+            </View>
+            <View style={[styles.sectionBadge, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={[styles.sectionBadgeText, { color: tintColor }]} type="defaultSemiBold">
+                必填优先
+              </ThemedText>
+            </View>
           </View>
 
           <LinkOptionInput
@@ -792,7 +788,6 @@ export default function PurchaseOrderCreateScreen() {
 
           <LinkOptionInput
             errorText={companyError}
-            helperText="建议使用当前账号默认公司，或沿用供应商上下文建议值。"
             label="公司"
             loadOptions={searchCompanies}
             onChangeText={(value) => {
@@ -805,18 +800,32 @@ export default function PurchaseOrderCreateScreen() {
             value={company}
           />
 
-          <View style={styles.dateGrid}>
-            <View style={styles.dateBlock}>
-              <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                下单日期
-              </ThemedText>
-              <TextInput
-                onChangeText={setTransactionDate}
-                placeholder="YYYY-MM-DD"
-                style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
-                value={transactionDate}
-              />
+          {supplierContext && (supplierContext.suggestions.company || supplierContext.suggestions.warehouse) ? (
+            <View style={[styles.inlineHintCard, { backgroundColor: surfaceMuted }]}>
+              <View style={styles.inlineHintHeader}>
+                <ThemedText style={styles.inlineHintTitle} type="defaultSemiBold">
+                  供应商建议
+                </ThemedText>
+                {isLoadingContext ? <ActivityIndicator color={tintColor} size="small" /> : null}
+              </View>
+              <View style={styles.inlineHintGrid}>
+                <View style={[styles.inlineHintChip, { backgroundColor: surface }]}>
+                  <ThemedText style={styles.inlineHintLabel}>建议公司</ThemedText>
+                  <ThemedText type="defaultSemiBold">
+                    {supplierContext.suggestions.company || company.trim() || '未建议'}
+                  </ThemedText>
+                </View>
+                <View style={[styles.inlineHintChip, { backgroundColor: surface }]}>
+                  <ThemedText style={styles.inlineHintLabel}>建议仓库</ThemedText>
+                  <ThemedText type="defaultSemiBold">
+                    {supplierContext.suggestions.warehouse || '未建议仓库'}
+                  </ThemedText>
+                </View>
+              </View>
             </View>
+          ) : null}
+
+          <View style={styles.dateGrid}>
             <View style={styles.dateBlock}>
               <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
                 计划到货
@@ -828,32 +837,96 @@ export default function PurchaseOrderCreateScreen() {
                 value={scheduleDate}
               />
             </View>
+            <View style={styles.dateBlock}>
+              <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                下单日期
+              </ThemedText>
+              <TextInput
+                onChangeText={setTransactionDate}
+                placeholder="YYYY-MM-DD"
+                style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+                value={transactionDate}
+              />
+              <ThemedText style={styles.selectorHint}>默认今天，通常无需频繁修改。</ThemedText>
+            </View>
           </View>
 
-          <View style={styles.fieldBlock}>
-            <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-              供应商单号
+          <Pressable onPress={() => setShowOptionalFields((current) => !current)} style={styles.foldHeader}>
+            <ThemedText style={styles.foldTitle} type="defaultSemiBold">
+              更多信息（可选）
             </ThemedText>
-            <TextInput
-              onChangeText={setSupplierRef}
-              placeholder="可选，记录对方单号"
-              style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
-              value={supplierRef}
-            />
-          </View>
+            <ThemedText style={[styles.foldAction, { color: tintColor }]} type="defaultSemiBold">
+              {showOptionalFields ? '收起' : '展开'}
+            </ThemedText>
+          </Pressable>
 
-          <View style={styles.fieldBlock}>
-            <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-              备注
-            </ThemedText>
-            <TextInput
-              multiline
-              onChangeText={setRemarks}
-              placeholder="可选，记录本次采购补充说明"
-              style={[styles.input, styles.textarea, { backgroundColor: surfaceMuted, borderColor }]}
-              value={remarks}
-            />
-          </View>
+          {showOptionalFields ? (
+            <View style={styles.foldBody}>
+              <View style={styles.fieldBlock}>
+                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                  供应商单号
+                </ThemedText>
+                <TextInput
+                  onChangeText={setSupplierRef}
+                  placeholder="可选，记录对方单号"
+                  style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+                  value={supplierRef}
+                />
+              </View>
+
+              <View style={styles.fieldBlock}>
+                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                  备注
+                </ThemedText>
+                <TextInput
+                  multiline
+                  onChangeText={setRemarks}
+                  placeholder="可选，记录本次采购补充说明"
+                  style={[styles.input, styles.textarea, { backgroundColor: surfaceMuted, borderColor }]}
+                  value={remarks}
+                />
+              </View>
+            </View>
+          ) : null}
+
+          {supplierContext ? (
+            <>
+              <Pressable onPress={() => setShowSupplierDetails((current) => !current)} style={styles.foldHeader}>
+                <ThemedText style={styles.foldTitle} type="defaultSemiBold">
+                  查看供应商资料
+                </ThemedText>
+                <ThemedText style={[styles.foldAction, { color: tintColor }]} type="defaultSemiBold">
+                  {showSupplierDetails ? '收起' : '展开'}
+                </ThemedText>
+              </Pressable>
+
+              {showSupplierDetails ? (
+                <View style={styles.contextGrid}>
+                  <View style={[styles.contextBlock, { backgroundColor: surfaceMuted }]}>
+                    <ThemedText style={styles.contextLabel}>默认联系人</ThemedText>
+                    <ThemedText type="defaultSemiBold">
+                      {supplierContext.defaultContact?.displayName || '未设置'}
+                    </ThemedText>
+                    {supplierContext.defaultContact?.phone ? (
+                      <ThemedText>{supplierContext.defaultContact.phone}</ThemedText>
+                    ) : null}
+                  </View>
+                  <View style={[styles.contextBlock, { backgroundColor: surfaceMuted }]}>
+                    <ThemedText style={styles.contextLabel}>默认地址</ThemedText>
+                    <ThemedText numberOfLines={3} type="defaultSemiBold">
+                      {supplierContext.defaultAddress?.addressDisplay || '未设置'}
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.contextBlock, { backgroundColor: surfaceMuted }]}>
+                    <ThemedText style={styles.contextLabel}>最近采购地址</ThemedText>
+                    <ThemedText numberOfLines={3} type="defaultSemiBold">
+                      {supplierContext.recentAddresses[0]?.addressDisplay || '暂无记录'}
+                    </ThemedText>
+                  </View>
+                </View>
+              ) : null}
+            </>
+          ) : null}
         </View>
 
         <View
@@ -867,7 +940,7 @@ export default function PurchaseOrderCreateScreen() {
               <ThemedText style={styles.cardTitle} type="defaultSemiBold">
                 采购商品
               </ThemedText>
-              <ThemedText style={styles.sectionHintText}>商品明细决定本次采购数量与入库分配</ThemedText>
+              <ThemedText style={styles.sectionHintText}>先选商品，再按仓库拆分数量和采购价。</ThemedText>
             </View>
             <Pressable onPress={handleAddItem}>
               <ThemedText style={[styles.textAction, { color: tintColor }]} type="defaultSemiBold">
@@ -897,6 +970,11 @@ export default function PurchaseOrderCreateScreen() {
                 }, 0);
                 const projectedTotal =
                   typeof groupLeadRow.totalQty === 'number' ? groupLeadRow.totalQty + groupIncomingQty : null;
+                const groupReferenceBuyingRate =
+                  typeof groupLeadRow.standardBuyingRate === 'number' ? groupLeadRow.standardBuyingRate : null;
+                const groupReferenceUnit = formatDisplayUom(groupLeadRow.stockUom || groupLeadRow.uom || '');
+                const groupReferenceAmount =
+                  typeof groupReferenceBuyingRate === 'number' ? groupIncomingQty * groupReferenceBuyingRate : null;
 
                 return (
                 <View
@@ -923,8 +1001,24 @@ export default function PurchaseOrderCreateScreen() {
                           {group.itemName || group.itemCode}
                         </ThemedText>
                         <ThemedText style={styles.groupMeta}>编码 {group.itemCode}</ThemedText>
+                        <View style={styles.groupInfoRow}>
+                          <ThemedText style={styles.groupInfoText}>
+                            参考进货价{' '}
+                            <ThemedText type="defaultSemiBold">
+                              {groupReferenceBuyingRate != null ? formatMoney(groupReferenceBuyingRate) : '未配置'}
+                            </ThemedText>
+                            {groupReferenceBuyingRate != null && groupReferenceUnit ? ` / ${groupReferenceUnit}` : ''}
+                          </ThemedText>
+                          <ThemedText style={styles.groupInfoText}>
+                            参考金额{' '}
+                            <ThemedText type="defaultSemiBold">
+                              {groupReferenceAmount != null ? formatMoney(groupReferenceAmount) : '—'}
+                            </ThemedText>
+                          </ThemedText>
+                        </View>
                       </View>
                     </View>
+
                     <View style={styles.groupActions}>
                       {group.rows.length === 1 ? (
                         <Pressable
@@ -941,7 +1035,7 @@ export default function PurchaseOrderCreateScreen() {
                               },
                             })
                           }
-                          style={[styles.groupActionButton, { backgroundColor: surface, borderColor }]}>
+                          style={[styles.groupActionButton, styles.groupActionSecondary, { backgroundColor: surface, borderColor }]}>
                           <ThemedText style={[styles.groupActionText, { color: tintColor }]} type="defaultSemiBold">
                             更换商品
                           </ThemedText>
@@ -949,31 +1043,26 @@ export default function PurchaseOrderCreateScreen() {
                       ) : null}
                       <Pressable
                         onPress={() => handleAddWarehouseRow(group.rows)}
-                        style={[styles.groupActionButton, { backgroundColor: surface, borderColor }]}>
-                        <ThemedText style={[styles.groupActionText, { color: tintColor }]} type="defaultSemiBold">
+                        style={[styles.groupActionButton, styles.groupActionPrimary, { backgroundColor: tintColor }]}>
+                        <ThemedText style={styles.groupActionPrimaryText} type="defaultSemiBold">
                           新增仓库行
                         </ThemedText>
                       </Pressable>
                     </View>
                   </View>
 
-                  <View style={styles.groupMetricRow}>
-                    <View style={[styles.groupMetricCard, { backgroundColor: surface }]}>
-                      <ThemedText style={styles.groupMetricLabel}>总库存</ThemedText>
-                      <ThemedText style={styles.groupMetricValue} type="defaultSemiBold">
-                        {formatQty(groupLeadRow.totalQty)} {groupStockUom ? formatDisplayUom(groupStockUom) : ''}
-                      </ThemedText>
-                    </View>
-                    <View style={[styles.groupMetricCard, { backgroundColor: surface }]}>
-                      <ThemedText style={styles.groupMetricLabel}>本次入库后</ThemedText>
-                      <ThemedText style={styles.groupMetricValue} type="defaultSemiBold">
-                        {formatQty(projectedTotal)} {groupStockUom ? formatDisplayUom(groupStockUom) : ''}
-                      </ThemedText>
-                    </View>
-                  </View>
-
-                  <View style={[styles.groupNotice, { backgroundColor: surface }]}>
-                    <ThemedText style={styles.groupHint}>同商品多仓入库时，在这里继续拆分仓库子行。</ThemedText>
+                  <View style={[styles.groupSummaryBar, { backgroundColor: surface }]}>
+                    <ThemedText style={styles.groupSummaryText}>
+                      总库存 <ThemedText type="defaultSemiBold">{formatQty(groupLeadRow.totalQty)} {groupStockUom ? formatDisplayUom(groupStockUom) : ''}</ThemedText>
+                    </ThemedText>
+                    <ThemedText style={styles.groupSummaryDivider}>·</ThemedText>
+                    <ThemedText style={styles.groupSummaryText}>
+                      本次入库后 <ThemedText type="defaultSemiBold">{formatQty(projectedTotal)} {groupStockUom ? formatDisplayUom(groupStockUom) : ''}</ThemedText>
+                    </ThemedText>
+                    <ThemedText style={styles.groupSummaryDivider}>·</ThemedText>
+                    <ThemedText style={styles.groupSummaryText}>
+                      已拆分 <ThemedText type="defaultSemiBold">{group.rows.length}</ThemedText> 条仓库行
+                    </ThemedText>
                   </View>
 
                   <View style={styles.subRowList}>
@@ -994,6 +1083,14 @@ export default function PurchaseOrderCreateScreen() {
                         typeof currentWarehouseStock === 'number'
                           ? currentWarehouseStock + incomingStockQty
                           : null;
+                      const isExpanded = expandedItemRows[item.id] ?? group.rows.length === 1;
+                      const rowUnit = item.uom || item.stockUom || '';
+                      const rowDisplayUnit = formatDisplayUom(rowUnit);
+                      const rowPriceNumber = Number(item.price);
+                      const rowSubtotal =
+                        Number.isFinite(rowQty) && Number.isFinite(rowPriceNumber)
+                          ? rowQty * rowPriceNumber
+                          : null;
 
                       return (
                       <View
@@ -1002,100 +1099,153 @@ export default function PurchaseOrderCreateScreen() {
                           styles.subRowSection,
                           { backgroundColor: surface },
                           rowIndex > 0 ? [styles.subRowSectionDivider, { borderTopColor: borderColor }] : null,
-                        ]}>
+                      ]}>
                         <View style={styles.subRowHeader}>
                           <View style={styles.subRowCopy}>
-                            <View style={styles.subRowBadge}>
-                              <ThemedText style={styles.subRowBadgeText} type="defaultSemiBold">
-                                仓库分配 {rowIndex + 1}
+                            <View style={styles.subRowTitleRow}>
+                              <View style={styles.subRowBadge}>
+                                <ThemedText style={styles.subRowBadgeText} type="defaultSemiBold">
+                                  仓库分配 {rowIndex + 1}
+                                </ThemedText>
+                              </View>
+                              <ThemedText style={styles.subRowSummaryText}>
+                                {item.warehouse || '未选仓库'} · 数量 {item.qty || '0'} · 单价 {item.price || '默认'}
                               </ThemedText>
                             </View>
-                            <ThemedText style={styles.subRowMeta}>这一行会生成一条采购明细，适合拆分到不同仓库。</ThemedText>
+                            <View style={styles.subRowSummaryInline}>
+                              <ThemedText style={styles.subRowMetaCompact}>
+                                当前仓库 {formatQty(currentWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
+                              </ThemedText>
+                              <ThemedText style={styles.subRowSummaryDivider}>→</ThemedText>
+                              <ThemedText style={styles.subRowMetaCompact}>
+                                入库后 {formatQty(projectedWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
+                              </ThemedText>
+                            </View>
                           </View>
-                          <Pressable onPress={() => handleRemoveItem(item.id)} style={[styles.subRowRemove, { borderColor }]}>
-                            <ThemedText style={styles.subRowRemoveText} type="defaultSemiBold">
-                              删除
-                            </ThemedText>
-                          </Pressable>
-                        </View>
-
-                        <View style={styles.subRowInventoryRow}>
-                          <View style={[styles.subRowInventoryCard, { backgroundColor: surfaceMuted }]}>
-                            <ThemedText style={styles.subRowInventoryLabel}>当前仓库库存</ThemedText>
-                            <ThemedText style={styles.subRowInventoryValue} type="defaultSemiBold">
-                              {formatQty(currentWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
-                            </ThemedText>
-                          </View>
-                          <View style={[styles.subRowInventoryCard, { backgroundColor: surfaceMuted }]}>
-                            <ThemedText style={styles.subRowInventoryLabel}>入库后库存</ThemedText>
-                            <ThemedText style={styles.subRowInventoryValue} type="defaultSemiBold">
-                              {formatQty(projectedWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
-                            </ThemedText>
-                          </View>
-                        </View>
-
-                        <View style={styles.subRowGrid}>
-                          <View style={styles.subRowField}>
-                            <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                              数量
-                            </ThemedText>
-                            <TextInput
-                              keyboardType="decimal-pad"
-                              onChangeText={(value) => handleItemChange(item.id, 'qty', value)}
-                              placeholder="数量"
-                              style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
-                              value={item.qty}
-                            />
-                          </View>
-                          <View style={styles.subRowField}>
-                            <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                              实际采购价
-                            </ThemedText>
-                            <TextInput
-                              keyboardType="decimal-pad"
-                              onChangeText={(value) => handleItemChange(item.id, 'price', value)}
-                              placeholder="留空则沿用默认采购价"
-                              style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
-                              value={item.price}
-                            />
+                          <View style={styles.subRowHeaderActions}>
+                            <Pressable
+                              onPress={() =>
+                                setExpandedItemRows((current) => ({ ...current, [item.id]: !isExpanded }))
+                              }
+                              style={[styles.subRowToggle, { borderColor }]}>
+                              <ThemedText style={[styles.subRowToggleText, { color: tintColor }]} type="defaultSemiBold">
+                                {isExpanded ? '收起' : '编辑'}
+                              </ThemedText>
+                            </Pressable>
+                            <Pressable onPress={() => handleRemoveItem(item.id)} style={[styles.subRowRemove, { borderColor }]}>
+                              <ThemedText style={styles.subRowRemoveText} type="defaultSemiBold">
+                                删除
+                              </ThemedText>
+                            </Pressable>
                           </View>
                         </View>
 
-                        <View style={styles.subRowField}>
-                          <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                            入库仓库
-                          </ThemedText>
-                          <Pressable
-                            onPress={() => openPicker(item.id, 'warehouse')}
-                            style={[styles.selectorButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                            <ThemedText style={styles.selectorButtonText}>
-                              {item.warehouse || '选择入库仓库'}
-                            </ThemedText>
-                          </Pressable>
-                          <ThemedText style={styles.selectorHint}>
-                            未填写时会优先尝试使用供应商建议仓库或你的默认仓库。
-                          </ThemedText>
-                        </View>
+                        {isExpanded ? (
+                          <View style={styles.subRowEditBody}>
+                            <View style={styles.subRowGrid}>
+                              <View style={styles.subRowField}>
+                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                                  采购数量 {rowUnit ? `(${rowDisplayUnit})` : ''}
+                                </ThemedText>
+                                <View style={[styles.qtyStepper, { backgroundColor: surfaceMuted, borderColor }]}>
+                                  <Pressable
+                                    disabled={(Number(item.qty) || 0) <= 1}
+                                    onPress={() => handleAdjustItemQty(item.id, -1)}
+                                    style={[
+                                      styles.qtyActionButton,
+                                      (Number(item.qty) || 0) <= 1 ? styles.qtyActionButtonDisabled : null,
+                                    ]}>
+                                    <ThemedText style={[styles.qtyActionText, { color: tintColor }]} type="defaultSemiBold">
+                                      -
+                                    </ThemedText>
+                                  </Pressable>
+                                  <TextInput
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(value) => handleItemChange(item.id, 'qty', value)}
+                                    placeholder="数量"
+                                    style={[
+                                      styles.qtyInput,
+                                      styles.textInputReset,
+                                      Platform.OS === 'web' ? styles.webTextInputReset : null,
+                                    ]}
+                                    value={item.qty}
+                                  />
+                                  <Pressable onPress={() => handleAdjustItemQty(item.id, 1)} style={styles.qtyActionButton}>
+                                    <ThemedText style={[styles.qtyActionText, { color: tintColor }]} type="defaultSemiBold">
+                                      +
+                                    </ThemedText>
+                                  </Pressable>
+                                </View>
+                              </View>
+                              <View style={styles.subRowField}>
+                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                                  实际采购价 {rowUnit ? `(元/${rowDisplayUnit})` : ''}
+                                </ThemedText>
+                                <View style={[styles.priceInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
+                                  <ThemedText style={styles.pricePrefix}>¥</ThemedText>
+                                  <TextInput
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(value) => handleItemChange(item.id, 'price', value)}
+                                    placeholder="单价"
+                                    style={[
+                                      styles.priceInput,
+                                      styles.textInputReset,
+                                      Platform.OS === 'web' ? styles.webTextInputReset : null,
+                                    ]}
+                                    value={item.price}
+                                  />
+                                </View>
+                              </View>
+                            </View>
 
-                        <View style={styles.subRowField}>
-                          <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                            单位
-                          </ThemedText>
-                          <Pressable
-                            onPress={() => openPicker(item.id, 'uom')}
-                            style={[styles.selectorButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                            <ThemedText style={styles.selectorButtonText}>
-                              {item.uom || '选择录入单位'}
-                            </ThemedText>
-                          </Pressable>
-                          <ThemedText style={styles.selectorHint}>
-                            {item.stockUom && item.uom && item.stockUom !== item.uom
-                              ? `库存单位 ${formatDisplayUom(item.stockUom)}，系统会按换算关系计算入库量。`
-                              : item.stockUom
-                                ? `当前库存单位 ${formatDisplayUom(item.stockUom)}。`
-                                : '优先展示商品已配置单位。'}
-                          </ThemedText>
-                        </View>
+                            <View style={styles.subRowGrid}>
+                              <View style={styles.subRowField}>
+                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                                  采购单位
+                                  <ThemedText style={styles.fieldLabelHint}>
+                                    {item.stockUom && item.uom && item.stockUom !== item.uom
+                                      ? `（默认按${formatDisplayUom(item.stockUom)}带入，库存按${formatDisplayUom(item.stockUom)}换算）`
+                                      : item.stockUom
+                                        ? `（默认：${formatDisplayUom(item.stockUom)}基准单位）`
+                                        : ''}
+                                  </ThemedText>
+                                </ThemedText>
+                                <Pressable
+                                  onPress={() => openPicker(item.id, 'uom')}
+                                  style={[styles.compactInfoBox, { backgroundColor: surfaceMuted, borderColor }]}>
+                                  <ThemedText style={styles.compactInfoValue} type="defaultSemiBold">
+                                    {rowUnit ? rowDisplayUnit : '选择单位'}
+                                  </ThemedText>
+                                </Pressable>
+                              </View>
+
+                              <View style={styles.subRowField}>
+                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                                  小计
+                                </ThemedText>
+                                <View style={[styles.compactInfoBox, { backgroundColor: surfaceMuted, borderColor }]}>
+                                  <ThemedText style={styles.compactInfoValueStrong} type="defaultSemiBold">
+                                    {formatMoney(rowSubtotal)}
+                                  </ThemedText>
+                                </View>
+                              </View>
+                            </View>
+
+                            <View style={styles.subRowField}>
+                              <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                                入库仓库
+                                <ThemedText style={styles.fieldLabelHint}>（留空时优先建议仓/默认仓）</ThemedText>
+                              </ThemedText>
+                              <Pressable
+                                onPress={() => openPicker(item.id, 'warehouse')}
+                                style={[styles.selectorButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                                <ThemedText style={styles.selectorButtonText}>
+                                  {item.warehouse || '选择入库仓库'}
+                                </ThemedText>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ) : null}
                       </View>
                     )})}
                   </View>
@@ -1119,71 +1269,20 @@ export default function PurchaseOrderCreateScreen() {
           </View>
         </View>
 
-        <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
-          <View style={styles.cardHeader}>
-            <ThemedText style={styles.cardTitle} type="defaultSemiBold">
-              供应商上下文
-            </ThemedText>
-            {isLoadingContext ? <ActivityIndicator color={tintColor} /> : null}
-          </View>
-
-          {supplierContext ? (
-            <View style={styles.contextGrid}>
-              <View style={[styles.contextBlock, { backgroundColor: surfaceMuted }]}>
-                <ThemedText style={styles.contextLabel}>默认联系人</ThemedText>
-                <ThemedText type="defaultSemiBold">
-                  {supplierContext.defaultContact?.displayName || '未设置'}
-                </ThemedText>
-                {supplierContext.defaultContact?.phone ? (
-                  <ThemedText>{supplierContext.defaultContact.phone}</ThemedText>
-                ) : null}
-              </View>
-              <View style={[styles.contextBlock, { backgroundColor: surfaceMuted }]}>
-                <ThemedText style={styles.contextLabel}>默认地址</ThemedText>
-                <ThemedText numberOfLines={3} type="defaultSemiBold">
-                  {supplierContext.defaultAddress?.addressDisplay || '未设置'}
-                </ThemedText>
-              </View>
-              <View style={[styles.contextBlock, { backgroundColor: surfaceMuted }]}>
-                <ThemedText style={styles.contextLabel}>建议公司 / 仓库</ThemedText>
-                <ThemedText type="defaultSemiBold">
-                  {supplierContext.suggestions.company || '未建议'}
-                </ThemedText>
-                <ThemedText>{supplierContext.suggestions.warehouse || '未建议仓库'}</ThemedText>
-              </View>
-              <View style={[styles.contextBlock, { backgroundColor: surfaceMuted }]}>
-                <ThemedText style={styles.contextLabel}>最近采购地址</ThemedText>
-                <ThemedText numberOfLines={3} type="defaultSemiBold">
-                  {supplierContext.recentAddresses[0]?.addressDisplay || '暂无记录'}
-                </ThemedText>
-              </View>
-            </View>
-          ) : (
-            <View style={[styles.emptyState, { backgroundColor: surfaceMuted }]}>
-              <ThemedText type="defaultSemiBold">选择供应商后会自动读取默认信息</ThemedText>
-              <ThemedText>这里会展示默认联系人、默认地址和建议仓库，方便你在下单后补充核对。</ThemedText>
-            </View>
-          )}
-        </View>
-
-        <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
-          <View style={styles.cardHeader}>
-            <ThemedText style={styles.cardTitle} type="defaultSemiBold">
-              提交前检查
-            </ThemedText>
-            <ThemedText style={[styles.summaryCount, { color: successColor }]} type="defaultSemiBold">
-              {validItems.length} 条有效明细
-            </ThemedText>
-          </View>
-          <ThemedText>
-            当前会调用 `create_purchase_order`，创建并提交采购订单。后续收货、开票和付款将从采购订单详情页继续进入。
-          </ThemedText>
-        </View>
-
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
       <View style={[styles.bottomBar, { backgroundColor: surface, borderTopColor: borderColor }]}>
+        <View style={styles.bottomBarSummary}>
+          <ThemedText style={styles.bottomBarTitle} type="defaultSemiBold">
+            {itemCount ? `已选 ${itemCount} 条有效明细` : '先添加采购商品'}
+          </ThemedText>
+          <ThemedText style={styles.bottomBarMeta}>
+            {itemCount
+              ? `计划采购 ${formatQty(totalQty)} · 到货 ${scheduleDate || '未设置'}`
+              : '完成主体信息后，从商品页继续添加采购明细。'}
+          </ThemedText>
+        </View>
         <Pressable
           disabled={isSubmitting}
           onPress={handleSubmit}
@@ -1204,10 +1303,10 @@ export default function PurchaseOrderCreateScreen() {
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle} type="title">
-                {pickerTarget?.field === 'warehouse' ? '选择入库仓库' : '选择录入单位'}
+                {pickerTarget?.field === 'warehouse' ? '选择入库仓库' : '选择采购单位'}
               </ThemedText>
               <ThemedText style={styles.sectionHintText}>
-                {pickerTarget?.field === 'warehouse' ? '选择这一行商品最终入库的仓库。' : '优先显示商品已配置单位。'}
+                {pickerTarget?.field === 'warehouse' ? '选择这一行商品最终入库的仓库。' : '默认优先使用商品基准单位，也可以改成其他可换算单位。'}
               </ThemedText>
             </View>
             <View style={[styles.modalSearchWrap, { backgroundColor: surfaceMuted, borderColor }]}>
@@ -1324,48 +1423,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
   },
-  headerAction: {
-    alignItems: 'flex-end',
-    minWidth: 72,
-  },
-  heroCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    gap: 16,
-    padding: 18,
-  },
-  heroHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  heroCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  heroSubtitle: {
-    color: '#475569',
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  heroAction: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  heroActionText: {
-    fontSize: 13,
-  },
-  heroStatGrid: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  heroSummaryText: {
-    color: '#64748B',
-    fontSize: 13,
-    lineHeight: 20,
-  },
   card: {
     borderRadius: 24,
     borderWidth: 1,
@@ -1377,6 +1434,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     justifyContent: 'space-between',
+  },
+  cardHeaderCopy: {
+    flex: 1,
+    gap: 4,
   },
   sectionHeader: {
     alignItems: 'center',
@@ -1405,11 +1466,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  sectionHint: {
+  sectionBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  sectionBadgeText: {
     fontSize: 12,
   },
   textAction: {
     fontSize: 13,
+  },
+  inlineHintCard: {
+    borderRadius: 18,
+    gap: 10,
+    padding: 14,
+  },
+  inlineHintHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  inlineHintTitle: {
+    fontSize: 14,
+  },
+  inlineHintGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  inlineHintChip: {
+    borderRadius: 14,
+    flex: 1,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  inlineHintLabel: {
+    color: '#64748B',
+    fontSize: 12,
   },
   dateGrid: {
     flexDirection: 'row',
@@ -1448,23 +1542,6 @@ const styles = StyleSheet.create({
   contextLabel: {
     color: '#64748B',
     fontSize: 12,
-  },
-  metricCard: {
-    borderRadius: 18,
-    flex: 1,
-    gap: 6,
-    padding: 14,
-  },
-  metricLabel: {
-    color: '#64748B',
-    fontSize: 12,
-  },
-  metricValue: {
-    fontSize: 24,
-    lineHeight: 28,
-  },
-  metricValueSmall: {
-    fontSize: 15,
   },
   emptyState: {
     borderRadius: 18,
@@ -1512,8 +1589,8 @@ const styles = StyleSheet.create({
   },
   groupLead: {
     alignItems: 'center',
-    flex: 1,
     flexDirection: 'row',
+    flex: 1,
     gap: 12,
     minWidth: 0,
   },
@@ -1546,47 +1623,61 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 12,
   },
-  groupActions: {
+  groupInfoRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 10,
+  },
+  groupInfoText: {
+    color: '#71859D',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  groupActions: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
     gap: 8,
   },
   groupActionButton: {
-    borderRadius: 14,
+    alignItems: 'center',
+    borderRadius: 12,
     borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 34,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 6,
+  },
+  groupActionSecondary: {
+    minWidth: 104,
+  },
+  groupActionPrimary: {
+    borderWidth: 0,
+    minWidth: 104,
   },
   groupActionText: {
-    fontSize: 13,
+    fontSize: 12,
   },
-  groupHint: {
+  groupActionPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+  },
+  groupSummaryBar: {
+    alignItems: 'center',
+    borderRadius: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  groupSummaryText: {
     color: '#64748B',
     fontSize: 12,
     lineHeight: 18,
   },
-  groupMetricRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  groupMetricCard: {
-    borderRadius: 14,
-    flex: 1,
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  groupMetricLabel: {
-    color: '#64748B',
+  groupSummaryDivider: {
+    color: '#CBD5E1',
     fontSize: 12,
-  },
-  groupMetricValue: {
-    fontSize: 15,
-  },
-  groupNotice: {
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
   },
   subRowList: {
     gap: 10,
@@ -1594,7 +1685,7 @@ const styles = StyleSheet.create({
   },
   subRowSection: {
     borderRadius: 16,
-    gap: 12,
+    gap: 10,
     padding: 12,
     zIndex: 20,
   },
@@ -1610,6 +1701,13 @@ const styles = StyleSheet.create({
   },
   subRowCopy: {
     flex: 1,
+    gap: 6,
+  },
+  subRowTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   subRowBadge: {
     alignSelf: 'flex-start',
@@ -1622,29 +1720,38 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     fontSize: 12,
   },
-  subRowMeta: {
+  subRowSummaryText: {
+    color: '#475569',
+    fontSize: 12,
+  },
+  subRowSummaryInline: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  subRowMetaCompact: {
     color: '#64748B',
     fontSize: 12,
     lineHeight: 18,
-    marginTop: 8,
   },
-  subRowInventoryRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  subRowInventoryCard: {
-    borderRadius: 14,
-    flex: 1,
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  subRowInventoryLabel: {
-    color: '#64748B',
+  subRowSummaryDivider: {
+    color: '#94A3B8',
     fontSize: 12,
   },
-  subRowInventoryValue: {
-    fontSize: 14,
+  subRowHeaderActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  subRowToggle: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  subRowToggleText: {
+    fontSize: 12,
   },
   subRowRemove: {
     borderRadius: 999,
@@ -1656,6 +1763,9 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontSize: 12,
   },
+  subRowEditBody: {
+    gap: 12,
+  },
   subRowGrid: {
     flexDirection: 'row',
     gap: 10,
@@ -1663,6 +1773,100 @@ const styles = StyleSheet.create({
   subRowField: {
     flex: 1,
     gap: 8,
+  },
+  qtyStepper: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 52,
+    overflow: 'hidden',
+  },
+  qtyActionButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    width: 38,
+  },
+  qtyActionButtonDisabled: {
+    opacity: 0.35,
+  },
+  qtyActionText: {
+    fontSize: 20,
+    lineHeight: 20,
+  },
+  qtyInput: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    color: '#111827',
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    margin: 0,
+    minHeight: 52,
+    minWidth: 34,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    textAlign: 'center',
+  },
+  priceInputWrap: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 52,
+    paddingHorizontal: 12,
+  },
+  pricePrefix: {
+    color: '#94A3B8',
+    fontSize: 14,
+  },
+  priceInput: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    color: '#0F172A',
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    margin: 0,
+    minHeight: 52,
+    minWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  textInputReset: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    margin: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  webTextInputReset: {
+    outlineColor: 'transparent',
+    outlineOffset: 0,
+    outlineStyle: 'none',
+    outlineWidth: 0,
+  },
+  fieldLabelHint: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '400',
+  },
+  compactInfoBox: {
+    alignItems: 'flex-start',
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingHorizontal: 14,
+  },
+  compactInfoValue: {
+    fontSize: 16,
+  },
+  compactInfoValueStrong: {
+    color: '#0F172A',
+    fontSize: 16,
   },
   selectorButton: {
     borderRadius: 16,
@@ -1681,16 +1885,41 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingLeft: 4,
   },
-  summaryCount: {
+  foldHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 24,
+  },
+  foldTitle: {
+    fontSize: 15,
+  },
+  foldAction: {
     fontSize: 13,
   },
+  foldBody: {
+    gap: 12,
+  },
   bottomSpacer: {
-    height: 88,
+    height: 120,
   },
   bottomBar: {
     borderTopWidth: 1,
+    gap: 10,
     paddingHorizontal: 12,
     paddingVertical: 12,
+  },
+  bottomBarSummary: {
+    gap: 2,
+    paddingHorizontal: 4,
+  },
+  bottomBarTitle: {
+    fontSize: 14,
+  },
+  bottomBarMeta: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
   },
   footerButton: {
     alignItems: 'center',

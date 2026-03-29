@@ -2347,6 +2347,62 @@ The old mode reminder banner on the home dashboard was removed.
 - it no longer helps users complete the primary home-page tasks
 - it consumed vertical space that is more valuable for real navigation or business data
 
+## Sales And Purchase Mobile Entry Cleanup (2026-03-29)
+
+This round focused on making sales and purchase creation flows behave more like real mobile task pages instead of compressed desktop forms.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/link-option-input.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/item-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/purchase-order-draft.ts`
+
+### What Changed
+
+- sales-order entry was simplified:
+  - the outer `扫码添加` card was removed
+  - sales order now keeps a single `选择商品` entry
+  - the order page clearly points users into the shared product-search page for both search and future scan-add flows
+- shared product search was rebuilt as a stronger order-mode picker:
+  - top search tools were compressed into a mobile toolbar
+  - scan entry moved into the search page itself
+  - warehouse filter now defaults to "all warehouses" when empty
+  - the confusing `全部仓库` action was removed
+  - a dedicated `切换` action was added inside the warehouse selector input
+  - stock filter now uses a more explicit on/off switch treatment
+  - lightweight status messaging replaced the heavier extra notice card
+  - warehouse-switch rows now emphasize per-warehouse added quantity more clearly
+- the shared `LinkOptionInput` component was extended:
+  - right-side inline action text is now supported
+  - dropdown open/close state no longer relies only on raw input focus
+  - this prevents the warehouse selector from flashing open, reopening after selection, or refusing to close
+- purchase-order create flow was tightened:
+  - the top intro and repeated guidance blocks were reduced
+  - optional fields moved later in the form
+  - purchase item groups were changed to summary-first cards
+  - warehouse sub-rows now support a compact edit/expand flow
+  - quantity input now uses a stepper
+  - subtotal and reference buying price are shown with clearer hierarchy
+  - purchase unit defaults to the stock/base unit while still remaining editable
+- purchase item search was also compressed into a better mobile picker:
+  - products now auto-load without forcing a first keyword
+  - cards were flattened for faster scan speed
+  - add/remove controls were redesigned to feel closer to a mobile cart picker
+
+### Why
+
+- on real mobile widths, duplicated entry points and stacked helper cards consumed too much vertical space
+- sales and purchase users should enter goods selection through one clear path, then choose between searching and scanning inside that picker
+- warehouse filtering should feel like a filter, not like a second workflow
+- purchase creation especially benefits from:
+  - fewer repeated explanations
+  - stronger action hierarchy
+  - clearer default unit and price semantics
+- stabilizing the shared warehouse selector interaction is important because both sales and purchase search flows depend on it
+
 ### Common packaging failures already seen in this project
 
 1. Java not found
