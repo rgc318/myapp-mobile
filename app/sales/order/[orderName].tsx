@@ -23,10 +23,15 @@ import {
   buildWarehouseStockDisplay,
 } from '@/lib/uom-display';
 import {
+  clearSalesOrderDraftForm,
   clearSalesOrderDraft,
+  getSalesOrderDraftForm,
   getSalesOrderDraft,
+  hasSalesOrderDraftForm,
   replaceSalesOrderDraft,
+  updateSalesOrderDraftForm,
   type SalesOrderDraftItem,
+  type SalesOrderDraftForm,
 } from '@/lib/sales-order-draft';
 import { fetchProductDetail } from '@/services/products';
 import {
@@ -297,6 +302,28 @@ function mapDraftItemToEditable(item: SalesOrderDraftItem): EditableOrderItem {
   };
 }
 
+function buildScopedDraftForm(
+  detail: SalesOrderDetailV2 | null,
+  values: {
+    deliveryDate: string;
+    remarks: string;
+    shippingAddress: string;
+    shippingContact: string;
+    shippingPhone: string;
+  },
+): Partial<SalesOrderDraftForm> {
+  return {
+    customer: detail?.customer ?? '',
+    company: detail?.company ?? '',
+    defaultSalesMode: normalizeSalesMode(detail?.defaultSalesMode),
+    deliveryDate: values.deliveryDate,
+    remarks: values.remarks,
+    shippingAddress: values.shippingAddress,
+    shippingContact: values.shippingContact,
+    shippingPhone: values.shippingPhone,
+  };
+}
+
 function buildComparableItemSignature(items: {
   itemCode: string;
   qty: number | null;
@@ -368,7 +395,7 @@ export default function SalesOrderDetailScreen() {
   }>();
   const isFocused = useIsFocused();
   const orderDraftScope = orderName ? `order-edit:${orderName}` : 'order-edit';
-  const resumeEditMode = resumeEdit === 'items' ? 'items' : undefined;
+  const resumeEditMode = resumeEdit === 'all' || resumeEdit === 'items' ? resumeEdit : undefined;
 
   const [detail, setDetail] = useState<SalesOrderDetailV2 | null>(null);
   const [message, setMessage] = useState('');
@@ -419,7 +446,13 @@ export default function SalesOrderDetailScreen() {
         }
 
         const scopedDraft =
-          isEditingItems || resumeEditMode === 'items' ? getSalesOrderDraft(orderDraftScope) : [];
+          isEditingItems || resumeEditMode === 'items' || resumeEditMode === 'all'
+            ? getSalesOrderDraft(orderDraftScope)
+            : [];
+        const scopedDraftForm =
+          isEditingContact || isEditingRemarks || resumeEditMode === 'all' || hasSalesOrderDraftForm(orderDraftScope)
+            ? getSalesOrderDraftForm(orderDraftScope)
+            : null;
         const detailItems =
           nextDetail?.items.map((item) => ({
             itemCode: item.itemCode,
@@ -440,20 +473,45 @@ export default function SalesOrderDetailScreen() {
           })) ?? [];
         const nextEditableItems = scopedDraft.length ? scopedDraft.map(mapDraftItemToEditable) : detailItems;
 
+        const shouldRestoreDraftItems =
+          scopedDraft.length > 0 && (isEditingItems || resumeEditMode === 'items' || resumeEditMode === 'all');
+        const shouldRestoreDraftForm =
+          scopedDraftForm != null && (isEditingContact || isEditingRemarks || resumeEditMode === 'all');
+
         setDetail(nextDetail);
-        setDeliveryDateInput(nextDetail?.deliveryDate ?? '');
-        setContactDisplayInput(nextDetail?.contactDisplay ?? nextDetail?.contactPerson ?? '');
-        setContactPhoneInput(nextDetail?.contactPhone ?? '');
-        setAddressInput(nextDetail?.addressDisplay ?? '');
-        setRemarksInput(nextDetail?.remarks ?? '');
-        setEditableItems(nextEditableItems);
+        if (shouldRestoreDraftForm) {
+          setDeliveryDateInput(scopedDraftForm.deliveryDate);
+          setContactDisplayInput(scopedDraftForm.shippingContact);
+          setContactPhoneInput(scopedDraftForm.shippingPhone);
+          setAddressInput(scopedDraftForm.shippingAddress);
+        } else if (!isEditingContact) {
+          setDeliveryDateInput(nextDetail?.deliveryDate ?? '');
+          setContactDisplayInput(nextDetail?.contactDisplay ?? nextDetail?.contactPerson ?? '');
+          setContactPhoneInput(nextDetail?.contactPhone ?? '');
+          setAddressInput(nextDetail?.addressDisplay ?? '');
+        }
+        if (shouldRestoreDraftForm) {
+          setRemarksInput(scopedDraftForm.remarks);
+        } else if (!isEditingRemarks) {
+          setRemarksInput(nextDetail?.remarks ?? '');
+        }
+        if (shouldRestoreDraftItems) {
+          setEditableItems(nextEditableItems);
+        } else if (!isEditingItems) {
+          setEditableItems(detailItems);
+        }
         if (nextDetail?.latestSalesInvoice) {
           const paymentNotice = getPaymentResultHandoff(nextDetail.latestSalesInvoice);
           setRecentPaymentNotice((previous) => paymentNotice ?? previous);
         } else {
           setRecentPaymentNotice(null);
         }
-        if (resumeEditMode === 'items' && scopedDraft.length) {
+        if (resumeEditMode === 'all') {
+          setIsEditingContact(true);
+          setIsEditingItems(true);
+          setIsEditingRemarks(true);
+          (navigation as any).setParams?.({ resumeEdit: undefined });
+        } else if (resumeEditMode === 'items' && scopedDraft.length) {
           setIsEditingContact(false);
           setIsEditingRemarks(false);
           setIsEditingItems(true);
@@ -472,7 +530,7 @@ export default function SalesOrderDetailScreen() {
     return () => {
       active = false;
     };
-  }, [isFocused, isEditingItems, navigation, orderDraftScope, orderName, resumeEditMode]);
+  }, [isFocused, isEditingContact, isEditingItems, isEditingRemarks, navigation, orderDraftScope, orderName, resumeEditMode]);
 
   useEffect(() => {
     if (!isFocused || !isEditingItems) {
@@ -692,6 +750,34 @@ export default function SalesOrderDetailScreen() {
     }
   }, [isFocused, allowLeaveRef]);
 
+  useEffect(() => {
+    if (!orderName || (!isEditingContact && !isEditingRemarks)) {
+      return;
+    }
+
+    updateSalesOrderDraftForm(
+      buildScopedDraftForm(detail, {
+        deliveryDate: deliveryDateInput,
+        remarks: remarksInput,
+        shippingAddress: addressInput,
+        shippingContact: contactDisplayInput,
+        shippingPhone: contactPhoneInput,
+      }),
+      orderDraftScope,
+    );
+  }, [
+    addressInput,
+    contactDisplayInput,
+    contactPhoneInput,
+    detail,
+    deliveryDateInput,
+    isEditingContact,
+    isEditingRemarks,
+    orderName,
+    orderDraftScope,
+    remarksInput,
+  ]);
+
   async function handleSaveContact() {
     if (!orderName) {
       return;
@@ -709,6 +795,7 @@ export default function SalesOrderDetailScreen() {
       });
 
       setDetail(nextDetail);
+      clearSalesOrderDraftForm(orderDraftScope);
       setIsEditingContact(false);
       showSuccess('收货与联系人已更新。');
     } catch (error) {
@@ -728,6 +815,7 @@ export default function SalesOrderDetailScreen() {
       setIsCancelling(true);
       const nextDetail = await cancelSalesOrderV2(orderName);
       setDetail(nextDetail);
+      clearSalesOrderDraftForm(orderDraftScope);
       setIsEditingContact(false);
       setIsEditingItems(false);
       setIsEditingRemarks(false);
@@ -802,6 +890,7 @@ export default function SalesOrderDetailScreen() {
     setContactDisplayInput(detail?.contactDisplay ?? detail?.contactPerson ?? '');
     setContactPhoneInput(detail?.contactPhone ?? '');
     setAddressInput(detail?.addressDisplay ?? '');
+    clearSalesOrderDraftForm(orderDraftScope);
     setIsEditingContact(false);
   }
 
@@ -835,6 +924,16 @@ export default function SalesOrderDetailScreen() {
     setRemarksInput(baseDetail?.remarks ?? '');
     setEditableItems(nextItems);
     syncScopedDraft(nextItems);
+    updateSalesOrderDraftForm(
+      buildScopedDraftForm(baseDetail, {
+        deliveryDate: baseDetail?.deliveryDate ?? '',
+        remarks: baseDetail?.remarks ?? '',
+        shippingAddress: baseDetail?.addressDisplay ?? '',
+        shippingContact: baseDetail?.contactDisplay ?? baseDetail?.contactPerson ?? '',
+        shippingPhone: baseDetail?.contactPhone ?? '',
+      }),
+      orderDraftScope,
+    );
   }
 
   function updateEditableItem(index: number, patch: Partial<EditableOrderItem>) {
@@ -907,6 +1006,27 @@ export default function SalesOrderDetailScreen() {
     );
   }
 
+  function syncScopedFormDraft(
+    nextValues?: Partial<{
+      deliveryDate: string;
+      remarks: string;
+      shippingAddress: string;
+      shippingContact: string;
+      shippingPhone: string;
+    }>,
+  ) {
+    updateSalesOrderDraftForm(
+      buildScopedDraftForm(detail, {
+        deliveryDate: nextValues?.deliveryDate ?? deliveryDateInput,
+        remarks: nextValues?.remarks ?? remarksInput,
+        shippingAddress: nextValues?.shippingAddress ?? addressInput,
+        shippingContact: nextValues?.shippingContact ?? contactDisplayInput,
+        shippingPhone: nextValues?.shippingPhone ?? contactPhoneInput,
+      }),
+      orderDraftScope,
+    );
+  }
+
   function startEditingContact() {
     if (!requestEditEntry('contact')) {
       return;
@@ -917,6 +1037,12 @@ export default function SalesOrderDetailScreen() {
     setContactDisplayInput(detail?.contactDisplay ?? detail?.contactPerson ?? '');
     setContactPhoneInput(detail?.contactPhone ?? '');
     setAddressInput(detail?.addressDisplay ?? '');
+    syncScopedFormDraft({
+      deliveryDate: detail?.deliveryDate ?? '',
+      shippingContact: detail?.contactDisplay ?? detail?.contactPerson ?? '',
+      shippingPhone: detail?.contactPhone ?? '',
+      shippingAddress: detail?.addressDisplay ?? '',
+    });
     setIsEditingContact(true);
   }
 
@@ -1031,11 +1157,15 @@ export default function SalesOrderDetailScreen() {
     setIsEditingContact(false);
     setIsEditingItems(false);
     setRemarksInput(detail?.remarks ?? '');
+    syncScopedFormDraft({
+      remarks: detail?.remarks ?? '',
+    });
     setIsEditingRemarks(true);
   }
 
   function resetRemarksForm() {
     setRemarksInput(detail?.remarks ?? '');
+    clearSalesOrderDraftForm(orderDraftScope);
     setIsEditingRemarks(false);
   }
 
@@ -1051,6 +1181,7 @@ export default function SalesOrderDetailScreen() {
         remarks: remarksInput,
       });
       setDetail(nextDetail);
+      clearSalesOrderDraftForm(orderDraftScope);
       setIsEditingRemarks(false);
       showSuccess('订单备注已更新。');
     } catch (error) {
@@ -1067,6 +1198,7 @@ export default function SalesOrderDetailScreen() {
     }
 
     syncScopedDraft(editableItems);
+    syncScopedFormDraft();
     allowLeaveRef.current = true;
     router.push({
       pathname: '/common/product-search',
@@ -1074,6 +1206,7 @@ export default function SalesOrderDetailScreen() {
         mode: 'order',
         draftScope: orderDraftScope,
         returnOrderName: orderName,
+        resumeEdit: isEditingContact || isEditingRemarks ? 'all' : 'items',
         defaultSalesMode: detail?.defaultSalesMode ?? 'wholesale',
       },
     });
@@ -1134,6 +1267,7 @@ export default function SalesOrderDetailScreen() {
   }
 
   function resetAllForms() {
+    clearSalesOrderDraftForm(orderDraftScope);
     resetContactForm();
     resetItemsForm();
     resetRemarksForm();
@@ -1437,6 +1571,7 @@ export default function SalesOrderDetailScreen() {
       setIsEditingItems(false);
       setIsEditingRemarks(false);
       clearSalesOrderDraft(orderDraftScope);
+      clearSalesOrderDraftForm(orderDraftScope);
 
       if (itemUpdateResult.orderName !== orderName) {
         allowLeaveRef.current = true;

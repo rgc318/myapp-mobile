@@ -421,6 +421,7 @@ export default function ProductSearchScreen() {
     query?: string;
     draftScope?: string;
     returnOrderName?: string;
+    resumeEdit?: string;
     defaultSalesMode?: string;
   }>();
   const preferences = getAppPreferences();
@@ -441,6 +442,7 @@ export default function ProductSearchScreen() {
   const isOrderMode = mode === 'order';
   const draftScope = typeof params.draftScope === 'string' ? params.draftScope : undefined;
   const returnOrderName = typeof params.returnOrderName === 'string' ? params.returnOrderName : '';
+  const resumeEdit = typeof params.resumeEdit === 'string' ? params.resumeEdit : '';
   const defaultSalesMode = useMemo<SalesMode>(
     () =>
       normalizeSalesMode(
@@ -726,7 +728,7 @@ export default function ProductSearchScreen() {
     if (returnOrderName) {
       router.replace({
         pathname: '/sales/order/[orderName]',
-        params: { orderName: returnOrderName, resumeEdit: 'items' },
+        params: { orderName: returnOrderName, resumeEdit: resumeEdit || 'items' },
       });
       return;
     }

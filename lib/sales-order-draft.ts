@@ -31,6 +31,7 @@ export type SalesOrderDraftForm = {
   customer: string;
   company: string;
   defaultSalesMode: SalesMode;
+  deliveryDate: string;
   remarks: string;
   shippingAddress: string;
   shippingContact: string;
@@ -158,11 +159,26 @@ function normalizeDraftForm(value: Partial<SalesOrderDraftForm> | null | undefin
     customer: typeof value?.customer === 'string' ? value.customer : '',
     company: typeof value?.company === 'string' ? value.company : '',
     defaultSalesMode: normalizeSalesMode(value?.defaultSalesMode),
+    deliveryDate: typeof value?.deliveryDate === 'string' ? value.deliveryDate : '',
     remarks: typeof value?.remarks === 'string' ? value.remarks : '',
     shippingAddress: typeof value?.shippingAddress === 'string' ? value.shippingAddress : '',
     shippingContact: typeof value?.shippingContact === 'string' ? value.shippingContact : '',
     shippingPhone: typeof value?.shippingPhone === 'string' ? value.shippingPhone : '',
   };
+}
+
+export function hasSalesOrderDraftForm(scope?: string) {
+  const normalizedScope = getScope(scope);
+
+  if (Object.prototype.hasOwnProperty.call(memoryDraftFormByScope, normalizedScope)) {
+    return true;
+  }
+
+  if (canUseWebStorage()) {
+    return window.localStorage.getItem(getFormStorageKey(normalizedScope)) !== null;
+  }
+
+  return false;
 }
 
 export function getSalesOrderDraftForm(scope?: string) {
@@ -351,5 +367,9 @@ export function removeSalesOrderDraftItem(draftKey: string, scope?: string) {
 
 export function clearSalesOrderDraft(scope?: string) {
   persistDraft([], scope);
+  persistDraftForm(normalizeDraftForm(null), scope);
+}
+
+export function clearSalesOrderDraftForm(scope?: string) {
   persistDraftForm(normalizeDraftForm(null), scope);
 }

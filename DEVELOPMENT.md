@@ -4764,3 +4764,31 @@ Editing an existing sales order should not lose in-progress item changes just be
 - recreated pages lost local `isEditingItems` state, so users were dropped back to read-only mode
 - the shared product search page was already writing into the correct scoped draft, but the order page was not always re-entering item edit mode to consume that draft
 - preserving the original page instance first, and restoring from scoped draft as fallback, makes the edit flow stable across search round trips
+
+## Sales Order Edit Form Draft Alignment (2026-03-29)
+
+The edit-order page previously behaved differently from the create-order page: goods were already using a scoped draft, but contact and remark fields still relied only on local component state.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/sales-order-draft.ts`
+
+### What Changed
+
+- `SalesOrderDraftForm` now also stores `deliveryDate`
+- edit-order flow now writes contact, phone, address, remark, and delivery date into the scoped form draft `order-edit:${orderName}`
+- entering product search from the edit-order page now carries the correct `resumeEdit` hint:
+  - `items` when only goods are being edited
+  - `all` when goods are being edited together with contact or remarks
+- returning from shared product search can now restore both:
+  - item draft rows
+  - form draft fields
+- edit-order save and cancel actions now clear the scoped form draft together with the scoped item draft when appropriate
+
+### Why
+
+- before this change, the create-order page could restore unsaved contact and remark fields because those values were stored in draft form state
+- the edit-order page did not have the same protection, so a search-page round trip could keep goods but still lose unsaved receiver, phone, address, remark, or delivery date edits
+- aligning the edit-order page with the create-order draft model makes cross-page editing much more predictable
