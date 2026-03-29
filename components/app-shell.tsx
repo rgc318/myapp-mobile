@@ -22,40 +22,30 @@ type AppShellProps = {
   actions?: ActionLink[];
   contentCard?: boolean;
   compactHeader?: boolean;
+  showWorkflowQuickNav?: boolean;
   footer?: ReactNode;
 };
 
 export function AppShell({
   title,
-  description,
   children,
   actions = [],
   contentCard = true,
-  compactHeader = false,
+  showWorkflowQuickNav,
   footer,
 }: AppShellProps) {
   const segments = useSegments();
   const isTabRoot = segments[0] === '(tabs)';
-  const showWorkflowQuickNav = !isTabRoot;
+  const shouldShowWorkflowQuickNav = showWorkflowQuickNav ?? !isTabRoot;
   const surface = useThemeColor({}, 'surface');
-  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
-  const tintColor = useThemeColor({}, 'tint');
 
   return (
     <View style={[styles.screen, { backgroundColor: useThemeColor({}, 'background') }]}>
       <MobilePageHeader showBack={!isTabRoot} title={title} />
 
       <ScrollView contentContainerStyle={styles.container}>
-        <ThemedView
-          lightColor={surfaceMuted}
-          darkColor={surfaceMuted}
-          style={[compactHeader ? styles.headerCompact : styles.header, { borderColor }]}>
-          <ThemedText style={[styles.eyebrow, { color: tintColor }]}>RGC WHOLESALE FLOW</ThemedText>
-          <ThemedText style={styles.description}>{description}</ThemedText>
-        </ThemedView>
-
-        {showWorkflowQuickNav ? <WorkflowQuickNav /> : null}
+        {shouldShowWorkflowQuickNav ? <WorkflowQuickNav /> : null}
 
         {actions.length ? (
           <View style={styles.actions}>
@@ -97,27 +87,6 @@ const styles = StyleSheet.create({
     padding: 18,
     paddingBottom: 48,
     paddingTop: 14,
-  },
-  header: {
-    borderRadius: 28,
-    borderWidth: 1,
-    gap: 10,
-    padding: 22,
-  },
-  headerCompact: {
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-  },
-  description: {
-    opacity: 0.82,
   },
   actions: {
     gap: 12,

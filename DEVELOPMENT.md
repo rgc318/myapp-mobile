@@ -2248,6 +2248,105 @@ The top-right workflow action on sales-order detail should behave like a seconda
 - strong filled or boxed buttons are better reserved for main workflow progression
 - without a wider header action slot, large action labels could wrap and look broken
 
+## AppShell Intro Card Removal (2026-03-29)
+
+The old shared intro card at the top of many module pages (`RGC WHOLESALE FLOW` + descriptive paragraph) is now considered legacy UI and has been removed from the shared shell.
+
+### File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/app-shell.tsx`
+
+### What Changed
+
+- the shared intro/description card was removed from `AppShell`
+- pages that use `AppShell` now enter their real content sooner
+- page title responsibility stays with the shared mobile top header
+
+### Why
+
+- once the unified top navigation was added, the extra intro card became repetitive
+- on mobile it consumed high-value vertical space before any real action or data
+- removing it simplifies module entry pages without changing business behavior
+
+## Product Search Default Load And Card Compression (2026-03-29)
+
+The sales-order product-search page now behaves like a real mobile picker instead of waiting for an artificial first keyword.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/products.ts`
+
+### What Changed
+
+- order-mode product search now auto-loads a first page of products on entry
+- empty-keyword auto-load no longer incorrectly calls `search_product_v2`
+- instead it uses `list_products_v2` semantics through `fetchProducts(...)`
+- the result card was compressed into a flatter mobile layout:
+  - title + current warehouse + code on the left
+  - add/stepper actions in the header-right area
+  - inventory reduced to a light summary row
+  - price references reduced to short inline summaries
+  - warehouse switching reduced to a shorter bottom selector row
+- the extra workflow quick-nav strip is hidden on this search page
+
+### Why
+
+- backend `search_product_v2` is a true search endpoint and returns empty data when `search_key` is empty
+- that behavior is valid for a search API, but it is the wrong tool for an auto-loaded picker
+- a mobile product picker should open in a browsable state, then let users narrow with keywords
+- flatter cards improve scan speed and reduce single-result vertical cost on narrow screens
+
+## Purchase Workbench Visual Refresh (2026-03-29)
+
+The purchase workbench top metrics and quick-action area were refined to look less like temporary placeholders and more like real mobile dashboard entry points.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/purchase.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/ui/icon-symbol.tsx`
+
+### What Changed
+
+- the four top metrics now use clearer colored borders plus light shadow/elevation
+- this prevents pale cards such as the unfinished/yellow metric from visually melting into the hero background
+- quick actions were rebuilt as compact mobile cards:
+  - icon on top
+  - label centered below
+  - no oversized dark circular badge
+- action navigation now uses plain `Pressable + router.push(...)`
+  - this avoids web/runtime issues seen with `Link asChild` in this area
+- purchase-specific icon mappings were added for payment and return actions
+
+### Why
+
+- the old quick-action cards still looked like horizontally stretched desktop blocks
+- deeper badge colors created visual conflict against the lighter card backgrounds
+- `Link asChild` caused unstable web/CSS behavior in this workbench section
+- mobile dashboards benefit more from compact icon-first shortcuts than label-first wide rows
+
+## Home Legacy Mode Banner Removal (2026-03-29)
+
+The old mode reminder banner on the home dashboard was removed.
+
+### File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+
+### What Changed
+
+- the banner showing:
+  - `销售模式`
+  - `采购模式`
+  - `立即设置`
+  was removed from the dashboard
+
+### Why
+
+- this information was a legacy reminder from an earlier phase
+- it no longer helps users complete the primary home-page tasks
+- it consumed vertical space that is more valuable for real navigation or business data
+
 ### Common packaging failures already seen in this project
 
 1. Java not found

@@ -161,15 +161,6 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          <View style={[styles.noticeBar, { backgroundColor: surface, borderColor }]}>
-            <ThemedText style={styles.noticeText}>
-              销售模式：{preferences.salesFlowMode === 'quick' ? '快捷结算' : '分步处理'} / 采购模式：
-              {preferences.purchaseFlowMode === 'immediate' ? '收货并结算' : '收货后结算'}
-            </ThemedText>
-            <Link href="/settings" style={styles.noticeAction}>
-              <ThemedText style={styles.noticeActionText}>立即设置</ThemedText>
-            </Link>
-          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -321,31 +312,5 @@ const styles = StyleSheet.create({
   shortcutLabel: {
     fontSize: 13,
     textAlign: 'center',
-  },
-  noticeBar: {
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'space-between',
-    marginHorizontal: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  noticeText: {
-    flex: 1,
-    opacity: 0.72,
-  },
-  noticeAction: {
-    backgroundColor: '#2DD4BF',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    textDecorationLine: 'none',
-  },
-  noticeActionText: {
-    color: '#FFF',
-    fontWeight: '700',
   },
 });

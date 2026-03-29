@@ -1,11 +1,12 @@
 import type { Href } from 'expo-router';
-import { Link, useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
@@ -315,46 +316,41 @@ export default function PurchaseTabScreen() {
     {
       href: '/purchase/order/create' as Href,
       label: '采购下单',
-      badge: 'PO',
+      icon: 'cart.fill' as const,
       toneBackground: '#EFF6FF',
       toneBorder: '#BFDBFE',
-      toneBadge: '#DBEAFE',
       toneText: '#1D4ED8',
     },
     {
       href: '/purchase/receipt/create' as Href,
       label: '采购收货',
-      badge: 'PR',
+      icon: 'shippingbox.fill' as const,
       toneBackground: '#F0FDF4',
       toneBorder: '#BBF7D0',
-      toneBadge: '#DCFCE7',
       toneText: '#15803D',
     },
     {
       href: '/purchase/invoice/create' as Href,
       label: '登记发票',
-      badge: 'PI',
+      icon: 'doc.text.fill' as const,
       toneBackground: '#FFF7ED',
       toneBorder: '#FED7AA',
-      toneBadge: '#FFEDD5',
       toneText: '#C2410C',
     },
     {
       href: '/purchase/payment/create' as Href,
       label: '供应商付款',
-      badge: 'PAY',
+      icon: 'creditcard.fill' as const,
       toneBackground: '#F5F3FF',
       toneBorder: '#DDD6FE',
-      toneBadge: '#EDE9FE',
       toneText: '#6D28D9',
     },
     {
       href: '/purchase/return/create' as Href,
       label: '采购退货',
-      badge: 'RET',
+      icon: 'arrow.uturn.backward.circle.fill' as const,
       toneBackground: '#FEF2F2',
       toneBorder: '#FECACA',
-      toneBadge: '#FEE2E2',
       toneText: '#B91C1C',
     },
   ];
@@ -410,25 +406,25 @@ export default function PurchaseTabScreen() {
           </View>
 
           <View style={styles.metricRow}>
-            <View style={[styles.metricCard, { backgroundColor: '#FFF5D6' }]}>
+            <View style={[styles.metricCard, { backgroundColor: '#FFF5D6', borderColor: '#FDE68A' }]}>
               <ThemedText style={styles.metricLabel}>未完成</ThemedText>
               <ThemedText style={[styles.metricValue, { color: '#B45309' }]} type="defaultSemiBold">
                 {unfinishedCount}
               </ThemedText>
             </View>
-            <View style={[styles.metricCard, { backgroundColor: '#E2EDFF' }]}>
+            <View style={[styles.metricCard, { backgroundColor: '#E2EDFF', borderColor: '#BFDBFE' }]}>
               <ThemedText style={styles.metricLabel}>待收货</ThemedText>
               <ThemedText style={[styles.metricValue, { color: '#1D4ED8' }]} type="defaultSemiBold">
                 {receivingCount}
               </ThemedText>
             </View>
-            <View style={[styles.metricCard, { backgroundColor: '#DCFCE7' }]}>
+            <View style={[styles.metricCard, { backgroundColor: '#DCFCE7', borderColor: '#BBF7D0' }]}>
               <ThemedText style={styles.metricLabel}>待付款</ThemedText>
               <ThemedText style={[styles.metricValue, { color: '#15803D' }]} type="defaultSemiBold">
                 {paymentCount}
               </ThemedText>
             </View>
-            <View style={[styles.metricCard, { backgroundColor: '#F1F5F9' }]}>
+            <View style={[styles.metricCard, { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }]}>
               <ThemedText style={styles.metricLabel}>已完成</ThemedText>
               <ThemedText style={[styles.metricValue, { color: '#334155' }]} type="defaultSemiBold">
                 {completedCount}
@@ -447,9 +443,9 @@ export default function PurchaseTabScreen() {
 
           <View style={styles.actionGrid}>
             {quickActions.map((action) => (
-              <Link
+              <Pressable
                 key={action.label}
-                href={action.href}
+                onPress={() => router.push(action.href)}
                 style={[
                   styles.actionCard,
                   {
@@ -457,15 +453,11 @@ export default function PurchaseTabScreen() {
                     borderColor: action.toneBorder,
                   },
                 ]}>
-                <View style={[styles.actionBadge, { backgroundColor: action.toneBadge }]}>
-                  <ThemedText style={[styles.actionBadgeText, { color: action.toneText }]} type="defaultSemiBold">
-                    {action.badge}
-                  </ThemedText>
-                </View>
+                <IconSymbol color={action.toneText} name={action.icon} size={20} />
                 <ThemedText style={[styles.actionLabel, { color: action.toneText }]} type="defaultSemiBold">
                   {action.label}
                 </ThemedText>
-              </Link>
+              </Pressable>
             ))}
           </View>
         </View>
@@ -823,6 +815,12 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    borderWidth: 1,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 2,
   },
   metricLabel: {
     color: '#475569',
@@ -867,28 +865,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 18,
     borderWidth: 1,
-    gap: 7,
+    gap: 10,
     justifyContent: 'center',
-    minHeight: 76,
-    paddingHorizontal: 6,
-    paddingVertical: 10,
+    minHeight: 88,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
     textDecorationLine: 'none',
     width: '31.5%',
   },
-  actionBadge: {
-    borderRadius: 999,
-    minWidth: 36,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  actionBadgeText: {
-    fontSize: 11,
-    textAlign: 'center',
-  },
   actionLabel: {
     fontSize: 13,
-    lineHeight: 17,
-    maxWidth: 68,
+    lineHeight: 18,
+    maxWidth: 74,
     textAlign: 'center',
   },
   panel: {

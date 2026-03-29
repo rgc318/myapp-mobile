@@ -31,6 +31,8 @@ const MAPPING = {
   'barcode.viewfinder': 'qr-code-scanner',
   photo: 'photo',
   'ruler.fill': 'straighten',
+  'creditcard.fill': 'credit-card',
+  'arrow.uturn.backward.circle.fill': 'assignment-return',
 } as IconMapping;
 
 /**
