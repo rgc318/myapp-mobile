@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
@@ -415,6 +416,7 @@ function DraftProductGroup({
 
 export default function ProductSearchScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{
     query?: string;
     draftScope?: string;
@@ -716,10 +718,15 @@ export default function ProductSearchScreen() {
   }, [draftScope, isOrderMode, params.query]);
 
   const handleReturnToOrder = () => {
+    if (isOrderMode && navigation.canGoBack()) {
+      router.back();
+      return;
+    }
+
     if (returnOrderName) {
       router.replace({
         pathname: '/sales/order/[orderName]',
-        params: { orderName: returnOrderName },
+        params: { orderName: returnOrderName, resumeEdit: 'items' },
       });
       return;
     }

@@ -2366,19 +2366,30 @@ This round focused on making sales and purchase creation flows behave more like 
   - the outer `扫码添加` card was removed
   - sales order now keeps a single `选择商品` entry
   - the order page clearly points users into the shared product-search page for both search and future scan-add flows
+  - the fixed bottom action bar was rebuilt for real mobile widths:
+    - `订单总额` and amount now live on the first row
+    - action buttons now live on a dedicated second row
+    - multi-UOM orders no longer render misleading pseudo-totals such as `12 件 + 20 箱` in the bottom summary
+    - when order lines contain multiple UOMs, the footer summary now degrades to a lighter expression such as `共 4 项 · 2 种单位`
 - shared product search was rebuilt as a stronger order-mode picker:
   - top search tools were compressed into a mobile toolbar
   - scan entry moved into the search page itself
   - warehouse filter now defaults to "all warehouses" when empty
   - the confusing `全部仓库` action was removed
-  - a dedicated `切换` action was added inside the warehouse selector input
+  - warehouse search now treats empty value as "all warehouses" by default
+  - `清空仓库选项` is only shown when a warehouse filter is already active
+  - a dedicated `切换` action now lives inside the warehouse selector input itself
+  - the warehouse dropdown no longer depends only on native input focus
+    - this avoids flashing open
+    - avoids immediate reopen after closing
+    - avoids reopening after selecting a warehouse
   - stock filter now uses a more explicit on/off switch treatment
   - lightweight status messaging replaced the heavier extra notice card
   - warehouse-switch rows now emphasize per-warehouse added quantity more clearly
 - the shared `LinkOptionInput` component was extended:
   - right-side inline action text is now supported
   - dropdown open/close state no longer relies only on raw input focus
-  - this prevents the warehouse selector from flashing open, reopening after selection, or refusing to close
+  - inline action can now act as a true open/close control instead of a second pseudo-input
 - purchase-order create flow was tightened:
   - the top intro and repeated guidance blocks were reduced
   - optional fields moved later in the form
@@ -2386,6 +2397,7 @@ This round focused on making sales and purchase creation flows behave more like 
   - warehouse sub-rows now support a compact edit/expand flow
   - quantity input now uses a stepper
   - subtotal and reference buying price are shown with clearer hierarchy
+  - reference buying price is presented as product-level reference information, separate from row-level actual purchase price
   - purchase unit defaults to the stock/base unit while still remaining editable
 - purchase item search was also compressed into a better mobile picker:
   - products now auto-load without forcing a first keyword
@@ -4729,3 +4741,26 @@ Large document pages were showing many prices, but not clearly identifying which
   - one product total
   - or a line subtotal
 - explicit labels reduce hesitation and improve scan speed on mobile
+
+## Sales Order Edit Return Fix (2026-03-29)
+
+Editing an existing sales order should not lose in-progress item changes just because the operator briefly enters the shared product search page.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+
+### What Changed
+
+- returning from shared product search to an editing sales order now prefers stack back navigation instead of replacing the order detail screen
+- the sales order detail screen now supports an explicit `resumeEdit=items` fallback
+- when that fallback is used, the page restores item edit mode from the scoped draft `order-edit:${orderName}`
+- draft item to editable item conversion was centralized so the restored rows use the same mapping in both initial load and refocus sync
+
+### Why
+
+- the previous `replace` flow recreated the order detail page
+- recreated pages lost local `isEditingItems` state, so users were dropped back to read-only mode
+- the shared product search page was already writing into the correct scoped draft, but the order page was not always re-entering item edit mode to consume that draft
+- preserving the original page instance first, and restoring from scoped draft as fallback, makes the edit flow stable across search round trips

@@ -26,6 +26,7 @@ import {
   clearSalesOrderDraft,
   getSalesOrderDraft,
   replaceSalesOrderDraft,
+  type SalesOrderDraftItem,
 } from '@/lib/sales-order-draft';
 import { fetchProductDetail } from '@/services/products';
 import {
@@ -274,6 +275,28 @@ function normalizeEditableText(value: string | null | undefined) {
   return (value ?? '').trim();
 }
 
+function mapDraftItemToEditable(item: SalesOrderDraftItem): EditableOrderItem {
+  return {
+    itemCode: item.itemCode,
+    itemName: item.itemName,
+    qty: item.qty,
+    rate: item.price,
+    amount: (item.price ?? 0) * item.qty,
+    warehouse: item.warehouse ?? '',
+    uom: item.uom ?? '',
+    salesMode: normalizeSalesMode(item.salesMode),
+    stockUom: item.stockUom ?? null,
+    uomConversions: item.uomConversions ?? [],
+    warehouseStockQty: item.warehouseStockQty ?? null,
+    warehouseStockUom: item.warehouseStockUom ?? item.stockUom ?? null,
+    wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
+    retailDefaultUom: item.retailDefaultUom ?? null,
+    salesProfiles: item.salesProfiles ?? [],
+    priceSummary: item.priceSummary ?? null,
+    imageUrl: item.imageUrl ?? '',
+  };
+}
+
 function buildComparableItemSignature(items: {
   itemCode: string;
   qty: number | null;
@@ -339,9 +362,13 @@ function groupOrderItemsByProduct<T extends {
 export default function SalesOrderDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const { orderName } = useLocalSearchParams<{ orderName: string }>();
+  const { orderName, resumeEdit } = useLocalSearchParams<{
+    orderName: string;
+    resumeEdit?: string;
+  }>();
   const isFocused = useIsFocused();
   const orderDraftScope = orderName ? `order-edit:${orderName}` : 'order-edit';
+  const resumeEditMode = resumeEdit === 'items' ? 'items' : undefined;
 
   const [detail, setDetail] = useState<SalesOrderDetailV2 | null>(null);
   const [message, setMessage] = useState('');
@@ -391,7 +418,8 @@ export default function SalesOrderDetailScreen() {
           return;
         }
 
-        const scopedDraft = isEditingItems ? getSalesOrderDraft(orderDraftScope) : [];
+        const scopedDraft =
+          isEditingItems || resumeEditMode === 'items' ? getSalesOrderDraft(orderDraftScope) : [];
         const detailItems =
           nextDetail?.items.map((item) => ({
             itemCode: item.itemCode,
@@ -410,26 +438,7 @@ export default function SalesOrderDetailScreen() {
             priceSummary: item.priceSummary ?? null,
             imageUrl: item.imageUrl,
           })) ?? [];
-        const nextEditableItems = scopedDraft.length
-          ? scopedDraft.map((item) => ({
-              itemCode: item.itemCode,
-              itemName: item.itemName,
-              qty: item.qty,
-              rate: item.price,
-              amount: (item.price ?? 0) * item.qty,
-              warehouse: item.warehouse ?? '',
-              uom: item.uom ?? '',
-              salesMode: normalizeSalesMode(item.salesMode),
-              stockUom: item.stockUom ?? null,
-              warehouseStockQty: null,
-              warehouseStockUom: item.stockUom ?? null,
-              wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
-              retailDefaultUom: item.retailDefaultUom ?? null,
-              salesProfiles: item.salesProfiles ?? [],
-              priceSummary: item.priceSummary ?? null,
-              imageUrl: item.imageUrl ?? '',
-            }))
-          : detailItems;
+        const nextEditableItems = scopedDraft.length ? scopedDraft.map(mapDraftItemToEditable) : detailItems;
 
         setDetail(nextDetail);
         setDeliveryDateInput(nextDetail?.deliveryDate ?? '');
@@ -444,6 +453,12 @@ export default function SalesOrderDetailScreen() {
         } else {
           setRecentPaymentNotice(null);
         }
+        if (resumeEditMode === 'items' && scopedDraft.length) {
+          setIsEditingContact(false);
+          setIsEditingRemarks(false);
+          setIsEditingItems(true);
+          (navigation as any).setParams?.({ resumeEdit: undefined });
+        }
         setMessage(nextDetail ? '' : '未找到对应销售订单。');
       })
       .catch((error) => {
@@ -457,7 +472,7 @@ export default function SalesOrderDetailScreen() {
     return () => {
       active = false;
     };
-  }, [isFocused, isEditingItems, orderDraftScope, orderName]);
+  }, [isFocused, isEditingItems, navigation, orderDraftScope, orderName, resumeEditMode]);
 
   useEffect(() => {
     if (!isFocused || !isEditingItems) {
@@ -470,25 +485,7 @@ export default function SalesOrderDetailScreen() {
     }
 
     setEditableItems(
-      scopedDraft.map((item) => ({
-        itemCode: item.itemCode,
-        itemName: item.itemName,
-        qty: item.qty,
-        rate: item.price,
-        amount: (item.price ?? 0) * item.qty,
-        warehouse: item.warehouse ?? '',
-        uom: item.uom ?? '',
-        salesMode: normalizeSalesMode(item.salesMode),
-        stockUom: item.stockUom ?? null,
-        uomConversions: item.uomConversions ?? [],
-        warehouseStockQty: item.warehouseStockQty ?? null,
-        warehouseStockUom: item.warehouseStockUom ?? item.stockUom ?? null,
-        wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
-        retailDefaultUom: item.retailDefaultUom ?? null,
-        salesProfiles: item.salesProfiles ?? [],
-        priceSummary: item.priceSummary ?? null,
-        imageUrl: item.imageUrl ?? '',
-      })),
+      scopedDraft.map(mapDraftItemToEditable),
     );
   }, [isEditingItems, isFocused, orderDraftScope]);
 
