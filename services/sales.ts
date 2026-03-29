@@ -14,6 +14,7 @@ export type CreateSalesOrderPayload = {
   items: SalesOrderItemInput[];
   defaultSalesMode?: SalesMode;
   force_delivery?: boolean;
+  delivery_date?: string;
   transaction_date?: string;
   remarks?: string;
   customer_info?: {

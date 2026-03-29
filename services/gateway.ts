@@ -82,6 +82,7 @@ export type SalesOrderV2Input = {
   immediate?: boolean;
   force_delivery?: boolean;
   default_sales_mode?: SalesMode;
+  delivery_date?: string;
   transaction_date?: string;
   remarks?: string;
   customer_info?: {
@@ -338,6 +339,7 @@ export async function createSalesOrderV2(payload: SalesOrderV2Input) {
     immediate: payload.immediate ?? false,
     force_delivery: payload.force_delivery ? 1 : 0,
     default_sales_mode: payload.default_sales_mode,
+    delivery_date: payload.delivery_date,
     transaction_date: payload.transaction_date,
     remarks: payload.remarks,
     customer_info: payload.customer_info,
@@ -353,6 +355,7 @@ export async function quickCreateSalesOrderV2(payload: SalesOrderV2Input) {
     items: payload.items,
     force_delivery: payload.force_delivery ? 1 : 0,
     default_sales_mode: payload.default_sales_mode,
+    delivery_date: payload.delivery_date,
     transaction_date: payload.transaction_date,
     remarks: payload.remarks,
     customer_info: payload.customer_info,

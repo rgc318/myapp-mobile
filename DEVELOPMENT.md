@@ -4792,3 +4792,36 @@ The edit-order page previously behaved differently from the create-order page: g
 - before this change, the create-order page could restore unsaved contact and remark fields because those values were stored in draft form state
 - the edit-order page did not have the same protection, so a search-page round trip could keep goods but still lose unsaved receiver, phone, address, remark, or delivery date edits
 - aligning the edit-order page with the create-order draft model makes cross-page editing much more predictable
+
+## Sales Order Date Input Alignment (2026-03-29)
+
+Sales order date handling was previously inconsistent: create-order exposed only a read-only order date, while edit-order allowed raw text input for delivery date without strong validation.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/date-field-input.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/date-value.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/gateway.ts`
+
+### What Changed
+
+- create-order now keeps `transaction_date` as a read-only "today" value, matching the existing mobile quick-entry assumption
+- create-order now also exposes editable `delivery_date`
+- edit-order delivery date no longer uses a raw `TextInput`
+- both create-order and edit-order now use the same date-field interaction:
+  - tap field to open a dedicated date editor
+  - choose `今天` / `明天` / `+7天` shortcuts
+  - or fill year / month / day parts explicitly
+- strong ISO date validation now blocks invalid values from being applied or submitted
+- create-order payload now sends `delivery_date` through the sales services and gateway layer
+
+### Why
+
+- order date and delivery date are different business concepts and should not be mixed in the UI
+- mobile operators should not have to hand-type `YYYY-MM-DD` in the main form
+- keeping `transaction_date` fixed while exposing editable `delivery_date` matches the current business assumption better:
+  - most mobile orders are entered on the same day
+  - but the promised delivery date often needs to be adjusted per order

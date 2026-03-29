@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput,
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LinkOptionInput } from '@/components/link-option-input';
+import { DateFieldInput } from '@/components/date-field-input';
 import { MobilePageHeader } from '@/components/mobile-page-header';
 import { SalesOrderItemEditor } from '@/components/sales-order-item-editor';
 import { ThemedText } from '@/components/themed-text';
@@ -12,6 +13,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
+import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
 import { formatDisplayUom } from '@/lib/display-uom';
 import {
   compactAddressText,
@@ -271,6 +273,8 @@ export default function SalesOrderCreateScreen() {
   const [defaultSalesMode, setDefaultSalesMode] = useState<SalesMode>(
     normalizeSalesMode(initialDraftForm.defaultSalesMode),
   );
+  const postingDate = getTodayIsoDate();
+  const [deliveryDate, setDeliveryDate] = useState(initialDraftForm.deliveryDate || postingDate);
   const [remarks, setRemarks] = useState(initialDraftForm.remarks);
   const [shippingAddress, setShippingAddress] = useState(initialDraftForm.shippingAddress);
   const [shippingContact, setShippingContact] = useState(initialDraftForm.shippingContact);
@@ -303,8 +307,6 @@ export default function SalesOrderCreateScreen() {
   const shippingPhoneTouchedRef = useRef(false);
   const allowLeaveRef = useRef(false);
   const pendingNavigationActionRef = useRef<any>(null);
-
-  const postingDate = new Date().toISOString().slice(0, 10);
 
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
@@ -357,6 +359,7 @@ export default function SalesOrderCreateScreen() {
     setCustomer(nextDraftForm.customer);
     setCompany(nextDraftForm.company || preferences.defaultCompany);
     setDefaultSalesMode(normalizeSalesMode(nextDraftForm.defaultSalesMode));
+    setDeliveryDate(nextDraftForm.deliveryDate || postingDate);
     setRemarks(nextDraftForm.remarks);
     setShippingAddress(nextDraftForm.shippingAddress);
     setShippingContact(nextDraftForm.shippingContact);
@@ -365,19 +368,20 @@ export default function SalesOrderCreateScreen() {
     shippingAddressTouchedRef.current = Boolean(normalizeText(nextDraftForm.shippingAddress));
     shippingContactTouchedRef.current = Boolean(normalizeText(nextDraftForm.shippingContact));
     shippingPhoneTouchedRef.current = Boolean(normalizeText(nextDraftForm.shippingPhone));
-  }, [isFocused, preferences.defaultCompany]);
+  }, [isFocused, postingDate, preferences.defaultCompany]);
 
   useEffect(() => {
     updateSalesOrderDraftForm({
       customer,
       company,
       defaultSalesMode,
+      deliveryDate,
       remarks,
       shippingAddress,
       shippingContact,
       shippingPhone,
     });
-  }, [company, customer, defaultSalesMode, remarks, shippingAddress, shippingContact, shippingPhone]);
+  }, [company, customer, defaultSalesMode, deliveryDate, remarks, shippingAddress, shippingContact, shippingPhone]);
 
   useEffect(() => () => {
     if (removeUndoTimerRef.current) {
@@ -390,13 +394,14 @@ export default function SalesOrderCreateScreen() {
       Boolean(
         normalizeText(customer) ||
           (normalizeText(company) && normalizeText(company) !== normalizeText(preferences.defaultCompany)) ||
+          normalizeText(deliveryDate) !== postingDate ||
           normalizeText(remarks) ||
           normalizeText(shippingAddress) ||
           normalizeText(shippingContact) ||
           normalizeText(shippingPhone) ||
           draftItems.length,
       ),
-    [company, customer, draftItems.length, preferences.defaultCompany, remarks, shippingAddress, shippingContact, shippingPhone],
+    [company, customer, deliveryDate, draftItems.length, postingDate, preferences.defaultCompany, remarks, shippingAddress, shippingContact, shippingPhone],
   );
 
   useEffect(() => {
@@ -706,6 +711,11 @@ export default function SalesOrderCreateScreen() {
       firstInvalidSection ??= 'shipping';
     }
 
+    if (!isValidIsoDate(deliveryDate)) {
+      valid = false;
+      firstInvalidSection ??= 'shipping';
+    }
+
     if (!draftItems.length) {
       setStatusMessage(ITEM_REQUIRED_MESSAGE, 'error');
       valid = false;
@@ -718,7 +728,9 @@ export default function SalesOrderCreateScreen() {
           ? '请先选择客户。'
           : firstInvalidSection === 'items'
             ? '请先添加销售商品。'
-            : '请先完善发货信息。',
+            : !isValidIsoDate(deliveryDate)
+              ? '请先选择有效交货日期。'
+              : '请先完善发货信息。',
       );
       if (firstInvalidSection === 'customer') {
         scrollToSection(customerSectionYRef.current);
@@ -792,6 +804,7 @@ export default function SalesOrderCreateScreen() {
       contact_display_name: toOptionalText(shippingContact),
       contact_phone: toOptionalText(shippingPhone),
     },
+    delivery_date: deliveryDate,
     shipping_info: {
       receiver_name: toOptionalText(shippingContact),
       receiver_phone: toOptionalText(shippingPhone),
@@ -1241,6 +1254,16 @@ export default function SalesOrderCreateScreen() {
                     value={shippingPhone}
                   />
                 </View>
+              </View>
+
+              <View style={styles.shippingFieldBlock}>
+                <DateFieldInput
+                  errorText={!isValidIsoDate(deliveryDate) ? '请选择有效交货日期。' : undefined}
+                  helperText="默认今天，可按本单交付约定调整。"
+                  label="交货日期"
+                  onChange={setDeliveryDate}
+                  value={deliveryDate}
+                />
               </View>
 
               <View style={styles.shippingFieldBlock}>

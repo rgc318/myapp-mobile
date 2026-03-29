@@ -11,6 +11,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
+import { isValidIsoDate } from '@/lib/date-value';
 import { formatCurrencyValue } from '@/lib/display-currency';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { getPaymentResultHandoff, type PaymentResultHandoff } from '@/lib/payment-result-handoff';
@@ -43,6 +44,7 @@ import {
   type SalesOrderDetailV2,
 } from '@/services/sales';
 import { useFeedback } from '@/providers/feedback-provider';
+import { DateFieldInput } from '@/components/date-field-input';
 
 type EditableOrderItem = {
   itemCode: string;
@@ -780,6 +782,11 @@ export default function SalesOrderDetailScreen() {
 
   async function handleSaveContact() {
     if (!orderName) {
+      return;
+    }
+
+    if (!isValidIsoDate(deliveryDateInput)) {
+      showError('请先选择有效交货日期。');
       return;
     }
 
@@ -1535,6 +1542,11 @@ export default function SalesOrderDetailScreen() {
       return;
     }
 
+    if (!isValidIsoDate(deliveryDateInput)) {
+      showError('请先选择有效交货日期。');
+      return;
+    }
+
     try {
       setIsSavingContact(true);
       setIsSavingItems(true);
@@ -1853,12 +1865,11 @@ export default function SalesOrderDetailScreen() {
               </View>
 
               <View style={[styles.editField, { backgroundColor: surfaceMuted }]}>
-                <ThemedText style={styles.editFieldLabel}>交货日期</ThemedText>
-                <TextInput
-                  onChangeText={setDeliveryDateInput}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#9AA3B2"
-                  style={styles.editInput}
+                <DateFieldInput
+                  errorText={!isValidIsoDate(deliveryDateInput) ? '请选择有效交货日期。' : undefined}
+                  helperText="交货日期会同步写回销售订单头部。"
+                  label="交货日期"
+                  onChange={setDeliveryDateInput}
                   value={deliveryDateInput}
                 />
               </View>
