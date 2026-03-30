@@ -59,6 +59,18 @@ function formatQty(value: number | null | undefined) {
   return formatConvertedQty(value);
 }
 
+function formatMoney(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '—';
+  }
+
+  return new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency: 'CNY',
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 function getAvailableUoms(item: EditablePurchaseOrderItem) {
   const values = new Set<string>();
   if (item.uom) {
