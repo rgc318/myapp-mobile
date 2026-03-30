@@ -171,14 +171,14 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   blockActive: {
-    zIndex: 50,
+    zIndex: 200,
   },
   inputWrap: {
     position: 'relative',
     zIndex: 20,
   },
   inputWrapActive: {
-    zIndex: 60,
+    zIndex: 220,
   },
   input: {
     borderRadius: 16,
@@ -211,16 +211,17 @@ const styles = StyleSheet.create({
   dropdown: {
     borderRadius: 14,
     borderWidth: 1,
+    elevation: 16,
     left: 0,
     position: 'absolute',
     right: 0,
+    zIndex: 240,
     top: 58,
     overflow: 'hidden',
     shadowColor: '#101828',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
     shadowRadius: 18,
-    elevation: 8,
   },
   optionRow: {
     alignItems: 'center',

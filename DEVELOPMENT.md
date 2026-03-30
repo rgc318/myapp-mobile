@@ -4825,3 +4825,43 @@ Sales order date handling was previously inconsistent: create-order exposed only
 - keeping `transaction_date` fixed while exposing editable `delivery_date` matches the current business assumption better:
   - most mobile orders are entered on the same day
   - but the promised delivery date often needs to be adjusted per order
+
+## Purchase Default Warehouse Alignment (2026-03-30)
+
+Purchase create-order previously mixed three different warehouse concepts:
+
+- app-level global default warehouse
+- supplier suggestion warehouse
+- current company warehouse scope
+
+This made the purchase create page and purchase item-search page look unstable:
+
+- switching company did not necessarily refresh the default inbound warehouse
+- search-page round trips could still produce empty warehouse rows
+- supplier suggestion looked like the final effective warehouse even when the current company had changed
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/item-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/purchase-order-draft.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+
+### What Changed
+
+- purchase create-order now treats `默认入库仓` as a company-scoped default, not as a plain app-global preference
+- when the operator has not manually changed the field:
+  - the page first loads the current company default warehouse
+  - if the current company has no default warehouse, it falls back to supplier suggestion warehouse
+- once the operator manually edits or clears the field, that choice is respected and will not be silently overwritten
+- draft form state now stores whether the default warehouse has been manually touched
+- returning from purchase item-search now backfills empty draft rows with the current effective default warehouse
+- purchase item-search now treats warehouse as a read-only quick-entry context:
+  - it previews total stock and target-warehouse stock
+  - it no longer tries to manage per-item warehouse switching in the search list
+
+### Why
+
+- the purchase search page should focus on adding goods and previewing stock, not on carrying warehouse management logic
+- the effective inbound warehouse must follow the current company first, otherwise operators can accidentally add goods into a warehouse belonging to another company
+- manual operator choices should be sticky; auto-fill should only help before the user has taken control

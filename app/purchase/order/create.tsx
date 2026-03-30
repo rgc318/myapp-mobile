@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, 
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DateFieldInput } from '@/components/date-field-input';
 import { LinkOptionInput } from '@/components/link-option-input';
 import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
@@ -12,6 +13,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
+import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
 import { formatDisplayUom } from '@/lib/display-uom';
 import {
   clearPurchaseOrderDraft,
@@ -28,6 +30,7 @@ import { searchLinkOptions } from '@/services/master-data';
 import { fetchProductDetail } from '@/services/products';
 import {
   companyExists,
+  fetchPurchaseCompanyContext,
   fetchSupplierPurchaseContext,
   getWarehouseCompany,
   searchCompanies,
@@ -96,6 +99,20 @@ function getAvailableUoms(item: PurchaseOrderDraftItem) {
   return Array.from(values);
 }
 
+function resolveFormDefaultWarehouse(
+  draftForm: ReturnType<typeof getPurchaseOrderDraftForm>,
+) {
+  if (draftForm.defaultWarehouse.trim()) {
+    return draftForm.defaultWarehouse;
+  }
+
+  if (draftForm.defaultWarehouseTouched) {
+    return '';
+  }
+
+  return '';
+}
+
 export default function PurchaseOrderCreateScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -104,7 +121,7 @@ export default function PurchaseOrderCreateScreen() {
   const preferences = getAppPreferences();
   const { showError, showSuccess } = useFeedback();
   const initialDraftForm = getPurchaseOrderDraftForm();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayIsoDate();
 
   const [supplier, setSupplier] = useState(
     typeof supplierParam === 'string' && supplierParam.trim() ? supplierParam : initialDraftForm.supplier,
@@ -118,6 +135,10 @@ export default function PurchaseOrderCreateScreen() {
   const [scheduleDate, setScheduleDate] = useState(
     initialDraftForm.scheduleDate || today,
   );
+  const [defaultWarehouse, setDefaultWarehouse] = useState(
+    resolveFormDefaultWarehouse(initialDraftForm),
+  );
+  const [defaultWarehouseTouched, setDefaultWarehouseTouched] = useState(initialDraftForm.defaultWarehouseTouched === true);
   const [draftItems, setDraftItems] = useState<PurchaseOrderDraftItem[]>(() => getPurchaseOrderDraft());
   const [supplierContext, setSupplierContext] = useState<SupplierPurchaseContext | null>(null);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
@@ -154,6 +175,31 @@ export default function PurchaseOrderCreateScreen() {
   }, [supplierParam]);
 
   useEffect(() => {
+    const trimmedDefaultWarehouse = defaultWarehouse.trim();
+    if (!trimmedDefaultWarehouse || !draftItems.some((item) => !item.warehouse.trim())) {
+      return;
+    }
+
+    setDraftItems((currentItems) => {
+      let changed = false;
+      const nextItems = currentItems.map((item) => {
+        if (item.warehouse.trim()) {
+          return item;
+        }
+        changed = true;
+        return { ...item, warehouse: trimmedDefaultWarehouse };
+      });
+
+      if (!changed) {
+        return currentItems;
+      }
+
+      replacePurchaseOrderDraft(nextItems);
+      return nextItems;
+    });
+  }, [defaultWarehouse, draftItems]);
+
+  useEffect(() => {
     if (isFocused) {
       setDraftItems(getPurchaseOrderDraft());
       const nextDraftForm = getPurchaseOrderDraftForm();
@@ -165,8 +211,41 @@ export default function PurchaseOrderCreateScreen() {
       setSupplierRef(nextDraftForm.supplierRef);
       setTransactionDate(nextDraftForm.transactionDate || today);
       setScheduleDate(nextDraftForm.scheduleDate || today);
+      setDefaultWarehouse(resolveFormDefaultWarehouse(nextDraftForm));
+      setDefaultWarehouseTouched(nextDraftForm.defaultWarehouseTouched === true);
     }
   }, [isFocused, preferences.defaultCompany, supplierParam, today]);
+
+  useEffect(() => {
+    const trimmedCompany = company.trim();
+
+    if (!trimmedCompany) {
+      if (!defaultWarehouseTouched) {
+        setDefaultWarehouse('');
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchPurchaseCompanyContext(trimmedCompany)
+      .then((context) => {
+        if (cancelled || defaultWarehouseTouched) {
+          return;
+        }
+
+        setDefaultWarehouse(context?.warehouse?.trim() || '');
+      })
+      .catch(() => {
+        if (!cancelled && !defaultWarehouseTouched) {
+          setDefaultWarehouse('');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [company, defaultWarehouseTouched]);
 
   useEffect(() => {
     updatePurchaseOrderDraftForm({
@@ -176,8 +255,10 @@ export default function PurchaseOrderCreateScreen() {
       supplierRef,
       transactionDate,
       scheduleDate,
+      defaultWarehouse,
+      defaultWarehouseTouched,
     });
-  }, [company, remarks, scheduleDate, supplier, supplierRef, transactionDate]);
+  }, [company, defaultWarehouse, defaultWarehouseTouched, remarks, scheduleDate, supplier, supplierRef, transactionDate]);
 
   useEffect(() => {
     const activeKeys = new Set(
@@ -285,7 +366,7 @@ export default function PurchaseOrderCreateScreen() {
 
     let cancelled = false;
     setIsLoadingContext(true);
-    fetchSupplierPurchaseContext(trimmedSupplier)
+    fetchSupplierPurchaseContext(trimmedSupplier, company.trim() || undefined)
       .then((context) => {
         if (cancelled) {
           return;
@@ -297,14 +378,8 @@ export default function PurchaseOrderCreateScreen() {
         if (context?.suggestions.company && company === preferences.defaultCompany) {
           setCompany(context.suggestions.company);
         }
-        if (context?.suggestions.warehouse) {
-          setDraftItems((currentItems) => {
-            const nextItems = currentItems.map((item) =>
-              item.warehouse.trim() ? item : { ...item, warehouse: context.suggestions.warehouse || '' },
-            );
-            replacePurchaseOrderDraft(nextItems);
-            return nextItems;
-          });
+        if (context?.suggestions.warehouse && !defaultWarehouseTouched) {
+          setDefaultWarehouse((current) => current.trim() || context.suggestions.warehouse || '');
         }
       })
       .catch((error) => {
@@ -322,7 +397,7 @@ export default function PurchaseOrderCreateScreen() {
     return () => {
       cancelled = true;
     };
-  }, [company, preferences.defaultCompany, showError, supplier]);
+  }, [company, defaultWarehouseTouched, preferences.defaultCompany, showError, supplier]);
 
   const pickerItem = useMemo(
     () => (pickerTarget ? draftItems.find((item) => item.id === pickerTarget.itemId) ?? null : null),
@@ -331,31 +406,32 @@ export default function PurchaseOrderCreateScreen() {
 
   useEffect(() => {
     const trimmedCompany = company.trim();
-    const activeWarehouses = Array.from(
+    const warehouseCandidates = Array.from(
       new Set(
-        draftItems
-          .map((item) => item.warehouse.trim())
-          .filter(Boolean),
+        [
+          defaultWarehouse.trim(),
+          ...draftItems.map((item) => item.warehouse.trim()),
+        ].filter(Boolean),
       ),
     );
 
     Object.keys(warehouseCompanyCacheRef.current).forEach((warehouse) => {
-      if (!activeWarehouses.includes(warehouse)) {
+      if (!warehouseCandidates.includes(warehouse)) {
         delete warehouseCompanyCacheRef.current[warehouse];
       }
     });
 
-    if (!trimmedCompany || !activeWarehouses.length) {
+    if (!trimmedCompany || !warehouseCandidates.length) {
       return;
     }
 
     let active = true;
-    const unresolvedWarehouses = activeWarehouses.filter(
+    const unresolvedWarehouses = warehouseCandidates.filter(
       (warehouse) => typeof warehouseCompanyCacheRef.current[warehouse] === 'undefined',
     );
 
     const validateDraftWarehouses = () => {
-      const invalidWarehouses = activeWarehouses.filter((warehouse) => {
+      const invalidWarehouses = warehouseCandidates.filter((warehouse) => {
         const warehouseCompany = warehouseCompanyCacheRef.current[warehouse];
         return Boolean(warehouseCompany && warehouseCompany !== trimmedCompany);
       });
@@ -364,9 +440,16 @@ export default function PurchaseOrderCreateScreen() {
         return;
       }
 
+      const invalidSet = new Set(invalidWarehouses);
+      const shouldClearDefaultWarehouse = invalidSet.has(defaultWarehouse.trim());
+
+      if (shouldClearDefaultWarehouse) {
+        setDefaultWarehouse('');
+        setDefaultWarehouseTouched(true);
+      }
+
       setDraftItems((currentItems) => {
         let changed = false;
-        const invalidSet = new Set(invalidWarehouses);
         const nextItems = currentItems.map((item) => {
           if (invalidSet.has(item.warehouse.trim())) {
             changed = true;
@@ -411,7 +494,7 @@ export default function PurchaseOrderCreateScreen() {
     return () => {
       active = false;
     };
-  }, [company, draftItems, showError]);
+  }, [company, defaultWarehouse, draftItems, showError]);
 
   useEffect(() => {
     if (!pickerVisible || !pickerTarget || !pickerItem) {
@@ -577,7 +660,7 @@ export default function PurchaseOrderCreateScreen() {
       pathname: '/purchase/order/item-search',
       params: {
         company,
-        warehouse: supplierContext?.suggestions.warehouse || preferences.defaultWarehouse,
+        defaultWarehouse: defaultWarehouse.trim() || supplierContext?.suggestions.warehouse || '',
       },
     });
   };
@@ -590,6 +673,11 @@ export default function PurchaseOrderCreateScreen() {
       delete next[itemId];
       return next;
     });
+  };
+
+  const handleDefaultWarehouseChange = (value: string) => {
+    setDefaultWarehouse(value);
+    setDefaultWarehouseTouched(true);
   };
 
   const closePicker = () => {
@@ -626,7 +714,10 @@ export default function PurchaseOrderCreateScreen() {
         imageUrl: baseRow.imageUrl ?? null,
         qty: '1',
         price: baseRow.price,
-        warehouse: supplierContext?.suggestions.warehouse || preferences.defaultWarehouse || '',
+        warehouse:
+          defaultWarehouse.trim() ||
+          supplierContext?.suggestions.warehouse ||
+          '',
         uom: baseRow.stockUom || baseRow.uom,
         stockUom: baseRow.stockUom ?? null,
         totalQty: baseRow.totalQty ?? null,
@@ -658,12 +749,24 @@ export default function PurchaseOrderCreateScreen() {
       firstInvalidSection ??= 'basic';
     }
 
+    if (!isValidIsoDate(transactionDate) || !isValidIsoDate(scheduleDate)) {
+      firstInvalidSection ??= 'basic';
+    }
+
     if (!validItems.length) {
       firstInvalidSection ??= 'items';
     }
 
     if (firstInvalidSection) {
-      showError(firstInvalidSection === 'basic' ? '请先完善主体信息。' : '请至少填写一条有效的采购商品。');
+      showError(
+        firstInvalidSection === 'basic'
+          ? !isValidIsoDate(transactionDate)
+            ? '请先选择有效下单日期。'
+            : !isValidIsoDate(scheduleDate)
+              ? '请先选择有效计划到货日期。'
+              : '请先完善主体信息。'
+          : '请至少填写一条有效的采购商品。',
+      );
       scrollToSection(firstInvalidSection === 'basic' ? basicSectionYRef.current : itemsSectionYRef.current);
       return;
     }
@@ -706,7 +809,7 @@ export default function PurchaseOrderCreateScreen() {
         items: validItems,
         transactionDate,
         scheduleDate,
-        defaultWarehouse: preferences.defaultWarehouse,
+        defaultWarehouse: normalizeOptionalText(defaultWarehouse),
         currency: supplierContext?.suggestions.currency ?? supplierContext?.supplier.defaultCurrency ?? null,
         supplierRef,
         remarks,
@@ -827,27 +930,22 @@ export default function PurchaseOrderCreateScreen() {
 
           <View style={styles.dateGrid}>
             <View style={styles.dateBlock}>
-              <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                计划到货
-              </ThemedText>
-              <TextInput
-                onChangeText={setScheduleDate}
-                placeholder="YYYY-MM-DD"
-                style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+              <DateFieldInput
+                errorText={!isValidIsoDate(scheduleDate) ? '请选择有效计划到货日期。' : undefined}
+                helperText="用于安排预期收货时间。"
+                label="计划到货"
+                onChange={setScheduleDate}
                 value={scheduleDate}
               />
             </View>
             <View style={styles.dateBlock}>
-              <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                下单日期
-              </ThemedText>
-              <TextInput
-                onChangeText={setTransactionDate}
-                placeholder="YYYY-MM-DD"
-                style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+              <DateFieldInput
+                errorText={!isValidIsoDate(transactionDate) ? '请选择有效下单日期。' : undefined}
+                helperText="默认今天，补录历史采购时可调整。"
+                label="下单日期"
+                onChange={setTransactionDate}
                 value={transactionDate}
               />
-              <ThemedText style={styles.selectorHint}>默认今天，通常无需频繁修改。</ThemedText>
             </View>
           </View>
 
@@ -929,24 +1027,67 @@ export default function PurchaseOrderCreateScreen() {
           ) : null}
         </View>
 
+        <View style={[styles.card, styles.overlayCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionAccent, { backgroundColor: tintColor }]} />
+            <View style={styles.sectionHeaderCopy}>
+              <ThemedText style={styles.cardTitle} type="defaultSemiBold">
+                选择商品
+              </ThemedText>
+              <ThemedText style={styles.sectionHintText}>
+                先确认新增商品默认带入哪个仓，再进入采购商品搜索页选择；后续明细仍可单独调整。
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.itemControlField}>
+            <LinkOptionInput
+              helperText="未手动修改时会优先带当前公司的默认仓；如果当前公司没有默认仓，再尝试供应商建议仓。"
+              inputActionText="切换"
+              label="默认入库仓（新增商品默认带入）"
+              loadOptions={(text) => searchWarehouses(text, company.trim() || undefined)}
+              onChangeText={handleDefaultWarehouseChange}
+              onOptionSelect={handleDefaultWarehouseChange}
+              placeholder="未设置时优先带当前公司默认仓，其次供应商建议仓"
+              value={defaultWarehouse}
+            />
+          </View>
+
+          <Pressable
+            onPress={handleAddItem}
+            style={[styles.quickPickerCard, { backgroundColor: surfaceMuted, borderColor }]}>
+            <View style={[styles.quickPickerIconWrap, { backgroundColor: surface }]}>
+              <IconSymbol color={tintColor} name="shippingbox.fill" size={18} />
+            </View>
+            <View style={styles.quickPickerCopy}>
+              <ThemedText style={styles.quickPickerLabel} type="defaultSemiBold">
+                选择商品
+              </ThemedText>
+              <ThemedText style={styles.quickPickerHint}>
+                进入采购商品搜索页选择，也可在页内扫码添加
+              </ThemedText>
+            </View>
+            <View style={styles.quickPickerActionWrap}>
+              <ThemedText style={[styles.textAction, { color: tintColor }]} type="defaultSemiBold">
+                去选择
+              </ThemedText>
+            </View>
+          </Pressable>
+        </View>
+
         <View
           onLayout={(event) => {
             itemsSectionYRef.current = event.nativeEvent.layout.y;
           }}
-          style={[styles.card, { backgroundColor: surface, borderColor }]}>
+          style={[styles.card, styles.itemsCardShell, { backgroundColor: surface, borderColor }]}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionAccent, { backgroundColor: tintColor }]} />
             <View style={styles.sectionHeaderCopy}>
               <ThemedText style={styles.cardTitle} type="defaultSemiBold">
                 采购商品
               </ThemedText>
-              <ThemedText style={styles.sectionHintText}>先选商品，再按仓库拆分数量和采购价。</ThemedText>
+              <ThemedText style={styles.sectionHintText}>已选商品在这里按仓库拆分数量和采购价。</ThemedText>
             </View>
-            <Pressable onPress={handleAddItem}>
-              <ThemedText style={[styles.textAction, { color: tintColor }]} type="defaultSemiBold">
-                选择商品
-              </ThemedText>
-            </Pressable>
           </View>
 
           <View style={styles.itemList}>
@@ -1028,10 +1169,11 @@ export default function PurchaseOrderCreateScreen() {
                               params: {
                                 lineId: group.rows[0].id,
                                 company,
-                                warehouse:
+                                defaultWarehouse:
                                   group.rows[0].warehouse ||
+                                  defaultWarehouse ||
                                   supplierContext?.suggestions.warehouse ||
-                                  preferences.defaultWarehouse,
+                                  '',
                               },
                             })
                           }
@@ -1427,7 +1569,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     gap: 14,
+    overflow: 'visible',
     padding: 18,
+  },
+  overlayCard: {
+    zIndex: 120,
   },
   cardHeader: {
     alignItems: 'center',
@@ -1476,6 +1622,41 @@ const styles = StyleSheet.create({
   },
   textAction: {
     fontSize: 13,
+  },
+  quickPickerCard: {
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 76,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  quickPickerIconWrap: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  quickPickerCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  quickPickerLabel: {
+    fontSize: 16,
+  },
+  quickPickerHint: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  quickPickerActionWrap: {
+    justifyContent: 'center',
+  },
+  itemControlField: {
+    zIndex: 30,
   },
   inlineHintCard: {
     borderRadius: 18,
@@ -1563,6 +1744,9 @@ const styles = StyleSheet.create({
   itemList: {
     gap: 12,
     zIndex: 1,
+  },
+  itemsCardShell: {
+    zIndex: 10,
   },
   itemsCard: {
     overflow: 'visible',

@@ -24,7 +24,9 @@ export type ProductDetail = {
   barcode: string;
   stockQty: number | null;
   totalQty: number | null;
+  globalTotalQty?: number | null;
   warehouseStockDetails: WarehouseStockDetail[];
+  globalWarehouseStockDetails?: WarehouseStockDetail[];
   price: number | null;
   warehouse: string;
   allUoms: string[];
@@ -261,7 +263,9 @@ function mapProductRow(
     barcode: typeof data.barcode === 'string' ? data.barcode : '',
     stockQty: toOptionalNumber(data.qty) ?? toOptionalNumber(data.stock_qty),
     totalQty: toOptionalNumber(data.total_qty),
+    globalTotalQty: toOptionalNumber(data.global_total_qty),
     warehouseStockDetails,
+    globalWarehouseStockDetails: mapWarehouseStockDetails(data.global_warehouse_stock_details),
     price: toOptionalNumber(data.price),
     warehouse,
     allUoms: mapUomNames(data.all_uoms),

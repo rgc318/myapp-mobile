@@ -57,6 +57,11 @@ export type SupplierPurchaseContext = {
   };
 };
 
+export type PurchaseCompanyContext = {
+  company: string | null;
+  warehouse: string | null;
+};
+
 export type PurchaseOrderItemInput = {
   itemCode: string;
   qty: number;
@@ -529,7 +534,25 @@ export async function fetchPurchaseOrderStatusSummary(options?: {
     .filter((row): row is PurchaseOrderSummaryItem => Boolean(row?.name));
 }
 
-export async function fetchSupplierPurchaseContext(supplier: string): Promise<SupplierPurchaseContext | null> {
+export async function fetchPurchaseCompanyContext(company?: string): Promise<PurchaseCompanyContext | null> {
+  const trimmedCompany = company?.trim();
+
+  const data = await callGatewayMethod<Record<string, any>>(
+    'myapp.api.gateway.get_purchase_company_context',
+    { company: normalizeOptionalText(trimmedCompany) },
+  );
+
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  return {
+    company: typeof data.company === 'string' ? data.company : null,
+    warehouse: typeof data.warehouse === 'string' ? data.warehouse : null,
+  };
+}
+
+export async function fetchSupplierPurchaseContext(supplier: string, company?: string): Promise<SupplierPurchaseContext | null> {
   const trimmedSupplier = supplier.trim();
   if (!trimmedSupplier) {
     return null;
@@ -537,7 +560,10 @@ export async function fetchSupplierPurchaseContext(supplier: string): Promise<Su
 
   const data = await callGatewayMethod<Record<string, any>>(
     'myapp.api.gateway.get_supplier_purchase_context',
-    { supplier: trimmedSupplier },
+    {
+      supplier: trimmedSupplier,
+      company: normalizeOptionalText(company),
+    },
   );
 
   if (!data || typeof data !== 'object' || !data.supplier || typeof data.supplier !== 'object') {

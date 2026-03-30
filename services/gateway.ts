@@ -9,6 +9,7 @@ export type ProductSearchItem = {
   stockQty: number | null;
   warehouseStockQty?: number | null;
   totalQty?: number | null;
+  globalTotalQty?: number | null;
   price: number | null;
   uom: string | null;
   stockUom?: string | null;
@@ -21,6 +22,11 @@ export type ProductSearchItem = {
   priceSummary?: PriceSummary | null;
   warehouse: string | null;
   warehouseStockDetails?: {
+    warehouse: string;
+    company: string | null;
+    qty: number;
+  }[];
+  globalWarehouseStockDetails?: {
     warehouse: string;
     company: string | null;
     qty: number;
@@ -259,6 +265,7 @@ export async function searchProducts(
         toOptionalNumber(row.qty) ??
         null,
       totalQty: toOptionalNumber(row.total_qty) ?? null,
+      globalTotalQty: toOptionalNumber(row.global_total_qty) ?? null,
       price: toOptionalNumber(row.price) ?? toOptionalNumber(row.rate) ?? null,
       uom: typeof row.uom === 'string' ? row.uom : null,
       stockUom: typeof row.stock_uom === 'string' ? row.stock_uom : null,
@@ -276,6 +283,30 @@ export async function searchProducts(
           : options?.warehouse ?? null,
       warehouseStockDetails: Array.isArray(row.warehouse_stock_details)
         ? row.warehouse_stock_details
+            .map((entry) => {
+              if (!entry || typeof entry !== 'object') {
+                return null;
+              }
+              const stockRow = entry as Record<string, unknown>;
+              const warehouse =
+                typeof stockRow.warehouse === 'string' ? stockRow.warehouse.trim() : '';
+              if (!warehouse) {
+                return null;
+              }
+              return {
+                warehouse,
+                company: typeof stockRow.company === 'string' ? stockRow.company : null,
+                qty: toOptionalNumber(stockRow.qty) ?? 0,
+              };
+            })
+            .filter(
+              (
+                entry,
+              ): entry is { warehouse: string; company: string | null; qty: number } => Boolean(entry),
+            )
+        : [],
+      globalWarehouseStockDetails: Array.isArray(row.global_warehouse_stock_details)
+        ? row.global_warehouse_stock_details
             .map((entry) => {
               if (!entry || typeof entry !== 'object') {
                 return null;

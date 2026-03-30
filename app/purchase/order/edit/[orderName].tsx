@@ -5,11 +5,13 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput,
 import { Image } from 'expo-image';
 
 import { AppShell } from '@/components/app-shell';
+import { DateFieldInput } from '@/components/date-field-input';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
+import { isValidIsoDate } from '@/lib/date-value';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { convertQtyToStockQty, formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
 import { useFeedback } from '@/providers/feedback-provider';
@@ -549,6 +551,18 @@ export default function PurchaseOrderEditScreen() {
       return;
     }
 
+    if (!isValidIsoDate(transactionDate)) {
+      showError('请先选择有效下单日期。');
+      scrollToSection(metaSectionYRef.current);
+      return;
+    }
+
+    if (!isValidIsoDate(scheduleDate)) {
+      showError('请先选择有效计划到货日期。');
+      scrollToSection(metaSectionYRef.current);
+      return;
+    }
+
     if (!headerChanged && !itemsChanged) {
       showError('当前没有可保存的修改。');
       return;
@@ -714,24 +728,20 @@ export default function PurchaseOrderEditScreen() {
 
               <View style={styles.inlineGrid}>
                 <View style={styles.inlineField}>
-                  <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                    下单日期
-                  </ThemedText>
-                  <TextInput
-                    onChangeText={setTransactionDate}
-                    placeholder="YYYY-MM-DD"
-                    style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+                  <DateFieldInput
+                    errorText={!isValidIsoDate(transactionDate) ? '请选择有效下单日期。' : undefined}
+                    helperText="采购单头部日期。"
+                    label="下单日期"
+                    onChange={setTransactionDate}
                     value={transactionDate}
                   />
                 </View>
                 <View style={styles.inlineField}>
-                  <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                    计划到货
-                  </ThemedText>
-                  <TextInput
-                    onChangeText={setScheduleDate}
-                    placeholder="YYYY-MM-DD"
-                    style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+                  <DateFieldInput
+                    errorText={!isValidIsoDate(scheduleDate) ? '请选择有效计划到货日期。' : undefined}
+                    helperText="用于收货计划安排。"
+                    label="计划到货"
+                    onChange={setScheduleDate}
                     value={scheduleDate}
                   />
                 </View>

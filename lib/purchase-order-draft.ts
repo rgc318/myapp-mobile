@@ -32,6 +32,8 @@ export type PurchaseOrderDraftForm = {
   supplierRef: string;
   transactionDate: string;
   scheduleDate: string;
+  defaultWarehouse: string;
+  defaultWarehouseTouched: boolean;
 };
 
 const STORAGE_KEY = 'myapp-mobile.purchase-order-draft';
@@ -107,6 +109,8 @@ function normalizeDraftForm(value: Partial<PurchaseOrderDraftForm> | null | unde
     supplierRef: typeof value?.supplierRef === 'string' ? value.supplierRef : '',
     transactionDate: typeof value?.transactionDate === 'string' ? value.transactionDate : '',
     scheduleDate: typeof value?.scheduleDate === 'string' ? value.scheduleDate : '',
+    defaultWarehouse: typeof value?.defaultWarehouse === 'string' ? value.defaultWarehouse : '',
+    defaultWarehouseTouched: value?.defaultWarehouseTouched === true,
   };
 }
 
