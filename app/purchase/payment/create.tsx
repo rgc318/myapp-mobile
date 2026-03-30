@@ -3,10 +3,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { DateFieldInput } from '@/components/date-field-input';
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
+import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
+import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
   fetchPurchaseInvoiceDetail,
@@ -38,7 +41,7 @@ export default function PurchasePaymentCreateScreen() {
   const [paidAmount, setPaidAmount] = useState('');
   const [modeOfPayment, setModeOfPayment] = useState('');
   const [referenceNo, setReferenceNo] = useState('');
-  const [referenceDate, setReferenceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [referenceDate, setReferenceDate] = useState(getTodayIsoDate());
   const [invoiceDetail, setInvoiceDetail] = useState<PurchaseInvoiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -104,6 +107,10 @@ export default function PurchasePaymentCreateScreen() {
       showError('请输入有效的付款金额。');
       return;
     }
+    if (!isValidIsoDate(referenceDate)) {
+      showError('请先选择有效付款日期。');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -158,7 +165,7 @@ export default function PurchasePaymentCreateScreen() {
             </ThemedText>
             <TextInput
               keyboardType="numeric"
-              onChangeText={setPaidAmount}
+              onChangeText={(value) => setPaidAmount(sanitizeDecimalInput(value))}
               placeholder="输入本次付款金额"
               style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
               value={paidAmount}
@@ -189,13 +196,11 @@ export default function PurchasePaymentCreateScreen() {
               />
             </View>
             <View style={styles.field}>
-              <ThemedText style={styles.label} type="defaultSemiBold">
-                付款日期
-              </ThemedText>
-              <TextInput
-                onChangeText={setReferenceDate}
-                placeholder="YYYY-MM-DD"
-                style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+              <DateFieldInput
+                errorText={!isValidIsoDate(referenceDate) ? '请选择有效付款日期。' : undefined}
+                helperText="默认今天，用于登记本次实际付款日期。"
+                label="付款日期"
+                onChange={setReferenceDate}
                 value={referenceDate}
               />
             </View>

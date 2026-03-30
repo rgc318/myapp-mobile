@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { sanitizeDecimalInput, sanitizeIntegerInput } from '@/lib/numeric-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getSalesModeLabel, type SalesMode } from '@/lib/sales-mode';
 
@@ -240,7 +241,7 @@ function WarehouseEntryEditor({
               </Pressable>
               <TextInput
                 keyboardType="number-pad"
-                onChangeText={onChangeQty}
+                onChangeText={(value) => onChangeQty(sanitizeIntegerInput(value))}
                 style={styles.qtyInput}
                 value={String(qty)}
               />
@@ -267,7 +268,7 @@ function WarehouseEntryEditor({
               <ThemedText style={styles.pricePrefix}>{'¥'}</ThemedText>
               <TextInput
                 keyboardType="numeric"
-                onChangeText={onChangePrice}
+                onChangeText={(value) => onChangePrice(sanitizeDecimalInput(value))}
                 style={styles.priceInput}
                 value={priceText}
               />

@@ -10,13 +10,14 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
-import { getAppPreferences } from '@/lib/app-preferences';
 import { isValidIsoDate } from '@/lib/date-value';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import { convertQtyToStockQty, formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
 import { useFeedback } from '@/providers/feedback-provider';
 import { fetchProductDetail } from '@/services/products';
 import {
+  fetchPurchaseCompanyContext,
   fetchPurchaseOrderDetail,
   getWarehouseCompany,
   searchWarehouses,
@@ -97,7 +98,6 @@ function buildItemsSignature(
 export default function PurchaseOrderEditScreen() {
   const { orderName } = useLocalSearchParams<{ orderName: string }>();
   const router = useRouter();
-  const preferences = getAppPreferences();
   const { showError, showSuccess } = useFeedback();
 
   const [detail, setDetail] = useState<PurchaseOrderDetail | null>(null);
@@ -107,6 +107,7 @@ export default function PurchaseOrderEditScreen() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [supplierRef, setSupplierRef] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [companyDefaultWarehouse, setCompanyDefaultWarehouse] = useState('');
   const [editableItems, setEditableItems] = useState<EditablePurchaseOrderItem[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{ itemId: string; field: 'warehouse' | 'uom' } | null>(null);
@@ -184,6 +185,43 @@ export default function PurchaseOrderEditScreen() {
       cancelled = true;
     };
   }, [orderName, showError]);
+
+  useEffect(() => {
+    const trimmedCompany = detail?.company?.trim();
+    if (!trimmedCompany) {
+      setCompanyDefaultWarehouse('');
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchPurchaseCompanyContext(trimmedCompany)
+      .then((context) => {
+        if (!cancelled) {
+          setCompanyDefaultWarehouse(context?.warehouse?.trim() || '');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCompanyDefaultWarehouse('');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.company]);
+
+  useEffect(() => {
+    const trimmedDefaultWarehouse = companyDefaultWarehouse.trim();
+    if (!trimmedDefaultWarehouse || !editableItems.some((item) => !item.warehouse.trim())) {
+      return;
+    }
+
+    setEditableItems((currentItems) =>
+      currentItems.map((item) => (item.warehouse.trim() ? item : { ...item, warehouse: trimmedDefaultWarehouse })),
+    );
+  }, [companyDefaultWarehouse, editableItems]);
 
   useEffect(() => {
     if (!detail?.company) {
@@ -459,6 +497,18 @@ export default function PurchaseOrderEditScreen() {
     () => originalItemsRef.current !== buildItemsSignature(editableItems),
     [editableItems],
   );
+  const totalPurchaseAmount = useMemo(
+    () =>
+      editableItems.reduce((sum, item) => {
+        const qty = Number(item.qty);
+        const price = Number(item.price);
+        if (!Number.isFinite(qty) || !Number.isFinite(price)) {
+          return sum;
+        }
+        return sum + qty * price;
+      }, 0),
+    [editableItems],
+  );
 
   const actions = useMemo(() => {
     if (!detail?.name) {
@@ -493,7 +543,8 @@ export default function PurchaseOrderEditScreen() {
   };
 
   const handleItemChange = (itemId: string, field: keyof EditablePurchaseOrderItem, value: string) => {
-    setEditableItems((current) => current.map((item) => (item.id === itemId ? { ...item, [field]: value } : item)));
+    const nextValue = field === 'qty' || field === 'price' ? sanitizeDecimalInput(value) : value;
+    setEditableItems((current) => current.map((item) => (item.id === itemId ? { ...item, [field]: nextValue } : item)));
   };
 
   const openPicker = (itemId: string, field: 'warehouse' | 'uom') => {
@@ -541,7 +592,7 @@ export default function PurchaseOrderEditScreen() {
         ...baseRow,
         id: buildEditableId(),
         qty: '1',
-        warehouse: baseRow.warehouse,
+        warehouse: baseRow.warehouse || companyDefaultWarehouse || '',
       },
     ]);
   };
@@ -591,7 +642,7 @@ export default function PurchaseOrderEditScreen() {
           orderName: detail.name,
           company: detail.company,
           scheduleDate,
-          defaultWarehouse: preferences.defaultWarehouse,
+          defaultWarehouse: companyDefaultWarehouse || undefined,
           items: validItems,
         });
 
@@ -787,6 +838,16 @@ export default function PurchaseOrderEditScreen() {
                 </ThemedText>
               </View>
 
+              <View style={[styles.itemsSummaryBar, { backgroundColor: surfaceMuted }]}>
+                <ThemedText style={styles.itemsSummaryText}>
+                  当前明细 {editableItems.length} 条
+                </ThemedText>
+                <ThemedText style={styles.itemsSummaryDivider}>·</ThemedText>
+                <ThemedText style={styles.itemsSummaryText}>
+                  预计采购金额 <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">{formatMoney(totalPurchaseAmount)}</ThemedText>
+                </ThemedText>
+              </View>
+
               <View style={styles.groupList}>
                 {groupedItems.map((group, groupIndex) => {
                   const leadRow = group.rows[0];
@@ -806,6 +867,14 @@ export default function PurchaseOrderEditScreen() {
                     return sum + converted;
                   }, 0);
                   const projectedTotal = typeof leadRow.totalQty === 'number' ? leadRow.totalQty + incomingQty : null;
+                  const groupPurchaseAmount = group.rows.reduce((sum, row) => {
+                    const qty = Number(row.qty);
+                    const price = Number(row.price);
+                    if (!Number.isFinite(qty) || !Number.isFinite(price)) {
+                      return sum;
+                    }
+                    return sum + qty * price;
+                  }, 0);
 
                   return (
                     <View
@@ -828,6 +897,9 @@ export default function PurchaseOrderEditScreen() {
                               {group.itemName || group.itemCode}
                             </ThemedText>
                             <ThemedText style={styles.groupMeta}>编码 {group.itemCode}</ThemedText>
+                            <ThemedText style={styles.groupMeta}>
+                              本次采购额 <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">{formatMoney(groupPurchaseAmount)}</ThemedText>
+                            </ThemedText>
                           </View>
                         </View>
                         {canEditItems ? (
@@ -1170,6 +1242,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   sectionHint: {
+    fontSize: 13,
+  },
+  itemsSummaryBar: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  itemsSummaryText: {
+    color: '#475569',
+    fontSize: 13,
+  },
+  amountHighlightText: {
+    color: '#C2410C',
+    fontSize: 15,
+  },
+  itemsSummaryDivider: {
+    color: '#94A3B8',
     fontSize: 13,
   },
   fieldBlock: {

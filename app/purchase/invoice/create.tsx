@@ -4,10 +4,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { DateFieldInput } from '@/components/date-field-input';
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
+import { isValidIsoDate } from '@/lib/date-value';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
   fetchPurchaseInvoiceDetail,
@@ -140,6 +142,11 @@ export default function PurchaseInvoiceCreateScreen() {
       return;
     }
 
+    if (dueDate.trim() && !isValidIsoDate(dueDate)) {
+      showError('请先选择有效到期日期。');
+      return;
+    }
+
     if (!receiptDetail.canCreateInvoice) {
       showInfo('这张采购收货单当前不能继续登记发票，可能已经开票。');
       return;
@@ -201,13 +208,12 @@ export default function PurchaseInvoiceCreateScreen() {
               value={receiptName}
             />
             <View style={styles.field}>
-              <ThemedText style={styles.label} type="defaultSemiBold">
-                到期日期
-              </ThemedText>
-              <TextInput
-                onChangeText={setDueDate}
-                placeholder="YYYY-MM-DD，可选"
-                style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+              <DateFieldInput
+                allowClear
+                errorText={dueDate.trim() && !isValidIsoDate(dueDate) ? '请选择有效到期日期。' : undefined}
+                helperText="可选，用于记录供应商发票应付到期日。"
+                label="到期日期"
+                onChange={setDueDate}
                 value={dueDate}
               />
             </View>

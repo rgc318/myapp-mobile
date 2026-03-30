@@ -12,6 +12,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { sanitizeDecimalInput, sanitizeIntegerInput } from '@/lib/numeric-input';
 import { normalizeText, toOptionalText } from '@/lib/form-utils';
 import { normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
 import {
@@ -925,7 +926,7 @@ export default function ProductSearchScreen() {
               />
               <TextInput
                 keyboardType="numeric"
-                onChangeText={setNewItemQty}
+                onChangeText={(value) => setNewItemQty(sanitizeIntegerInput(value))}
                 placeholder={'初始数量，默认 0'}
                 placeholderTextColor="rgba(31,42,55,0.45)"
                 style={[styles.quickCreateInput, { backgroundColor: surfaceMuted, borderColor }]}
@@ -940,7 +941,7 @@ export default function ProductSearchScreen() {
               />
               <TextInput
                 keyboardType="numeric"
-                onChangeText={setNewItemPrice}
+                onChangeText={(value) => setNewItemPrice(sanitizeDecimalInput(value))}
                 placeholder={'参考售价，可选'}
                 placeholderTextColor="rgba(31,42,55,0.45)"
                 style={[styles.quickCreateInput, { backgroundColor: surfaceMuted, borderColor }]}

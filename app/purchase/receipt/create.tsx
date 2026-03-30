@@ -4,10 +4,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { DateFieldInput } from '@/components/date-field-input';
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
+import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
+import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
   fetchPurchaseOrderDetail,
@@ -50,7 +53,7 @@ export default function PurchaseReceiptCreateScreen() {
   const params = useLocalSearchParams<{ orderName?: string; receiptName?: string; notice?: string }>();
   const { showError, showSuccess, showInfo } = useFeedback();
   const [orderName, setOrderName] = useState(typeof params.orderName === 'string' ? params.orderName.trim() : '');
-  const [postingDate, setPostingDate] = useState(new Date().toISOString().slice(0, 10));
+  const [postingDate, setPostingDate] = useState(getTodayIsoDate());
   const [postingTime, setPostingTime] = useState('');
   const [remarks, setRemarks] = useState('');
   const [orderDetail, setOrderDetail] = useState<PurchaseOrderDetail | null>(null);
@@ -178,6 +181,11 @@ export default function PurchaseReceiptCreateScreen() {
       return;
     }
 
+    if (!isValidIsoDate(postingDate)) {
+      showError('请先选择有效收货日期。');
+      return;
+    }
+
     if (!orderDetail) {
       showError('当前采购订单详情尚未加载完成。');
       return;
@@ -297,13 +305,11 @@ export default function PurchaseReceiptCreateScreen() {
             />
             <View style={styles.row}>
               <View style={styles.field}>
-                <ThemedText style={styles.label} type="defaultSemiBold">
-                  收货日期
-                </ThemedText>
-                <TextInput
-                  onChangeText={setPostingDate}
-                  placeholder="YYYY-MM-DD"
-                  style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+                <DateFieldInput
+                  errorText={!isValidIsoDate(postingDate) ? '请选择有效收货日期。' : undefined}
+                  helperText="用于记录本次实际到货入库日期。"
+                  label="收货日期"
+                  onChange={setPostingDate}
                   value={postingDate}
                 />
               </View>
@@ -417,7 +423,7 @@ export default function PurchaseReceiptCreateScreen() {
                           onChangeText={(value) =>
                             updateEditableItem(item.key, (current) => ({
                               ...current,
-                              qtyInput: value,
+                              qtyInput: sanitizeDecimalInput(value),
                             }))
                           }
                           placeholder="填 0 可跳过"
@@ -434,7 +440,7 @@ export default function PurchaseReceiptCreateScreen() {
                           onChangeText={(value) =>
                             updateEditableItem(item.key, (current) => ({
                               ...current,
-                              priceInput: value,
+                              priceInput: sanitizeDecimalInput(value),
                             }))
                           }
                           placeholder="留空则沿用订单价"

@@ -15,6 +15,7 @@ import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import {
   clearPurchaseOrderDraft,
   getPurchaseOrderDraft,
@@ -593,6 +594,18 @@ export default function PurchaseOrderCreateScreen() {
 
   const itemCount = validItems.length;
   const totalQty = validItems.reduce((sum, item) => sum + item.qty, 0);
+  const totalAmount = useMemo(
+    () =>
+      draftItems.reduce((sum, item) => {
+        const qty = Number(item.qty);
+        const price = Number(item.price);
+        if (!Number.isFinite(qty) || !Number.isFinite(price)) {
+          return sum;
+        }
+        return sum + qty * price;
+      }, 0),
+    [draftItems],
+  );
   const hasDraftContent = useMemo(
     () =>
       Boolean(
@@ -628,8 +641,9 @@ export default function PurchaseOrderCreateScreen() {
   }, [hasDraftContent, isSubmitting, navigation]);
 
   const handleItemChange = (itemId: string, field: keyof PurchaseOrderDraftItem, value: string) => {
+    const nextValue = field === 'qty' || field === 'price' ? sanitizeDecimalInput(value) : value;
     setDraftItems((currentItems) => {
-      const nextItems = currentItems.map((item) => (item.id === itemId ? { ...item, [field]: value } : item));
+      const nextItems = currentItems.map((item) => (item.id === itemId ? { ...item, [field]: nextValue } : item));
       replacePurchaseOrderDraft(nextItems);
       return nextItems;
     });
@@ -1114,8 +1128,14 @@ export default function PurchaseOrderCreateScreen() {
                 const groupReferenceBuyingRate =
                   typeof groupLeadRow.standardBuyingRate === 'number' ? groupLeadRow.standardBuyingRate : null;
                 const groupReferenceUnit = formatDisplayUom(groupLeadRow.stockUom || groupLeadRow.uom || '');
-                const groupReferenceAmount =
-                  typeof groupReferenceBuyingRate === 'number' ? groupIncomingQty * groupReferenceBuyingRate : null;
+                const groupPurchaseAmount = group.rows.reduce((sum, row) => {
+                  const qty = Number(row.qty);
+                  const price = Number(row.price);
+                  if (!Number.isFinite(qty) || !Number.isFinite(price)) {
+                    return sum;
+                  }
+                  return sum + qty * price;
+                }, 0);
 
                 return (
                 <View
@@ -1151,9 +1171,9 @@ export default function PurchaseOrderCreateScreen() {
                             {groupReferenceBuyingRate != null && groupReferenceUnit ? ` / ${groupReferenceUnit}` : ''}
                           </ThemedText>
                           <ThemedText style={styles.groupInfoText}>
-                            参考金额{' '}
-                            <ThemedText type="defaultSemiBold">
-                              {groupReferenceAmount != null ? formatMoney(groupReferenceAmount) : '—'}
+                            本次采购额{' '}
+                            <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">
+                              {formatMoney(groupPurchaseAmount)}
                             </ThemedText>
                           </ThemedText>
                         </View>
@@ -1344,13 +1364,6 @@ export default function PurchaseOrderCreateScreen() {
                               <View style={styles.subRowField}>
                                 <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
                                   采购单位
-                                  <ThemedText style={styles.fieldLabelHint}>
-                                    {item.stockUom && item.uom && item.stockUom !== item.uom
-                                      ? `（默认按${formatDisplayUom(item.stockUom)}带入，库存按${formatDisplayUom(item.stockUom)}换算）`
-                                      : item.stockUom
-                                        ? `（默认：${formatDisplayUom(item.stockUom)}基准单位）`
-                                        : ''}
-                                  </ThemedText>
                                 </ThemedText>
                                 <Pressable
                                   onPress={() => openPicker(item.id, 'uom')}
@@ -1365,8 +1378,8 @@ export default function PurchaseOrderCreateScreen() {
                                 <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
                                   小计
                                 </ThemedText>
-                                <View style={[styles.compactInfoBox, { backgroundColor: surfaceMuted, borderColor }]}>
-                                  <ThemedText style={styles.compactInfoValueStrong} type="defaultSemiBold">
+                                <View style={[styles.compactResultBox, { backgroundColor: surface }]}>
+                                  <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">
                                     {formatMoney(rowSubtotal)}
                                   </ThemedText>
                                 </View>
@@ -1417,7 +1430,16 @@ export default function PurchaseOrderCreateScreen() {
       <View style={[styles.bottomBar, { backgroundColor: surface, borderTopColor: borderColor }]}>
         <View style={styles.bottomBarSummary}>
           <ThemedText style={styles.bottomBarTitle} type="defaultSemiBold">
-            {itemCount ? `已选 ${itemCount} 条有效明细` : '先添加采购商品'}
+            {itemCount ? (
+              <>
+                已选 {itemCount} 条有效明细 · 采购金额{' '}
+                <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">
+                  {formatMoney(totalAmount)}
+                </ThemedText>
+              </>
+            ) : (
+              '先添加采购商品'
+            )}
           </ThemedText>
           <ThemedText style={styles.bottomBarMeta}>
             {itemCount
@@ -2050,6 +2072,22 @@ const styles = StyleSheet.create({
   },
   compactInfoValueStrong: {
     color: '#0F172A',
+    fontSize: 16,
+  },
+  compactResultBox: {
+    alignItems: 'flex-start',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingHorizontal: 14,
+  },
+  compactResultValue: {
+    color: '#334155',
+    fontSize: 16,
+  },
+  amountHighlightText: {
+    color: '#C2410C',
     fontSize: 16,
   },
   selectorButton: {

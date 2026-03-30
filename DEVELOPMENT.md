@@ -4865,3 +4865,56 @@ This made the purchase create page and purchase item-search page look unstable:
 - the purchase search page should focus on adding goods and previewing stock, not on carrying warehouse management logic
 - the effective inbound warehouse must follow the current company first, otherwise operators can accidentally add goods into a warehouse belonging to another company
 - manual operator choices should be sticky; auto-fill should only help before the user has taken control
+
+## Purchase Amount And Numeric Input Alignment (2026-03-30)
+
+Purchase follow-up forms and item editors still had two inconsistent interaction problems:
+
+- several purchase downstream pages still used raw text dates while create-order had already moved to stronger date input handling
+- many numeric inputs accepted leading zero strings such as `01`, making amount and quantity fields feel unstable
+
+At the same time, purchase item rows still under-emphasized computed money values:
+
+- row subtotal looked too similar to editable inputs
+- grouped purchase amount and page-level purchase totals were present in logic but not visually prominent enough
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/receipt/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/invoice/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/payment/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/return/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/payment/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-order-item-editor.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/numeric-input.ts`
+
+### What Changed
+
+- purchase receipt, invoice, payment, and return pages now use `DateFieldInput` instead of raw date `TextInput`
+- those downstream purchase pages now also validate date values before submit
+- added shared numeric input sanitizers:
+  - `sanitizeDecimalInput`
+  - `sanitizeIntegerInput`
+- purchase order create/edit now sanitize quantity and price input while typing
+- purchase receipt, purchase payment, sales payment, sales order item editor, and product quick-create now reuse the same numeric sanitizing rules
+- leading-zero input is normalized early:
+  - `01` becomes `1`
+  - `01.5` becomes `1.5`
+  - `.5` becomes `0.5`
+- purchase create-order now shows:
+  - per-group `本次采购额`
+  - row-level `小计` as a read-only result block
+  - bottom summary `采购金额`
+- purchase edit-order now shows:
+  - section-level `预计采购金额`
+  - per-group `本次采购额`
+- amount values now use a dedicated highlight color so they read as computed financial results instead of editable fields
+
+### Why
+
+- purchase create/edit and downstream pages should feel like one continuous workflow, not a mix of upgraded and legacy form patterns
+- numeric entry should stabilize at the input boundary; otherwise every page ends up re-solving the same formatting issue differently
+- computed totals are core purchasing signals and should be easier to scan than labels, units, or helper copy

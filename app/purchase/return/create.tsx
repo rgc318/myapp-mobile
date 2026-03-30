@@ -3,10 +3,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { DateFieldInput } from '@/components/date-field-input';
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
+import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
   fetchPurchaseInvoiceDetail,
@@ -43,7 +45,7 @@ export default function PurchaseReturnCreateScreen() {
     typeof params.sourceName === 'string' ? params.sourceName.trim() : '',
   );
   const [remarks, setRemarks] = useState('');
-  const [postingDate, setPostingDate] = useState(new Date().toISOString().slice(0, 10));
+  const [postingDate, setPostingDate] = useState(getTodayIsoDate());
   const [receiptDetail, setReceiptDetail] = useState<PurchaseReceiptDetail | null>(null);
   const [invoiceDetail, setInvoiceDetail] = useState<PurchaseInvoiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -112,6 +114,10 @@ export default function PurchaseReturnCreateScreen() {
     const trimmedSourceName = sourceName.trim();
     if (!trimmedSourceName) {
       showError('请先选择退货来源单据。');
+      return;
+    }
+    if (!isValidIsoDate(postingDate)) {
+      showError('请先选择有效退货日期。');
       return;
     }
 
@@ -196,13 +202,11 @@ export default function PurchaseReturnCreateScreen() {
           />
 
           <View style={styles.field}>
-            <ThemedText style={styles.label} type="defaultSemiBold">
-              退货日期
-            </ThemedText>
-            <TextInput
-              onChangeText={setPostingDate}
-              placeholder="YYYY-MM-DD"
-              style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+            <DateFieldInput
+              errorText={!isValidIsoDate(postingDate) ? '请选择有效退货日期。' : undefined}
+              helperText="默认今天，用于记录本次退货过账日期。"
+              label="退货日期"
+              onChange={setPostingDate}
               value={postingDate}
             />
           </View>

@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { useFeedback } from '@/providers/feedback-provider';
 import { formatCurrencyValue } from '@/lib/display-currency';
+import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import { rememberPaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { recordSalesPayment } from '@/services/gateway';
 import { getSalesInvoiceDetailV2, type SalesInvoiceDetailV2 } from '@/services/sales';
@@ -413,11 +414,11 @@ export default function SalesPaymentCreateScreen() {
           <ThemedText style={styles.label} type="defaultSemiBold">本次实收金额</ThemedText>
           <TextInput
             keyboardType="decimal-pad"
-          onChangeText={(value) => {
-            const sanitized = value.replace(/[^0-9.]/g, '');
-            setAmountAutoCorrectHint('');
-            if (!sanitized) {
-              setPaidAmount('');
+            onChangeText={(value) => {
+              const sanitized = sanitizeDecimalInput(value);
+              setAmountAutoCorrectHint('');
+              if (!sanitized) {
+                setPaidAmount('');
                 return;
               }
 
