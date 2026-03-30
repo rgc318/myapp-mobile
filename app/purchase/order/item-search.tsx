@@ -215,10 +215,19 @@ function ResultRow({
 
 export default function PurchaseOrderItemSearchScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ lineId?: string; company?: string; warehouse?: string; defaultWarehouse?: string }>();
+  const params = useLocalSearchParams<{
+    lineId?: string;
+    company?: string;
+    warehouse?: string;
+    defaultWarehouse?: string;
+    draftScope?: string;
+    returnTo?: string;
+  }>();
   const { showError, showSuccess } = useFeedback();
   const lineId = typeof params.lineId === 'string' ? params.lineId.trim() : '';
   const company = typeof params.company === 'string' ? params.company.trim() : '';
+  const draftScope = typeof params.draftScope === 'string' && params.draftScope.trim() ? params.draftScope.trim() : undefined;
+  const returnTo = typeof params.returnTo === 'string' && params.returnTo.trim() ? params.returnTo.trim() : '/purchase/order/create';
   const defaultWarehouse =
     typeof params.defaultWarehouse === 'string' && params.defaultWarehouse.trim()
       ? params.defaultWarehouse.trim()
@@ -230,7 +239,7 @@ export default function PurchaseOrderItemSearchScreen() {
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [results, setResults] = useState<ProductSearchItem[]>([]);
   const [selectedWarehouseMap, setSelectedWarehouseMap] = useState<Record<string, string>>({});
-  const [draftItems, setDraftItems] = useState<PurchaseOrderDraftItem[]>(() => getPurchaseOrderDraft());
+  const [draftItems, setDraftItems] = useState<PurchaseOrderDraftItem[]>(() => getPurchaseOrderDraft(draftScope));
   const [showDraftSheet, setShowDraftSheet] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [inStockOnly, setInStockOnly] = useState(false);
@@ -284,7 +293,7 @@ export default function PurchaseOrderItemSearchScreen() {
     '';
 
   const syncDraftState = () => {
-    const nextDraft = getPurchaseOrderDraft();
+    const nextDraft = getPurchaseOrderDraft(draftScope);
     setDraftItems(nextDraft);
     setSelectedWarehouseMap((current) => {
       const next = { ...current };
@@ -369,7 +378,7 @@ export default function PurchaseOrderItemSearchScreen() {
     const selectedWarehouse =
       warehouseOverride ||
       resolveTargetWarehouse(item);
-    const existing = getDraftItem(item, selectedWarehouse, getPurchaseOrderDraft());
+    const existing = getDraftItem(item, selectedWarehouse, getPurchaseOrderDraft(draftScope));
     const nextQty = existing ? String((Number(existing.qty) || 0) + 1) : '1';
     const nextItem: PurchaseOrderDraftItem = {
       id: lineId || existing?.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -402,7 +411,7 @@ export default function PurchaseOrderItemSearchScreen() {
       warehouseStockDetails:
         item.warehouseStockDetails?.length ? item.warehouseStockDetails : existing?.warehouseStockDetails ?? [],
     };
-    upsertPurchaseOrderDraftItem(nextItem);
+    upsertPurchaseOrderDraftItem(nextItem, draftScope);
     syncDraftState();
     setMessage(`已将 ${item.itemName || item.itemCode} 加入采购单，目标入库仓 ${selectedWarehouse || '未指定'}，数量 ${nextQty}。`);
     showSuccess(`已加入 ${item.itemName || item.itemCode}`);
@@ -410,18 +419,18 @@ export default function PurchaseOrderItemSearchScreen() {
 
   const handleDecrease = (item: ProductSearchItem) => {
     const selectedWarehouse = resolveTargetWarehouse(item);
-    const existing = getDraftItem(item, selectedWarehouse, getPurchaseOrderDraft());
+    const existing = getDraftItem(item, selectedWarehouse, getPurchaseOrderDraft(draftScope));
     if (!existing) {
       return;
     }
     const nextQty = (Number(existing.qty) || 0) - 1;
     if (nextQty <= 0) {
-      removePurchaseOrderDraftItem(existing.id);
+      removePurchaseOrderDraftItem(existing.id, draftScope);
       syncDraftState();
       setMessage(`已将 ${item.itemName || item.itemCode} 从采购单中移除。`);
       return;
     }
-    upsertPurchaseOrderDraftItem({ ...existing, qty: String(nextQty) });
+    upsertPurchaseOrderDraftItem({ ...existing, qty: String(nextQty) }, draftScope);
     syncDraftState();
     setMessage(`已调整 ${item.itemName || item.itemCode} 数量，当前为 ${nextQty}。`);
   };
@@ -480,7 +489,9 @@ export default function PurchaseOrderItemSearchScreen() {
               <ThemedText style={styles.footerHint}>{warehouseDraftSummaryText}</ThemedText>
             </View>
           </Pressable>
-          <Pressable onPress={() => router.replace('/purchase/order/create')} style={[styles.returnButton, { backgroundColor: tintColor }]}>
+          <Pressable
+            onPress={() => router.replace(returnTo as never)}
+            style={[styles.returnButton, { backgroundColor: tintColor }]}>
             <ThemedText style={styles.returnButtonText} type="defaultSemiBold">
               返回采购单
             </ThemedText>
@@ -668,10 +679,10 @@ export default function PurchaseOrderItemSearchScreen() {
                 <ScrollView contentContainerStyle={styles.sheetList} style={styles.sheetScroll}>
                   {draftItems.map((item) => (
                     <DraftSummaryRow
-                      item={item}
-                      key={item.id}
-                      onRemove={(id) => {
-                        removePurchaseOrderDraftItem(id);
+                        item={item}
+                        key={item.id}
+                        onRemove={(id) => {
+                        removePurchaseOrderDraftItem(id, draftScope);
                         syncDraftState();
                       }}
                     />
@@ -680,7 +691,7 @@ export default function PurchaseOrderItemSearchScreen() {
                 <Pressable
                   onPress={() => {
                     setShowDraftSheet(false);
-                    router.replace('/purchase/order/create');
+                    router.replace(returnTo as never);
                   }}
                   style={[styles.sheetReturnButton, { backgroundColor: tintColor }]}>
                   <ThemedText style={styles.returnButtonText} type="defaultSemiBold">

@@ -106,6 +106,11 @@ export type PurchaseOrderDetail = {
   supplier: string;
   supplierGroup: string | null;
   supplierType: string | null;
+  supplierContactDisplay: string;
+  supplierContactPhone: string;
+  supplierContactEmail: string;
+  supplierAddressName: string;
+  supplierAddressDisplay: string;
   company: string;
   currency: string;
   transactionDate: string;
@@ -113,8 +118,10 @@ export type PurchaseOrderDetail = {
   remarks: string;
   supplierRef: string;
   orderAmountEstimate: number | null;
+  receivableAmount: number | null;
   paidAmount: number | null;
   outstandingAmount: number | null;
+  actualPaidAmount: number | null;
   receivingStatus: string;
   receivedQty: number | null;
   totalQty: number | null;
@@ -122,9 +129,15 @@ export type PurchaseOrderDetail = {
   completionStatus: string;
   canReceive: boolean;
   canCreateInvoice: boolean;
+  canRecordPayment: boolean;
+  canProcessReturn: boolean;
   canUpdate: boolean;
   canCancel: boolean;
   latestPaymentEntry: string;
+  latestPaymentInvoice: string;
+  latestUnallocatedAmount: number | null;
+  latestWriteoffAmount: number | null;
+  latestActualPaidAmount: number | null;
   purchaseReceipts: string[];
   purchaseInvoices: string[];
   defaultAddressDisplay: string;
@@ -801,6 +814,22 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
     supplier: typeof supplier.name === 'string' ? supplier.name : '',
     supplierGroup: typeof supplier.supplier_group === 'string' ? supplier.supplier_group : null,
     supplierType: typeof supplier.supplier_type === 'string' ? supplier.supplier_type : null,
+    supplierContactDisplay:
+      typeof supplier.contact_display_name === 'string'
+        ? supplier.contact_display_name
+        : typeof supplier.contact_person === 'string'
+          ? supplier.contact_person
+          : '',
+    supplierContactPhone: typeof supplier.contact_phone === 'string' ? supplier.contact_phone : '',
+    supplierContactEmail: typeof supplier.contact_email === 'string' ? supplier.contact_email : '',
+    supplierAddressName:
+      typeof address.supplier_address_name === 'string' ? address.supplier_address_name : '',
+    supplierAddressDisplay:
+      typeof address.supplier_address_text === 'string'
+        ? address.supplier_address_text
+        : typeof address.address_line1 === 'string'
+          ? address.address_line1
+          : '',
     company: typeof meta.company === 'string' ? meta.company : '',
     currency: typeof meta.currency === 'string' ? meta.currency : '',
     transactionDate: typeof meta.transaction_date === 'string' ? meta.transaction_date : '',
@@ -808,8 +837,10 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
     remarks: typeof meta.remarks === 'string' ? meta.remarks : '',
     supplierRef: typeof meta.supplier_ref === 'string' ? meta.supplier_ref : '',
     orderAmountEstimate: toOptionalNumber(amounts.order_amount_estimate),
+    receivableAmount: toOptionalNumber(amounts.receivable_amount),
     paidAmount: toOptionalNumber(amounts.paid_amount),
     outstandingAmount: toOptionalNumber(amounts.outstanding_amount),
+    actualPaidAmount: toOptionalNumber(payment.actual_paid_amount),
     receivingStatus: typeof receiving.status === 'string' ? receiving.status : '',
     receivedQty: toOptionalNumber(receiving.received_qty),
     totalQty: toOptionalNumber(receiving.total_qty),
@@ -817,6 +848,8 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
     completionStatus: typeof completion.status === 'string' ? completion.status : '',
     canReceive: Boolean(actions.can_receive_purchase_order),
     canCreateInvoice: Boolean(actions.can_create_purchase_invoice),
+    canRecordPayment: Boolean(actions.can_record_supplier_payment),
+    canProcessReturn: Boolean(actions.can_process_purchase_return),
     canUpdate:
       (typeof data.document_status === 'string' ? data.document_status : '') !== 'cancelled',
     canCancel:
@@ -828,6 +861,10 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
         Array.isArray(references.purchase_invoices) && references.purchase_invoices.length
       ),
     latestPaymentEntry: typeof references.latest_payment_entry === 'string' ? references.latest_payment_entry : '',
+    latestPaymentInvoice: typeof payment.latest_payment_invoice === 'string' ? payment.latest_payment_invoice : '',
+    latestUnallocatedAmount: toOptionalNumber(payment.latest_unallocated_amount),
+    latestWriteoffAmount: toOptionalNumber(payment.latest_writeoff_amount),
+    latestActualPaidAmount: toOptionalNumber(payment.latest_actual_paid_amount),
     purchaseReceipts: Array.isArray(references.purchase_receipts)
       ? references.purchase_receipts.map((value: unknown) => String(value ?? '')).filter(Boolean)
       : [],
@@ -867,6 +904,7 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
         (
           row,
         ): row is {
+          purchaseOrderItem: string;
           itemCode: string;
           itemName: string;
           qty: number | null;

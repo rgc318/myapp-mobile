@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { Image } from 'expo-image';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DateFieldInput } from '@/components/date-field-input';
 import { LinkOptionInput } from '@/components/link-option-input';
 import { MobilePageHeader } from '@/components/mobile-page-header';
+import { PurchaseOrderItemGroups } from '@/components/purchase-order-item-groups';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -25,7 +25,7 @@ import {
   updatePurchaseOrderDraftForm,
   type PurchaseOrderDraftItem,
 } from '@/lib/purchase-order-draft';
-import { convertQtyToStockQty, formatConvertedQty } from '@/lib/uom-conversion';
+import { formatConvertedQty } from '@/lib/uom-conversion';
 import { useFeedback } from '@/providers/feedback-provider';
 import { searchLinkOptions } from '@/services/master-data';
 import { fetchProductDetail } from '@/services/products';
@@ -565,33 +565,6 @@ export default function PurchaseOrderCreateScreen() {
     [draftItems],
   );
 
-  const groupedDraftItems = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        itemCode: string;
-        itemName: string;
-        rows: PurchaseOrderDraftItem[];
-      }
-    >();
-
-    draftItems.forEach((item) => {
-      const key = item.itemCode || item.id;
-      const existing = groups.get(key);
-      if (existing) {
-        existing.rows.push(item);
-        return;
-      }
-      groups.set(key, {
-        itemCode: item.itemCode,
-        itemName: item.itemName,
-        rows: [item],
-      });
-    });
-
-    return Array.from(groups.values());
-  }, [draftItems]);
-
   const itemCount = validItems.length;
   const totalQty = validItems.reduce((sum, item) => sum + item.qty, 0);
   const totalAmount = useMemo(
@@ -1105,322 +1078,42 @@ export default function PurchaseOrderCreateScreen() {
           </View>
 
           <View style={styles.itemList}>
-            {groupedDraftItems.length ? (
-              groupedDraftItems.map((group, groupIndex) => {
-                const groupLeadRow = group.rows[0];
-                const groupStockUom = groupLeadRow.stockUom || groupLeadRow.uom || '';
-                const groupIncomingQty = group.rows.reduce((sum, row) => {
-                  const qty = Number(row.qty);
-                  if (!Number.isFinite(qty)) {
-                    return sum;
-                  }
-                  const converted =
-                    convertQtyToStockQty({
-                      qty,
-                      uom: row.uom || groupStockUom,
-                      stockUom: groupLeadRow.stockUom || groupStockUom,
-                      uomConversions: row.uomConversions ?? groupLeadRow.uomConversions,
-                    }) ?? qty;
-                  return sum + converted;
-                }, 0);
-                const projectedTotal =
-                  typeof groupLeadRow.totalQty === 'number' ? groupLeadRow.totalQty + groupIncomingQty : null;
-                const groupReferenceBuyingRate =
-                  typeof groupLeadRow.standardBuyingRate === 'number' ? groupLeadRow.standardBuyingRate : null;
-                const groupReferenceUnit = formatDisplayUom(groupLeadRow.stockUom || groupLeadRow.uom || '');
-                const groupPurchaseAmount = group.rows.reduce((sum, row) => {
-                  const qty = Number(row.qty);
-                  const price = Number(row.price);
-                  if (!Number.isFinite(qty) || !Number.isFinite(price)) {
-                    return sum;
-                  }
-                  return sum + qty * price;
-                }, 0);
-
-                return (
-                <View
-                  key={group.itemCode || group.rows[0].id}
-                  style={[
-                    styles.groupBlock,
-                    { backgroundColor: surfaceMuted },
-                    groupIndex > 0 ? styles.groupBlockStacked : null,
-                  ]}>
-                  <View style={styles.groupHeader}>
-                    <View style={styles.groupLead}>
-                      <View style={[styles.groupThumbWrap, { backgroundColor: surface }]}>
-                        {groupLeadRow.imageUrl ? (
-                          <Image contentFit="cover" source={groupLeadRow.imageUrl} style={styles.groupThumbImage} />
-                        ) : (
-                          <IconSymbol color={tintColor} name="shippingbox.fill" size={20} />
-                        )}
-                      </View>
-                      <View style={styles.groupCopy}>
-                        <ThemedText style={styles.groupLabel} type="defaultSemiBold">
-                          采购商品 {groupIndex + 1}
-                        </ThemedText>
-                        <ThemedText style={styles.groupTitle} type="defaultSemiBold">
-                          {group.itemName || group.itemCode}
-                        </ThemedText>
-                        <ThemedText style={styles.groupMeta}>编码 {group.itemCode}</ThemedText>
-                        <View style={styles.groupInfoRow}>
-                          <ThemedText style={styles.groupInfoText}>
-                            参考进货价{' '}
-                            <ThemedText type="defaultSemiBold">
-                              {groupReferenceBuyingRate != null ? formatMoney(groupReferenceBuyingRate) : '未配置'}
-                            </ThemedText>
-                            {groupReferenceBuyingRate != null && groupReferenceUnit ? ` / ${groupReferenceUnit}` : ''}
-                          </ThemedText>
-                          <ThemedText style={styles.groupInfoText}>
-                            本次采购额{' '}
-                            <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">
-                              {formatMoney(groupPurchaseAmount)}
-                            </ThemedText>
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={styles.groupActions}>
-                      {group.rows.length === 1 ? (
-                        <Pressable
-                          onPress={() =>
-                            router.push({
-                              pathname: '/purchase/order/item-search',
-                              params: {
-                                lineId: group.rows[0].id,
-                                company,
-                                defaultWarehouse:
-                                  group.rows[0].warehouse ||
-                                  defaultWarehouse ||
-                                  supplierContext?.suggestions.warehouse ||
-                                  '',
-                              },
-                            })
-                          }
-                          style={[styles.groupActionButton, styles.groupActionSecondary, { backgroundColor: surface, borderColor }]}>
-                          <ThemedText style={[styles.groupActionText, { color: tintColor }]} type="defaultSemiBold">
-                            更换商品
-                          </ThemedText>
-                        </Pressable>
-                      ) : null}
-                      <Pressable
-                        onPress={() => handleAddWarehouseRow(group.rows)}
-                        style={[styles.groupActionButton, styles.groupActionPrimary, { backgroundColor: tintColor }]}>
-                        <ThemedText style={styles.groupActionPrimaryText} type="defaultSemiBold">
-                          新增仓库行
-                        </ThemedText>
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  <View style={[styles.groupSummaryBar, { backgroundColor: surface }]}>
-                    <ThemedText style={styles.groupSummaryText}>
-                      总库存 <ThemedText type="defaultSemiBold">{formatQty(groupLeadRow.totalQty)} {groupStockUom ? formatDisplayUom(groupStockUom) : ''}</ThemedText>
-                    </ThemedText>
-                    <ThemedText style={styles.groupSummaryDivider}>·</ThemedText>
-                    <ThemedText style={styles.groupSummaryText}>
-                      本次入库后 <ThemedText type="defaultSemiBold">{formatQty(projectedTotal)} {groupStockUom ? formatDisplayUom(groupStockUom) : ''}</ThemedText>
-                    </ThemedText>
-                    <ThemedText style={styles.groupSummaryDivider}>·</ThemedText>
-                    <ThemedText style={styles.groupSummaryText}>
-                      已拆分 <ThemedText type="defaultSemiBold">{group.rows.length}</ThemedText> 条仓库行
-                    </ThemedText>
-                  </View>
-
-                  <View style={styles.subRowList}>
-                    {group.rows.map((item, rowIndex) => {
-                      const currentWarehouseStock =
-                        item.warehouseStockDetails?.find((entry) => entry.warehouse === item.warehouse)?.qty ?? null;
-                      const rowQty = Number(item.qty);
-                      const incomingStockQty =
-                        Number.isFinite(rowQty) && rowQty > 0
-                          ? convertQtyToStockQty({
-                              qty: rowQty,
-                              uom: item.uom || item.stockUom,
-                              stockUom: item.stockUom,
-                              uomConversions: item.uomConversions,
-                            }) ?? rowQty
-                          : 0;
-                      const projectedWarehouseStock =
-                        typeof currentWarehouseStock === 'number'
-                          ? currentWarehouseStock + incomingStockQty
-                          : null;
-                      const isExpanded = expandedItemRows[item.id] ?? group.rows.length === 1;
-                      const rowUnit = item.uom || item.stockUom || '';
-                      const rowDisplayUnit = formatDisplayUom(rowUnit);
-                      const rowPriceNumber = Number(item.price);
-                      const rowSubtotal =
-                        Number.isFinite(rowQty) && Number.isFinite(rowPriceNumber)
-                          ? rowQty * rowPriceNumber
-                          : null;
-
-                      return (
-                      <View
-                        key={item.id}
-                        style={[
-                          styles.subRowSection,
-                          { backgroundColor: surface },
-                          rowIndex > 0 ? [styles.subRowSectionDivider, { borderTopColor: borderColor }] : null,
-                      ]}>
-                        <View style={styles.subRowHeader}>
-                          <View style={styles.subRowCopy}>
-                            <View style={styles.subRowTitleRow}>
-                              <View style={styles.subRowBadge}>
-                                <ThemedText style={styles.subRowBadgeText} type="defaultSemiBold">
-                                  仓库分配 {rowIndex + 1}
-                                </ThemedText>
-                              </View>
-                              <ThemedText style={styles.subRowSummaryText}>
-                                {item.warehouse || '未选仓库'} · 数量 {item.qty || '0'} · 单价 {item.price || '默认'}
-                              </ThemedText>
-                            </View>
-                            <View style={styles.subRowSummaryInline}>
-                              <ThemedText style={styles.subRowMetaCompact}>
-                                当前仓库 {formatQty(currentWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
-                              </ThemedText>
-                              <ThemedText style={styles.subRowSummaryDivider}>→</ThemedText>
-                              <ThemedText style={styles.subRowMetaCompact}>
-                                入库后 {formatQty(projectedWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
-                              </ThemedText>
-                            </View>
-                          </View>
-                          <View style={styles.subRowHeaderActions}>
-                            <Pressable
-                              onPress={() =>
-                                setExpandedItemRows((current) => ({ ...current, [item.id]: !isExpanded }))
-                              }
-                              style={[styles.subRowToggle, { borderColor }]}>
-                              <ThemedText style={[styles.subRowToggleText, { color: tintColor }]} type="defaultSemiBold">
-                                {isExpanded ? '收起' : '编辑'}
-                              </ThemedText>
-                            </Pressable>
-                            <Pressable onPress={() => handleRemoveItem(item.id)} style={[styles.subRowRemove, { borderColor }]}>
-                              <ThemedText style={styles.subRowRemoveText} type="defaultSemiBold">
-                                删除
-                              </ThemedText>
-                            </Pressable>
-                          </View>
-                        </View>
-
-                        {isExpanded ? (
-                          <View style={styles.subRowEditBody}>
-                            <View style={styles.subRowGrid}>
-                              <View style={styles.subRowField}>
-                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                  采购数量 {rowUnit ? `(${rowDisplayUnit})` : ''}
-                                </ThemedText>
-                                <View style={[styles.qtyStepper, { backgroundColor: surfaceMuted, borderColor }]}>
-                                  <Pressable
-                                    disabled={(Number(item.qty) || 0) <= 1}
-                                    onPress={() => handleAdjustItemQty(item.id, -1)}
-                                    style={[
-                                      styles.qtyActionButton,
-                                      (Number(item.qty) || 0) <= 1 ? styles.qtyActionButtonDisabled : null,
-                                    ]}>
-                                    <ThemedText style={[styles.qtyActionText, { color: tintColor }]} type="defaultSemiBold">
-                                      -
-                                    </ThemedText>
-                                  </Pressable>
-                                  <TextInput
-                                    keyboardType="decimal-pad"
-                                    onChangeText={(value) => handleItemChange(item.id, 'qty', value)}
-                                    placeholder="数量"
-                                    style={[
-                                      styles.qtyInput,
-                                      styles.textInputReset,
-                                      Platform.OS === 'web' ? styles.webTextInputReset : null,
-                                    ]}
-                                    value={item.qty}
-                                  />
-                                  <Pressable onPress={() => handleAdjustItemQty(item.id, 1)} style={styles.qtyActionButton}>
-                                    <ThemedText style={[styles.qtyActionText, { color: tintColor }]} type="defaultSemiBold">
-                                      +
-                                    </ThemedText>
-                                  </Pressable>
-                                </View>
-                              </View>
-                              <View style={styles.subRowField}>
-                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                  实际采购价 {rowUnit ? `(元/${rowDisplayUnit})` : ''}
-                                </ThemedText>
-                                <View style={[styles.priceInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
-                                  <ThemedText style={styles.pricePrefix}>¥</ThemedText>
-                                  <TextInput
-                                    keyboardType="decimal-pad"
-                                    onChangeText={(value) => handleItemChange(item.id, 'price', value)}
-                                    placeholder="单价"
-                                    style={[
-                                      styles.priceInput,
-                                      styles.textInputReset,
-                                      Platform.OS === 'web' ? styles.webTextInputReset : null,
-                                    ]}
-                                    value={item.price}
-                                  />
-                                </View>
-                              </View>
-                            </View>
-
-                            <View style={styles.subRowGrid}>
-                              <View style={styles.subRowField}>
-                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                  采购单位
-                                </ThemedText>
-                                <Pressable
-                                  onPress={() => openPicker(item.id, 'uom')}
-                                  style={[styles.compactInfoBox, { backgroundColor: surfaceMuted, borderColor }]}>
-                                  <ThemedText style={styles.compactInfoValue} type="defaultSemiBold">
-                                    {rowUnit ? rowDisplayUnit : '选择单位'}
-                                  </ThemedText>
-                                </Pressable>
-                              </View>
-
-                              <View style={styles.subRowField}>
-                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                  小计
-                                </ThemedText>
-                                <View style={[styles.compactResultBox, { backgroundColor: surface }]}>
-                                  <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">
-                                    {formatMoney(rowSubtotal)}
-                                  </ThemedText>
-                                </View>
-                              </View>
-                            </View>
-
-                            <View style={styles.subRowField}>
-                              <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                入库仓库
-                                <ThemedText style={styles.fieldLabelHint}>（留空时优先建议仓/默认仓）</ThemedText>
-                              </ThemedText>
-                              <Pressable
-                                onPress={() => openPicker(item.id, 'warehouse')}
-                                style={[styles.selectorButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                                <ThemedText style={styles.selectorButtonText}>
-                                  {item.warehouse || '选择入库仓库'}
-                                </ThemedText>
-                              </Pressable>
-                            </View>
-                          </View>
-                        ) : null}
-                      </View>
-                    )})}
-                  </View>
-                </View>
-              )})
-            ) : (
-              <View style={[styles.emptyState, { backgroundColor: surfaceMuted }]}>
-                <ThemedText type="defaultSemiBold">先从商品搜索页选择采购商品</ThemedText>
-                <ThemedText>
-                  选中商品后，这里会按商品分组展示，并在组内继续填写仓库、数量和采购价。
-                </ThemedText>
-                <Pressable
-                  onPress={handleAddItem}
-                  style={[styles.emptyActionButton, { backgroundColor: surface, borderColor }]}>
-                  <ThemedText style={[styles.emptyActionText, { color: tintColor }]} type="defaultSemiBold">
-                    去选择商品
-                  </ThemedText>
-                </Pressable>
-              </View>
-            )}
+            <PurchaseOrderItemGroups
+              borderColor={borderColor}
+              editable
+              emptyActionLabel="去选择商品"
+              emptyHint="选中商品后，这里会按商品分组展示，并在组内继续填写仓库、数量和采购价。"
+              emptyTitle="先从商品搜索页选择采购商品"
+              expandedRows={expandedItemRows}
+              items={draftItems}
+              onAddWarehouseRow={handleAddWarehouseRow}
+              onAdjustItemQty={handleAdjustItemQty}
+              onChangeItem={(itemId, field, value) => handleItemChange(itemId, field, value)}
+              onEmptyAction={handleAddItem}
+              onOpenPicker={openPicker}
+              onRemoveItem={handleRemoveItem}
+              onReplaceItem={(item) =>
+                router.push({
+                  pathname: '/purchase/order/item-search',
+                  params: {
+                    lineId: item.id,
+                    company,
+                    defaultWarehouse:
+                      item.warehouse ||
+                      defaultWarehouse ||
+                      supplierContext?.suggestions.warehouse ||
+                      '',
+                  },
+                })
+              }
+              onToggleRow={(itemId, nextExpanded) =>
+                setExpandedItemRows((current) => ({ ...current, [itemId]: nextExpanded }))
+              }
+              showReplaceItem
+              surface={surface}
+              surfaceMuted={surfaceMuted}
+              tintColor={tintColor}
+            />
           </View>
         </View>
 

@@ -4918,3 +4918,58 @@ At the same time, purchase item rows still under-emphasized computed money value
 - purchase create/edit and downstream pages should feel like one continuous workflow, not a mix of upgraded and legacy form patterns
 - numeric entry should stabilize at the input boundary; otherwise every page ends up re-solving the same formatting issue differently
 - computed totals are core purchasing signals and should be easier to scan than labels, units, or helper copy
+
+## Purchase Order Detail Alignment With Sales Flow (2026-03-30)
+
+Purchase order detail/edit had drifted away from the established sales-order detail pattern in three ways:
+
+- the route behaved like an edit page first and a detail page second
+- the frontend detail model only consumed a small slice of the backend payload, so supplier, address, payment, and action information looked incomplete
+- the purchase item editor was split across create/edit pages and recent UI tweaks introduced unstable row controls on mobile
+
+This round pulled purchase back toward the same interaction model already used by sales.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/item-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/purchase-order-item-groups.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/purchase-order-draft.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+
+### What Changed
+
+- purchase order detail now follows the same high-level structure as sales-order detail:
+  - hero summary
+  - order overview
+  - business documents and next actions
+  - header-info editing
+  - item-section editing
+- the purchase detail service mapping now keeps more of the backend payload:
+  - supplier contact snapshot
+  - supplier address snapshot
+  - receivable / paid / outstanding payment summary
+  - latest payment metadata
+  - `can_record_supplier_payment`
+  - `can_process_purchase_return`
+- purchase detail now surfaces downstream workflow actions directly from the main order page:
+  - continue receipt
+  - continue invoice
+  - supplier payment
+  - purchase return
+- purchase create and edit now share the same grouped item editor component:
+  - `/components/purchase-order-item-groups.tsx`
+- the grouped purchase item editor was tightened for mobile:
+  - quantity stepper no longer pushes the current value out of view
+  - row-level `编辑 / 收起` action now stays at the lower-right action area instead of mixing with `删除`
+  - row deletion now uses an in-app confirmation modal instead of browser-style confirmation
+- purchase edit draft restoration was kept scoped to the order being edited, so returning from item-search no longer overwrites the wrong page state
+
+### Why
+
+- purchase and sales are parallel business chains in the same app, so operators should not have to learn two different detail-page mental models
+- if the backend already returns supplier, address, payment, and action data, the mobile detail page should not hide that information and force operators to guess workflow state
+- item-row actions on mobile must stay visually stable:
+  - the operator should always be able to find `编辑 / 收起`
+  - destructive actions should require an explicit in-app confirmation

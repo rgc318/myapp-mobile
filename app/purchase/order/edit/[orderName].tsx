@@ -1,19 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Href } from 'expo-router';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { Image } from 'expo-image';
 
 import { AppShell } from '@/components/app-shell';
 import { DateFieldInput } from '@/components/date-field-input';
+import { LinkOptionInput } from '@/components/link-option-input';
+import { PurchaseOrderItemGroups } from '@/components/purchase-order-item-groups';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { isValidIsoDate } from '@/lib/date-value';
 import { formatDisplayUom } from '@/lib/display-uom';
+import {
+  clearPurchaseOrderDraft,
+  getPurchaseOrderDraft,
+  getPurchaseOrderDraftForm,
+  hasPurchaseOrderDraft,
+  hasPurchaseOrderDraftForm,
+  replacePurchaseOrderDraft,
+  updatePurchaseOrderDraftForm,
+} from '@/lib/purchase-order-draft';
 import { sanitizeDecimalInput } from '@/lib/numeric-input';
-import { convertQtyToStockQty, formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
+import { formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
 import { useFeedback } from '@/providers/feedback-provider';
 import { fetchProductDetail } from '@/services/products';
 import {
@@ -42,6 +51,8 @@ type EditablePurchaseOrderItem = {
   warehouseStockDetails?: { warehouse: string; company: string | null; qty: number }[];
 };
 
+type EditSection = 'meta' | 'items' | 'all';
+
 function buildEditableId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -59,16 +70,182 @@ function formatQty(value: number | null | undefined) {
   return formatConvertedQty(value);
 }
 
-function formatMoney(value: number | null | undefined) {
+function formatMoney(value: number | null | undefined, currency = 'CNY') {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '—';
   }
 
   return new Intl.NumberFormat('zh-CN', {
     style: 'currency',
-    currency: 'CNY',
+    currency,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function getOrderSummaryUom(detail: PurchaseOrderDetail | null) {
+  if (!detail?.items?.length) {
+    return '';
+  }
+
+  const uoms = Array.from(new Set(detail.items.map((item) => item.uom).filter(Boolean)));
+  return uoms.length === 1 ? formatDisplayUom(uoms[0]) : '';
+}
+
+function getPrimaryPurchaseInvoice(detail: PurchaseOrderDetail | null) {
+  if (!detail) {
+    return '';
+  }
+
+  return detail.latestPaymentInvoice || detail.purchaseInvoices[0] || '';
+}
+
+function getPurchaseBusinessStatusLabel(detail: PurchaseOrderDetail | null) {
+  if (!detail) {
+    return '未加载';
+  }
+
+  if (detail.documentStatus === 'cancelled') {
+    return '已作废';
+  }
+
+  if (detail.completionStatus === 'completed') {
+    return '已完成';
+  }
+
+  if (detail.purchaseInvoices.length) {
+    return '已开票';
+  }
+
+  if (detail.purchaseReceipts.length || (detail.receivedQty ?? 0) > 0) {
+    return '已收货';
+  }
+
+  if (detail.documentStatus === 'submitted') {
+    return '待收货';
+  }
+
+  return '草稿';
+}
+
+function getPurchaseStatusTone(detail: PurchaseOrderDetail | null) {
+  if (!detail) {
+    return { backgroundColor: '#E2E8F0', color: '#475569' };
+  }
+
+  if (detail.documentStatus === 'cancelled') {
+    return { backgroundColor: '#FEE2E2', color: '#B91C1C' };
+  }
+
+  if (detail.completionStatus === 'completed') {
+    return { backgroundColor: '#DCFCE7', color: '#15803D' };
+  }
+
+  if (detail.purchaseInvoices.length) {
+    return { backgroundColor: '#DBEAFE', color: '#1D4ED8' };
+  }
+
+  if (detail.purchaseReceipts.length || (detail.receivedQty ?? 0) > 0) {
+    return { backgroundColor: '#FEF3C7', color: '#B45309' };
+  }
+
+  return { backgroundColor: '#DBEAFE', color: '#1D4ED8' };
+}
+
+function getDocumentStatusLabel(value: string) {
+  switch (value) {
+    case 'draft':
+      return '草稿';
+    case 'submitted':
+      return '已提交';
+    case 'cancelled':
+      return '已作废';
+    default:
+      return value || '—';
+  }
+}
+
+function getReceivingStatusLabel(value: string) {
+  switch (value) {
+    case 'pending':
+      return '待收货';
+    case 'partial':
+      return '部分收货';
+    case 'received':
+      return '已收货';
+    default:
+      return value || '—';
+  }
+}
+
+function getPaymentStatusLabel(value: string) {
+  switch (value) {
+    case 'unpaid':
+      return '未付款';
+    case 'partial':
+      return '部分付款';
+    case 'paid':
+      return '已付款';
+    default:
+      return value || '—';
+  }
+}
+
+function getCompletionStatusLabel(value: string) {
+  switch (value) {
+    case 'pending':
+      return '处理中';
+    case 'completed':
+      return '已完成';
+    default:
+      return value || '—';
+  }
+}
+
+function getStatusValueColor(value: string, type: 'document' | 'receiving' | 'payment' | 'completion') {
+  if (!value) {
+    return '#0F172A';
+  }
+
+  if (type === 'document') {
+    if (value === 'cancelled') return '#DC2626';
+    if (value === 'submitted') return '#2563EB';
+    return '#475569';
+  }
+
+  if (type === 'payment') {
+    if (value === 'paid') return '#15803D';
+    if (value === 'partial') return '#D97706';
+    return '#DC2626';
+  }
+
+  if (type === 'receiving') {
+    if (value === 'received') return '#15803D';
+    if (value === 'partial') return '#D97706';
+    return '#2563EB';
+  }
+
+  if (type === 'completion') {
+    if (value === 'completed') return '#15803D';
+    return '#2563EB';
+  }
+
+  return '#0F172A';
+}
+
+function canEditPurchaseItems(detail: PurchaseOrderDetail | null) {
+  if (!detail) {
+    return false;
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return false;
+  }
+  if (detail.purchaseReceipts.length || detail.purchaseInvoices.length) {
+    return false;
+  }
+  if ((detail.receivedQty ?? 0) > 0) {
+    return false;
+  }
+  return true;
 }
 
 function getAvailableUoms(item: EditablePurchaseOrderItem) {
@@ -107,10 +284,52 @@ function buildItemsSignature(
   );
 }
 
+function buildPurchaseEditDraftScope(orderName: string) {
+  return `purchase-order-edit:${orderName}`;
+}
+
+function buildEditableItemsFromDetail(detail: PurchaseOrderDetail | null) {
+  if (!detail) {
+    return [] as EditablePurchaseOrderItem[];
+  }
+
+  return detail.items.map((item, index) => ({
+    id: `${item.purchaseOrderItem || item.itemCode}-${index}`,
+    itemCode: item.itemCode,
+    itemName: item.itemName || item.itemCode,
+    qty: typeof item.qty === 'number' ? String(item.qty) : '',
+    price: typeof item.rate === 'number' ? String(item.rate) : '',
+    warehouse: item.warehouse || '',
+    uom: item.uom || '',
+    imageUrl: null,
+    stockUom: item.uom || null,
+    totalQty: null,
+    allUoms: item.uom ? [item.uom] : [],
+    uomConversions: [],
+    warehouseStockDetails: [],
+  }));
+}
+
+function getDefaultWarehouseFromItems(items: EditablePurchaseOrderItem[]) {
+  return items.find((item) => item.warehouse.trim())?.warehouse?.trim() || '';
+}
+
+function InfoRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
+  return (
+    <View style={styles.infoRow}>
+      <ThemedText style={styles.infoLabel}>{label}</ThemedText>
+      <ThemedText style={[styles.infoValue, valueColor ? { color: valueColor } : null]} type="defaultSemiBold">
+        {value}
+      </ThemedText>
+    </View>
+  );
+}
+
 export default function PurchaseOrderEditScreen() {
-  const { orderName } = useLocalSearchParams<{ orderName: string }>();
+  const { orderName, resumeEdit } = useLocalSearchParams<{ orderName: string; resumeEdit?: string }>();
   const router = useRouter();
   const { showError, showSuccess } = useFeedback();
+  const draftScope = buildPurchaseEditDraftScope(orderName || '');
 
   const [detail, setDetail] = useState<PurchaseOrderDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,7 +339,12 @@ export default function PurchaseOrderEditScreen() {
   const [supplierRef, setSupplierRef] = useState('');
   const [remarks, setRemarks] = useState('');
   const [companyDefaultWarehouse, setCompanyDefaultWarehouse] = useState('');
+  const [defaultWarehouse, setDefaultWarehouse] = useState('');
+  const [defaultWarehouseTouched, setDefaultWarehouseTouched] = useState(false);
   const [editableItems, setEditableItems] = useState<EditablePurchaseOrderItem[]>([]);
+  const [isEditingMeta, setIsEditingMeta] = useState(false);
+  const [isEditingItemsSection, setIsEditingItemsSection] = useState(false);
+  const [expandedItemRows, setExpandedItemRows] = useState<Record<string, boolean>>({});
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{ itemId: string; field: 'warehouse' | 'uom' } | null>(null);
   const [pickerQuery, setPickerQuery] = useState('');
@@ -138,8 +362,8 @@ export default function PurchaseOrderEditScreen() {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
-  const warningColor = useThemeColor({}, 'warning');
-  const successColor = useThemeColor({}, 'success');
+  const statusTone = getPurchaseStatusTone(detail);
+  const businessStatus = getPurchaseBusinessStatusLabel(detail);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,35 +376,65 @@ export default function PurchaseOrderEditScreen() {
         }
 
         setDetail(nextDetail);
-        setTransactionDate(nextDetail.transactionDate || '');
-        setScheduleDate(nextDetail.scheduleDate || '');
-        setSupplierRef(nextDetail.supplierRef || '');
-        setRemarks(nextDetail.remarks || '');
+        const detailItems = buildEditableItemsFromDetail(nextDetail);
+        const nextDefaultWarehouse = getDefaultWarehouseFromItems(detailItems);
 
-        const nextItems = nextDetail.items.map((item, index) => ({
-          id: `${item.purchaseOrderItem || item.itemCode}-${index}`,
-          itemCode: item.itemCode,
-          itemName: item.itemName || item.itemCode,
-          qty: typeof item.qty === 'number' ? String(item.qty) : '',
-          price: typeof item.rate === 'number' ? String(item.rate) : '',
-          warehouse: item.warehouse || '',
-          uom: item.uom || '',
-          imageUrl: null,
-          stockUom: item.uom || null,
-          totalQty: null,
-          allUoms: item.uom ? [item.uom] : [],
-          uomConversions: [],
-          warehouseStockDetails: [],
-        }));
+        const hasScopedItems = hasPurchaseOrderDraft(draftScope);
+        const hasScopedForm = hasPurchaseOrderDraftForm(draftScope);
+        const scopedForm = hasScopedForm ? getPurchaseOrderDraftForm(draftScope) : null;
+        const scopedItems = hasScopedItems ? getPurchaseOrderDraft(draftScope) : [];
 
-        setEditableItems(nextItems);
+        const nextCanEditItems = canEditPurchaseItems(nextDetail);
+
+        const restoredItems =
+          hasScopedItems
+            ? scopedItems.map((item) => ({
+                id: item.id,
+                itemCode: item.itemCode,
+                itemName: item.itemName || item.itemCode,
+                qty: item.qty,
+                price: item.price,
+                warehouse: item.warehouse || '',
+                uom: item.uom || '',
+                imageUrl: item.imageUrl || null,
+                stockUom: item.stockUom || null,
+                totalQty: item.totalQty ?? null,
+                allUoms: item.allUoms ?? [],
+                uomConversions: item.uomConversions ?? [],
+                warehouseStockDetails: item.warehouseStockDetails ?? [],
+              }))
+            : detailItems;
+
+        if (!nextCanEditItems && hasScopedItems) {
+          replacePurchaseOrderDraft([], draftScope);
+        }
+
+        setTransactionDate(hasScopedForm ? scopedForm?.transactionDate || '' : nextDetail.transactionDate || '');
+        setScheduleDate(hasScopedForm ? scopedForm?.scheduleDate || '' : nextDetail.scheduleDate || '');
+        setSupplierRef(hasScopedForm ? scopedForm?.supplierRef || '' : nextDetail.supplierRef || '');
+        setRemarks(hasScopedForm ? scopedForm?.remarks || '' : nextDetail.remarks || '');
+        setDefaultWarehouse(hasScopedForm ? scopedForm?.defaultWarehouse || '' : nextDefaultWarehouse);
+        setDefaultWarehouseTouched(hasScopedForm ? scopedForm?.defaultWarehouseTouched === true : false);
+        setEditableItems(restoredItems);
+        const hasDraftMetaChanges =
+          Boolean(scopedForm) &&
+          (
+            (scopedForm?.transactionDate || '') !== (nextDetail.transactionDate || '') ||
+            (scopedForm?.scheduleDate || '') !== (nextDetail.scheduleDate || '') ||
+            (scopedForm?.supplierRef || '') !== (nextDetail.supplierRef || '') ||
+            (scopedForm?.remarks || '') !== (nextDetail.remarks || '')
+          );
+        setIsEditingMeta(resumeEdit === 'all' || resumeEdit === 'meta' || hasDraftMetaChanges);
+        setIsEditingItemsSection(
+          nextCanEditItems && (resumeEdit === 'all' || resumeEdit === 'items' || hasScopedItems),
+        );
         originalMetaRef.current = JSON.stringify({
           transactionDate: nextDetail.transactionDate || '',
           scheduleDate: nextDetail.scheduleDate || '',
           supplierRef: nextDetail.supplierRef || '',
           remarks: nextDetail.remarks || '',
         });
-        originalItemsRef.current = buildItemsSignature(nextItems);
+        originalItemsRef.current = buildItemsSignature(detailItems);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -196,7 +450,7 @@ export default function PurchaseOrderEditScreen() {
     return () => {
       cancelled = true;
     };
-  }, [orderName, showError]);
+  }, [draftScope, orderName, resumeEdit, showError]);
 
   useEffect(() => {
     const trimmedCompany = detail?.company?.trim();
@@ -210,7 +464,9 @@ export default function PurchaseOrderEditScreen() {
     fetchPurchaseCompanyContext(trimmedCompany)
       .then((context) => {
         if (!cancelled) {
-          setCompanyDefaultWarehouse(context?.warehouse?.trim() || '');
+          const nextWarehouse = context?.warehouse?.trim() || '';
+          setCompanyDefaultWarehouse(nextWarehouse);
+          setDefaultWarehouse((current) => (defaultWarehouseTouched ? current : current.trim() || nextWarehouse));
         }
       })
       .catch(() => {
@@ -222,10 +478,10 @@ export default function PurchaseOrderEditScreen() {
     return () => {
       cancelled = true;
     };
-  }, [detail?.company]);
+  }, [defaultWarehouseTouched, detail?.company]);
 
   useEffect(() => {
-    const trimmedDefaultWarehouse = companyDefaultWarehouse.trim();
+    const trimmedDefaultWarehouse = defaultWarehouse.trim() || companyDefaultWarehouse.trim();
     if (!trimmedDefaultWarehouse || !editableItems.some((item) => !item.warehouse.trim())) {
       return;
     }
@@ -233,7 +489,52 @@ export default function PurchaseOrderEditScreen() {
     setEditableItems((currentItems) =>
       currentItems.map((item) => (item.warehouse.trim() ? item : { ...item, warehouse: trimmedDefaultWarehouse })),
     );
-  }, [companyDefaultWarehouse, editableItems]);
+  }, [companyDefaultWarehouse, defaultWarehouse, editableItems]);
+
+  useEffect(() => {
+    if (!detail || (!isEditingMeta && !isEditingItemsSection)) {
+      return;
+    }
+
+    updatePurchaseOrderDraftForm(
+      {
+        supplier: detail.supplier,
+        company: detail.company,
+        supplierRef,
+        remarks,
+        transactionDate,
+        scheduleDate,
+        defaultWarehouse,
+        defaultWarehouseTouched,
+      },
+      draftScope,
+    );
+  }, [defaultWarehouse, defaultWarehouseTouched, detail, draftScope, isEditingItemsSection, isEditingMeta, remarks, scheduleDate, supplierRef, transactionDate]);
+
+  useEffect(() => {
+    if (!detail || !isEditingItemsSection) {
+      return;
+    }
+
+    replacePurchaseOrderDraft(
+      editableItems.map((item) => ({
+        id: item.id,
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        imageUrl: item.imageUrl || null,
+        qty: item.qty,
+        price: item.price,
+        warehouse: item.warehouse || '',
+        uom: item.uom || '',
+        stockUom: item.stockUom || null,
+        totalQty: item.totalQty ?? null,
+        allUoms: item.allUoms ?? [],
+        uomConversions: item.uomConversions ?? [],
+        warehouseStockDetails: item.warehouseStockDetails ?? [],
+      })),
+      draftScope,
+    );
+  }, [detail, draftScope, editableItems, isEditingItemsSection]);
 
   useEffect(() => {
     if (!detail?.company) {
@@ -427,34 +728,6 @@ export default function PurchaseOrderEditScreen() {
     };
   }, [detail?.company, pickerItem, pickerQuery, pickerTarget, pickerVisible]);
 
-  const groupedItems = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        itemCode: string;
-        itemName: string;
-        rows: EditablePurchaseOrderItem[];
-      }
-    >();
-
-    editableItems.forEach((item) => {
-      const key = item.itemCode || item.id;
-      const existing = groups.get(key);
-      if (existing) {
-        existing.rows.push(item);
-        return;
-      }
-
-      groups.set(key, {
-        itemCode: item.itemCode,
-        itemName: item.itemName,
-        rows: [item],
-      });
-    });
-
-    return Array.from(groups.values());
-  }, [editableItems]);
-
   const validItems = useMemo(
     () =>
       editableItems
@@ -477,21 +750,9 @@ export default function PurchaseOrderEditScreen() {
     [editableItems],
   );
 
-  const canEditItems = useMemo(() => {
-    if (!detail) {
-      return false;
-    }
-    if (detail.documentStatus === 'cancelled') {
-      return false;
-    }
-    if (detail.purchaseReceipts.length || detail.purchaseInvoices.length) {
-      return false;
-    }
-    if ((detail.receivedQty ?? 0) > 0) {
-      return false;
-    }
-    return true;
-  }, [detail]);
+  const canEditItems = useMemo(() => canEditPurchaseItems(detail), [detail]);
+  const summaryUom = useMemo(() => getOrderSummaryUom(detail), [detail]);
+  const primaryInvoiceName = useMemo(() => getPrimaryPurchaseInvoice(detail), [detail]);
 
   const headerChanged = useMemo(
     () =>
@@ -521,32 +782,7 @@ export default function PurchaseOrderEditScreen() {
       }, 0),
     [editableItems],
   );
-
-  const actions = useMemo(() => {
-    if (!detail?.name) {
-      return [] as { href: Href; label: string; description?: string }[];
-    }
-
-    const nextActions = [] as { href: Href; label: string; description?: string }[];
-
-    if (detail.canReceive) {
-      nextActions.push({
-        href: `/purchase/receipt/create?orderName=${encodeURIComponent(detail.name)}` as Href,
-        label: '继续收货',
-        description: '基于这张采购订单继续登记实际收货',
-      });
-    }
-
-    if (detail.canCreateInvoice) {
-      nextActions.push({
-        href: `/purchase/invoice/create?orderName=${encodeURIComponent(detail.name)}` as Href,
-        label: '继续开票',
-        description: '进入采购开票流程',
-      });
-    }
-
-    return nextActions;
-  }, [detail]);
+  const isEditingAnySection = isEditingMeta || isEditingItemsSection;
 
   const scrollToSection = (y: number) => {
     requestAnimationFrame(() => {
@@ -554,13 +790,93 @@ export default function PurchaseOrderEditScreen() {
     });
   };
 
+  const openLatestReceipt = (receiptName: string) => {
+    router.push({
+      pathname: '/purchase/receipt/create',
+      params: { receiptName },
+    });
+  };
+
+  const openLatestInvoice = (purchaseInvoice: string) => {
+    router.push({
+      pathname: '/purchase/invoice/create',
+      params: { purchaseInvoice },
+    });
+  };
+
+  const openReceiptCreate = () => {
+    if (!detail?.canReceive) {
+      return;
+    }
+
+    router.push({
+      pathname: '/purchase/receipt/create',
+      params: { orderName: detail.name },
+    });
+  };
+
+  const openInvoiceCreate = () => {
+    if (!detail?.canCreateInvoice) {
+      return;
+    }
+
+    router.push({
+      pathname: '/purchase/invoice/create',
+      params: { orderName: detail.name },
+    });
+  };
+
+  const openPaymentCreate = () => {
+    if (!primaryInvoiceName) {
+      return;
+    }
+
+    router.push({
+      pathname: '/purchase/payment/create',
+      params: { referenceName: primaryInvoiceName },
+    });
+  };
+
+  const openReturnCreate = () => {
+    if (!detail?.canProcessReturn) {
+      return;
+    }
+
+    if (primaryInvoiceName) {
+      router.push({
+        pathname: '/purchase/return/create',
+        params: {
+          sourceDoctype: 'Purchase Invoice',
+          sourceName: primaryInvoiceName,
+        },
+      });
+      return;
+    }
+
+    const sourceReceipt = detail.purchaseReceipts[0] || '';
+    if (!sourceReceipt) {
+      return;
+    }
+
+    router.push({
+      pathname: '/purchase/return/create',
+      params: {
+        sourceDoctype: 'Purchase Receipt',
+        sourceName: sourceReceipt,
+      },
+    });
+  };
+
   const handleItemChange = (itemId: string, field: keyof EditablePurchaseOrderItem, value: string) => {
+    if (!isEditingItemsSection) {
+      return;
+    }
     const nextValue = field === 'qty' || field === 'price' ? sanitizeDecimalInput(value) : value;
     setEditableItems((current) => current.map((item) => (item.id === itemId ? { ...item, [field]: nextValue } : item)));
   };
 
   const openPicker = (itemId: string, field: 'warehouse' | 'uom') => {
-    if (!canEditItems) {
+    if (!canEditItems || !isEditingItemsSection) {
       return;
     }
     setPickerTarget({ itemId, field });
@@ -585,28 +901,152 @@ export default function PurchaseOrderEditScreen() {
   };
 
   const handleRemoveItem = (itemId: string) => {
-    if (!canEditItems) {
+    if (!canEditItems || !isEditingItemsSection) {
       return;
     }
 
     setEditableItems((current) => current.filter((item) => item.id !== itemId));
+    setExpandedItemRows((current) => {
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+  };
+
+  const handleDefaultWarehouseChange = (value: string) => {
+    if (!isEditingItemsSection) {
+      return;
+    }
+    setDefaultWarehouseTouched(true);
+    setDefaultWarehouse(value);
+  };
+
+  const handleAddItem = () => {
+    if (!detail || !isEditingItemsSection) {
+      return;
+    }
+
+    router.push({
+      pathname: '/purchase/order/item-search',
+      params: {
+        company: detail.company,
+        defaultWarehouse: defaultWarehouse.trim() || companyDefaultWarehouse || '',
+        draftScope,
+        returnTo: `/purchase/order/edit/${encodeURIComponent(detail.name)}?resumeEdit=items`,
+      },
+    });
   };
 
   const handleAddWarehouseRow = (rows: EditablePurchaseOrderItem[]) => {
-    if (!canEditItems) {
+    if (!canEditItems || !isEditingItemsSection) {
       return;
     }
 
     const baseRow = rows[0];
+    const nextId = buildEditableId();
     setEditableItems((current) => [
       ...current,
       {
         ...baseRow,
-        id: buildEditableId(),
+        id: nextId,
         qty: '1',
         warehouse: baseRow.warehouse || companyDefaultWarehouse || '',
       },
     ]);
+    setExpandedItemRows((current) => ({ ...current, [nextId]: true }));
+  };
+
+  const resetMetaSection = () => {
+    if (!detail) {
+      return;
+    }
+    setTransactionDate(detail.transactionDate || '');
+    setScheduleDate(detail.scheduleDate || '');
+    setSupplierRef(detail.supplierRef || '');
+    setRemarks(detail.remarks || '');
+    setIsEditingMeta(false);
+    if (!isEditingItemsSection) {
+      clearPurchaseOrderDraft(draftScope);
+    } else {
+      updatePurchaseOrderDraftForm(
+        {
+          supplier: detail.supplier,
+          company: detail.company,
+          supplierRef: detail.supplierRef || '',
+          remarks: detail.remarks || '',
+          transactionDate: detail.transactionDate || '',
+          scheduleDate: detail.scheduleDate || '',
+          defaultWarehouse,
+          defaultWarehouseTouched,
+        },
+        draftScope,
+      );
+    }
+  };
+
+  const resetItemsSection = () => {
+    if (!detail) {
+      return;
+    }
+    const detailItems = buildEditableItemsFromDetail(detail);
+    setEditableItems(detailItems);
+    setExpandedItemRows({});
+    setDefaultWarehouse(getDefaultWarehouseFromItems(detailItems));
+    setDefaultWarehouseTouched(false);
+    setIsEditingItemsSection(false);
+    if (!isEditingMeta) {
+      clearPurchaseOrderDraft(draftScope);
+    } else {
+      replacePurchaseOrderDraft(detailItems, draftScope);
+      updatePurchaseOrderDraftForm(
+        {
+          supplier: detail.supplier,
+          company: detail.company,
+          supplierRef,
+          remarks,
+          transactionDate,
+          scheduleDate,
+          defaultWarehouse: getDefaultWarehouseFromItems(detailItems),
+          defaultWarehouseTouched: false,
+        },
+        draftScope,
+      );
+    }
+  };
+
+  const cancelEditing = () => {
+    if (isEditingItemsSection) {
+      resetItemsSection();
+    }
+    if (isEditingMeta) {
+      setTimeout(() => {
+        resetMetaSection();
+      }, 0);
+      return;
+    }
+    clearPurchaseOrderDraft(draftScope);
+  };
+
+  const enterEditMode = (section: EditSection) => {
+    if (!detail) {
+      return;
+    }
+    if (section === 'all') {
+      setIsEditingMeta(true);
+      if (canEditItems) {
+        setIsEditingItemsSection(true);
+      }
+      return;
+    }
+    if (section === 'meta') {
+      setIsEditingMeta(true);
+      return;
+    }
+    if (!canEditItems) {
+      showError('当前采购订单已有收货或开票记录，暂不允许修改商品明细。');
+      return;
+    }
+    setIsEditingItemsSection(true);
   };
 
   const handleSave = async () => {
@@ -654,7 +1094,7 @@ export default function PurchaseOrderEditScreen() {
           orderName: detail.name,
           company: detail.company,
           scheduleDate,
-          defaultWarehouse: companyDefaultWarehouse || undefined,
+          defaultWarehouse: defaultWarehouse.trim() || companyDefaultWarehouse || undefined,
           items: validItems,
         });
 
@@ -678,6 +1118,7 @@ export default function PurchaseOrderEditScreen() {
           : `采购订单 ${nextOrderName} 已更新。`,
       );
 
+      clearPurchaseOrderDraft(draftScope);
       router.replace({
         pathname: '/purchase/order/[orderName]',
         params: { orderName: nextOrderName },
@@ -691,24 +1132,58 @@ export default function PurchaseOrderEditScreen() {
 
   return (
     <AppShell
-      actions={actions}
       compactHeader
       contentCard={false}
-      description="编辑采购订单头信息和商品明细。若修改商品区，系统可能生成新的修订单号。"
+      description="查看采购订单详情，并按区块进入头信息或商品明细编辑。"
       footer={
-        <Pressable
-          disabled={isSaving || (!headerChanged && !itemsChanged)}
-          onPress={() => void handleSave()}
-          style={[
-            styles.footerButton,
-            { backgroundColor: isSaving || (!headerChanged && !itemsChanged) ? surfaceMuted : tintColor },
-          ]}>
-          <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
-            {isSaving ? '正在保存采购订单...' : '保存采购订单'}
-          </ThemedText>
-        </Pressable>
+        <View style={styles.footerWrap}>
+          <View style={[styles.footerSummaryCard, { backgroundColor: surfaceMuted }]}>
+            <ThemedText style={styles.footerSummaryTitle} type="defaultSemiBold">
+              当前明细 {editableItems.length} 条 · 预计采购金额 {formatMoney(totalPurchaseAmount, detail?.currency || 'CNY')}
+            </ThemedText>
+            <ThemedText style={styles.footerSummaryHint}>
+              计划入库 {formatQty(validItems.reduce((sum, item) => sum + item.qty, 0))} · 到货 {scheduleDate || '未设置'}
+            </ThemedText>
+          </View>
+
+          {isEditingAnySection ? (
+            <View style={styles.footerActionsRow}>
+              <Pressable
+                disabled={isSaving}
+                onPress={cancelEditing}
+                style={[styles.footerGhostButton, { borderColor }]}>
+                <ThemedText style={styles.footerGhostButtonText} type="defaultSemiBold">
+                  取消修改
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                disabled={isSaving}
+                onPress={() => void handleSave()}
+                style={[
+                  styles.footerButton,
+                  { backgroundColor: isSaving ? surfaceMuted : tintColor },
+                ]}>
+                <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
+                  {isSaving ? '正在保存采购订单...' : headerChanged || itemsChanged ? '保存采购订单' : '暂无修改'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              disabled={detail?.documentStatus === 'cancelled'}
+              onPress={() => enterEditMode(canEditItems ? 'all' : 'meta')}
+              style={[
+                styles.footerButton,
+                { backgroundColor: detail?.documentStatus === 'cancelled' ? surfaceMuted : tintColor },
+              ]}>
+              <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
+                {canEditItems ? '编辑采购订单' : '修改头部信息'}
+              </ThemedText>
+            </Pressable>
+          )}
+        </View>
       }
-      title="编辑采购订单">
+      title="采购订单详情">
       <ScrollView contentContainerStyle={styles.container} ref={scrollRef}>
         {isLoading ? (
           <View style={[styles.loadingCard, { backgroundColor: surface, borderColor }]}>
@@ -725,20 +1200,23 @@ export default function PurchaseOrderEditScreen() {
                   </ThemedText>
                   <ThemedText style={styles.heroSubline}>{detail.name}</ThemedText>
                 </View>
-                <View style={[styles.statusChip, { backgroundColor: canEditItems ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.14)' }]}>
+                <View style={[styles.statusChip, { backgroundColor: statusTone.backgroundColor }]}>
                   <ThemedText
-                    style={{ color: canEditItems ? successColor : warningColor }}
+                    style={{ color: statusTone.color }}
                     type="defaultSemiBold">
-                    {canEditItems ? '可编辑商品' : '仅可编辑头信息'}
+                    {businessStatus}
                   </ThemedText>
                 </View>
               </View>
 
               <View style={styles.metaGrid}>
                 <MetaBlock label="供应商" value={detail.supplierName || detail.supplier} />
-                <MetaBlock label="我方公司" value={detail.company || '未设置'} />
-                <MetaBlock label="状态" value={detail.documentStatus || '未知'} />
-                <MetaBlock label="当前金额" value={typeof detail.orderAmountEstimate === 'number' ? `¥ ${detail.orderAmountEstimate}` : '—'} />
+                <MetaBlock label="订单金额" value={formatMoney(detail.orderAmountEstimate, detail.currency || 'CNY')} />
+                <MetaBlock
+                  label="待收数量"
+                  value={`${formatQty(detail.totalQty != null && detail.receivedQty != null ? detail.totalQty - detail.receivedQty : detail.totalQty)} ${summaryUom}`.trim()}
+                />
+                <MetaBlock label="计划到货" value={detail.scheduleDate || '未设置'} />
               </View>
 
               {!canEditItems ? (
@@ -762,14 +1240,197 @@ export default function PurchaseOrderEditScreen() {
               )}
             </View>
 
+            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                订单概览
+              </ThemedText>
+              <InfoRow label="我方公司" value={detail.company || '—'} />
+              <InfoRow
+                label="单据状态"
+                value={getDocumentStatusLabel(detail.documentStatus || '')}
+                valueColor={getStatusValueColor(detail.documentStatus || '', 'document')}
+              />
+              <InfoRow
+                label="收货状态"
+                value={getReceivingStatusLabel(detail.receivingStatus || '')}
+                valueColor={getStatusValueColor(detail.receivingStatus || '', 'receiving')}
+              />
+              <InfoRow
+                label="付款状态"
+                value={getPaymentStatusLabel(detail.paymentStatus || '')}
+                valueColor={getStatusValueColor(detail.paymentStatus || '', 'payment')}
+              />
+              <InfoRow
+                label="完成状态"
+                value={getCompletionStatusLabel(detail.completionStatus || '')}
+                valueColor={getStatusValueColor(detail.completionStatus || '', 'completion')}
+              />
+              <InfoRow label="下单日期" value={detail.transactionDate || '—'} />
+            </View>
+
+            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderCopy}>
+                  <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                    供应商与地址
+                  </ThemedText>
+                  <ThemedText style={styles.sectionHintText}>
+                    这里展示的是当前采购订单保存下来的供应商和地址快照。
+                  </ThemedText>
+                </View>
+              </View>
+              <InfoRow label="供应商" value={detail.supplierName || detail.supplier || '—'} />
+              <InfoRow label="联系人" value={detail.supplierContactDisplay || '未配置'} />
+              <InfoRow label="联系电话" value={detail.supplierContactPhone || '未配置'} />
+              <InfoRow label="联系邮箱" value={detail.supplierContactEmail || '未配置'} />
+              <InfoRow label="地址" value={detail.supplierAddressDisplay || detail.defaultAddressDisplay || '未配置'} />
+            </View>
+
+            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                付款摘要
+              </ThemedText>
+              <InfoRow
+                label="订单金额"
+                value={formatMoney(detail.orderAmountEstimate, detail.currency || 'CNY')}
+              />
+              <InfoRow
+                label="已开票应付"
+                value={formatMoney(detail.receivableAmount, detail.currency || 'CNY')}
+              />
+              <InfoRow
+                label="已付款"
+                value={formatMoney(detail.paidAmount, detail.currency || 'CNY')}
+              />
+              <InfoRow
+                label="待付款"
+                value={formatMoney(detail.outstandingAmount, detail.currency || 'CNY')}
+                valueColor={detail.outstandingAmount && detail.outstandingAmount > 0 ? '#C2410C' : undefined}
+              />
+              <InfoRow label="最近付款单" value={detail.latestPaymentEntry || '暂无'} />
+            </View>
+
+            {(detail.purchaseReceipts.length ||
+              detail.purchaseInvoices.length ||
+              detail.latestPaymentEntry ||
+              detail.canReceive ||
+              detail.canCreateInvoice ||
+              detail.canRecordPayment ||
+              detail.canProcessReturn) ? (
+              <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+                <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                  业务单据
+                </ThemedText>
+
+                {detail.purchaseReceipts.length ? (
+                  <View style={styles.referenceRow}>
+                    <View style={styles.referenceCopy}>
+                      <ThemedText style={styles.referenceLabel}>
+                        采购收货单{detail.purchaseReceipts.length > 1 ? `（共 ${detail.purchaseReceipts.length} 张）` : ''}
+                      </ThemedText>
+                      <ThemedText style={styles.referenceValue} type="defaultSemiBold">
+                        {detail.purchaseReceipts[0]}
+                      </ThemedText>
+                    </View>
+                    <Pressable onPress={() => openLatestReceipt(detail.purchaseReceipts[0])} style={styles.linkButton}>
+                      <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                        查看
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {detail.purchaseInvoices.length ? (
+                  <View style={styles.referenceRow}>
+                    <View style={styles.referenceCopy}>
+                      <ThemedText style={styles.referenceLabel}>
+                        采购发票{detail.purchaseInvoices.length > 1 ? `（共 ${detail.purchaseInvoices.length} 张）` : ''}
+                      </ThemedText>
+                      <ThemedText style={styles.referenceValue} type="defaultSemiBold">
+                        {detail.purchaseInvoices[0]}
+                      </ThemedText>
+                    </View>
+                    <Pressable onPress={() => openLatestInvoice(detail.purchaseInvoices[0])} style={styles.linkButton}>
+                      <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                        查看
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {detail.latestPaymentEntry ? (
+                  <View style={styles.referenceRow}>
+                    <View style={styles.referenceCopy}>
+                      <ThemedText style={styles.referenceLabel}>供应商付款</ThemedText>
+                      <ThemedText style={styles.referenceValue} type="defaultSemiBold">
+                        {detail.latestPaymentEntry}
+                      </ThemedText>
+                    </View>
+                    {primaryInvoiceName ? (
+                      <Pressable onPress={openPaymentCreate} style={styles.linkButton}>
+                        <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                          去付款
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {(detail.canReceive || detail.canCreateInvoice || (detail.canRecordPayment && primaryInvoiceName) || detail.canProcessReturn) ? (
+                  <View style={styles.nextActionRow}>
+                    {detail.canReceive ? (
+                      <Pressable onPress={openReceiptCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          继续收货
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {detail.canCreateInvoice ? (
+                      <Pressable onPress={openInvoiceCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          继续开票
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {detail.canRecordPayment && primaryInvoiceName ? (
+                      <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          去付款
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {detail.canProcessReturn ? (
+                      <Pressable onPress={openReturnCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          退货
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
             <View
               onLayout={(event) => {
                 metaSectionYRef.current = event.nativeEvent.layout.y;
               }}
               style={[styles.card, { backgroundColor: surface, borderColor }]}>
-              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                头部信息
-              </ThemedText>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderCopy}>
+                  <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                    头部信息
+                  </ThemedText>
+                  <ThemedText style={styles.sectionHintText}>
+                    这里维护采购单头部日期、对方单号和备注，不影响已锁定的下游单据。
+                  </ThemedText>
+                </View>
+                <Pressable onPress={() => (isEditingMeta ? resetMetaSection() : enterEditMode('meta'))} style={styles.linkButton}>
+                  <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                    {isEditingMeta ? '取消' : '修改'}
+                  </ThemedText>
+                </Pressable>
+              </View>
 
               <View style={styles.fieldBlock}>
                 <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
@@ -789,51 +1450,62 @@ export default function PurchaseOrderEditScreen() {
                 </View>
               </View>
 
-              <View style={styles.inlineGrid}>
-                <View style={styles.inlineField}>
-                  <DateFieldInput
-                    errorText={!isValidIsoDate(transactionDate) ? '请选择有效下单日期。' : undefined}
-                    helperText="采购单头部日期。"
-                    label="下单日期"
-                    onChange={setTransactionDate}
-                    value={transactionDate}
-                  />
-                </View>
-                <View style={styles.inlineField}>
-                  <DateFieldInput
-                    errorText={!isValidIsoDate(scheduleDate) ? '请选择有效计划到货日期。' : undefined}
-                    helperText="用于收货计划安排。"
-                    label="计划到货"
-                    onChange={setScheduleDate}
-                    value={scheduleDate}
-                  />
-                </View>
-              </View>
+              {isEditingMeta ? (
+                <>
+                  <View style={styles.inlineGrid}>
+                    <View style={styles.inlineField}>
+                      <DateFieldInput
+                        errorText={!isValidIsoDate(transactionDate) ? '请选择有效下单日期。' : undefined}
+                        helperText="采购单头部日期。"
+                        label="下单日期"
+                        onChange={setTransactionDate}
+                        value={transactionDate}
+                      />
+                    </View>
+                    <View style={styles.inlineField}>
+                      <DateFieldInput
+                        errorText={!isValidIsoDate(scheduleDate) ? '请选择有效计划到货日期。' : undefined}
+                        helperText="用于收货计划安排。"
+                        label="计划到货"
+                        onChange={setScheduleDate}
+                        value={scheduleDate}
+                      />
+                    </View>
+                  </View>
 
-              <View style={styles.fieldBlock}>
-                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                  供应商单号
-                </ThemedText>
-                <TextInput
-                  onChangeText={setSupplierRef}
-                  placeholder="可选，记录对方单号"
-                  style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
-                  value={supplierRef}
-                />
-              </View>
+                  <View style={styles.fieldBlock}>
+                    <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                      供应商单号
+                    </ThemedText>
+                    <TextInput
+                      onChangeText={setSupplierRef}
+                      placeholder="可选，记录对方单号"
+                      style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
+                      value={supplierRef}
+                    />
+                  </View>
 
-              <View style={styles.fieldBlock}>
-                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                  备注
-                </ThemedText>
-                <TextInput
-                  multiline
-                  onChangeText={setRemarks}
-                  placeholder="可选，记录本次采购补充说明"
-                  style={[styles.input, styles.textarea, { backgroundColor: surfaceMuted, borderColor }]}
-                  value={remarks}
-                />
-              </View>
+                  <View style={styles.fieldBlock}>
+                    <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                      备注
+                    </ThemedText>
+                    <TextInput
+                      multiline
+                      onChangeText={setRemarks}
+                      placeholder="可选，记录本次采购补充说明"
+                      style={[styles.input, styles.textarea, { backgroundColor: surfaceMuted, borderColor }]}
+                      value={remarks}
+                    />
+                  </View>
+                </>
+              ) : (
+                <View style={styles.infoStack}>
+                  <InfoRow label="下单日期" value={detail.transactionDate || '未设置'} />
+                  <InfoRow label="计划到货" value={detail.scheduleDate || '未设置'} />
+                  <InfoRow label="供应商单号" value={detail.supplierRef || '未填写'} />
+                  <InfoRow label="备注" value={detail.remarks || '暂无备注'} />
+                </View>
+              )}
             </View>
 
             <View
@@ -842,13 +1514,62 @@ export default function PurchaseOrderEditScreen() {
               }}
               style={[styles.card, { backgroundColor: surface, borderColor }]}>
               <View style={styles.sectionHeader}>
-                <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                  商品明细
-                </ThemedText>
-                <ThemedText style={[styles.sectionHint, { color: canEditItems ? tintColor : warningColor }]} type="defaultSemiBold">
-                  {canEditItems ? '可修改' : '已锁定'}
-                </ThemedText>
+                <View style={styles.sectionHeaderCopy}>
+                  <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                    商品明细
+                  </ThemedText>
+                  <ThemedText style={styles.sectionHintText}>
+                    {canEditItems
+                      ? '和销售订单一样，默认先查看；进入编辑后再修改默认仓、加商品和调整采购行。'
+                      : '当前订单已有收货或开票记录，商品明细已锁定，仅保留查看。'}
+                  </ThemedText>
+                </View>
+                {canEditItems ? (
+                  <Pressable onPress={() => (isEditingItemsSection ? resetItemsSection() : enterEditMode('items'))} style={styles.linkButton}>
+                    <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                      {isEditingItemsSection ? '取消' : '修改商品'}
+                    </ThemedText>
+                  </Pressable>
+                ) : (
+                  <ThemedText style={[styles.sectionHint, { color: '#D97706' }]} type="defaultSemiBold">
+                    已锁定
+                  </ThemedText>
+                )}
               </View>
+
+              {isEditingItemsSection && canEditItems ? (
+                <>
+                  <LinkOptionInput
+                    helperText="未手动指定时优先带当前公司的默认仓；后续每条采购明细仍可单独改仓。"
+                    inputActionText="切换"
+                    label="默认入库仓（新增商品默认带入）"
+                    loadOptions={(text) => searchWarehouses(text, detail.company || undefined)}
+                    onChangeText={handleDefaultWarehouseChange}
+                    onOptionSelect={handleDefaultWarehouseChange}
+                    placeholder={companyDefaultWarehouse || '未设置'}
+                    value={defaultWarehouse}
+                  />
+
+                  <Pressable
+                    onPress={handleAddItem}
+                    style={[styles.quickPickerCard, { backgroundColor: surfaceMuted, borderColor }]}>
+                    <View style={[styles.quickPickerIconWrap, { backgroundColor: surface }]}>
+                      <IconSymbol color={tintColor} name="shippingbox.fill" size={18} />
+                    </View>
+                    <View style={styles.quickPickerCopy}>
+                      <ThemedText style={styles.quickPickerLabel} type="defaultSemiBold">
+                        选择商品
+                      </ThemedText>
+                      <ThemedText style={styles.quickPickerHint}>
+                        进入采购商品搜索页继续添加商品，也可在页内扫码加入。
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                      去选择
+                    </ThemedText>
+                  </Pressable>
+                </>
+              ) : null}
 
               <View style={[styles.itemsSummaryBar, { backgroundColor: surfaceMuted }]}>
                 <ThemedText style={styles.itemsSummaryText}>
@@ -856,222 +1577,37 @@ export default function PurchaseOrderEditScreen() {
                 </ThemedText>
                 <ThemedText style={styles.itemsSummaryDivider}>·</ThemedText>
                 <ThemedText style={styles.itemsSummaryText}>
-                  预计采购金额 <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">{formatMoney(totalPurchaseAmount)}</ThemedText>
+                  预计采购金额 <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">{formatMoney(totalPurchaseAmount, detail.currency || 'CNY')}</ThemedText>
                 </ThemedText>
               </View>
 
               <View style={styles.groupList}>
-                {groupedItems.map((group, groupIndex) => {
-                  const leadRow = group.rows[0];
-                  const stockUom = leadRow.stockUom || leadRow.uom || '';
-                  const incomingQty = group.rows.reduce((sum, row) => {
-                    const rowQty = Number(row.qty);
-                    if (!Number.isFinite(rowQty)) {
-                      return sum;
+                <PurchaseOrderItemGroups
+                  borderColor={borderColor}
+                  editable={isEditingItemsSection && canEditItems}
+                  expandedRows={expandedItemRows}
+                  items={editableItems}
+                  onAddWarehouseRow={isEditingItemsSection && canEditItems ? handleAddWarehouseRow : undefined}
+                  onAdjustItemQty={isEditingItemsSection && canEditItems ? ((itemId, delta) => {
+                    const currentItem = editableItems.find((item) => item.id === itemId);
+                    if (!currentItem) {
+                      return;
                     }
-                    const converted =
-                      convertQtyToStockQty({
-                        qty: rowQty,
-                        uom: row.uom || stockUom,
-                        stockUom: leadRow.stockUom || stockUom,
-                        uomConversions: row.uomConversions ?? leadRow.uomConversions,
-                      }) ?? rowQty;
-                    return sum + converted;
-                  }, 0);
-                  const projectedTotal = typeof leadRow.totalQty === 'number' ? leadRow.totalQty + incomingQty : null;
-                  const groupPurchaseAmount = group.rows.reduce((sum, row) => {
-                    const qty = Number(row.qty);
-                    const price = Number(row.price);
-                    if (!Number.isFinite(qty) || !Number.isFinite(price)) {
-                      return sum;
-                    }
-                    return sum + qty * price;
-                  }, 0);
-
-                  return (
-                    <View
-                      key={`${group.itemCode}-${groupIndex}`}
-                      style={[styles.groupCard, { backgroundColor: surfaceMuted }]}>
-                      <View style={styles.groupHeader}>
-                        <View style={styles.groupLead}>
-                          <View style={[styles.thumbWrap, { backgroundColor: surface }]}>
-                            {leadRow.imageUrl ? (
-                              <Image contentFit="cover" source={leadRow.imageUrl} style={styles.thumbImage} />
-                            ) : (
-                              <IconSymbol color={tintColor} name="shippingbox.fill" size={20} />
-                            )}
-                          </View>
-                          <View style={styles.groupCopy}>
-                            <ThemedText style={styles.groupLabel} type="defaultSemiBold">
-                              采购商品 {groupIndex + 1}
-                            </ThemedText>
-                            <ThemedText style={styles.groupTitle} type="defaultSemiBold">
-                              {group.itemName || group.itemCode}
-                            </ThemedText>
-                            <ThemedText style={styles.groupMeta}>编码 {group.itemCode}</ThemedText>
-                            <ThemedText style={styles.groupMeta}>
-                              本次采购额 <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">{formatMoney(groupPurchaseAmount)}</ThemedText>
-                            </ThemedText>
-                          </View>
-                        </View>
-                        {canEditItems ? (
-                          <Pressable
-                            onPress={() => handleAddWarehouseRow(group.rows)}
-                            style={[styles.actionButton, { backgroundColor: surface, borderColor }]}>
-                            <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                              新增仓库行
-                            </ThemedText>
-                          </Pressable>
-                        ) : null}
-                      </View>
-
-                      <View style={styles.metricRow}>
-                        <View style={[styles.metricCard, { backgroundColor: surface }]}>
-                          <ThemedText style={styles.metricLabel}>总库存</ThemedText>
-                          <ThemedText style={styles.metricValue} type="defaultSemiBold">
-                            {formatQty(leadRow.totalQty)} {stockUom ? formatDisplayUom(stockUom) : ''}
-                          </ThemedText>
-                        </View>
-                        <View style={[styles.metricCard, { backgroundColor: surface }]}>
-                          <ThemedText style={styles.metricLabel}>修改后预计</ThemedText>
-                          <ThemedText style={styles.metricValue} type="defaultSemiBold">
-                            {formatQty(projectedTotal)} {stockUom ? formatDisplayUom(stockUom) : ''}
-                          </ThemedText>
-                        </View>
-                      </View>
-
-                      <View style={styles.rowList}>
-                        {group.rows.map((item, rowIndex) => {
-                          const currentWarehouseStock =
-                            item.warehouseStockDetails?.find((entry) => entry.warehouse === item.warehouse)?.qty ?? null;
-                          const rowQty = Number(item.qty);
-                          const incomingStockQty =
-                            Number.isFinite(rowQty) && rowQty > 0
-                              ? convertQtyToStockQty({
-                                  qty: rowQty,
-                                  uom: item.uom || item.stockUom,
-                                  stockUom: item.stockUom,
-                                  uomConversions: item.uomConversions,
-                                }) ?? rowQty
-                              : 0;
-                          const projectedWarehouseStock =
-                            typeof currentWarehouseStock === 'number'
-                              ? currentWarehouseStock + incomingStockQty
-                              : null;
-
-                          return (
-                            <View
-                              key={item.id}
-                              style={[
-                                styles.rowCard,
-                                { backgroundColor: surface },
-                                rowIndex > 0 ? [styles.rowDivider, { borderTopColor: borderColor }] : null,
-                              ]}>
-                              <View style={styles.rowHeader}>
-                                <View style={styles.rowHeaderCopy}>
-                                  <View style={styles.rowBadge}>
-                                    <ThemedText style={styles.rowBadgeText} type="defaultSemiBold">
-                                      仓库分配 {rowIndex + 1}
-                                    </ThemedText>
-                                  </View>
-                                  <ThemedText style={styles.rowMeta}>
-                                    这一行会形成最终采购明细中的一条商品行。
-                                  </ThemedText>
-                                </View>
-                                {canEditItems ? (
-                                  <Pressable onPress={() => handleRemoveItem(item.id)} style={[styles.removeButton, { borderColor }]}>
-                                    <ThemedText style={styles.removeButtonText} type="defaultSemiBold">
-                                      删除
-                                    </ThemedText>
-                                  </Pressable>
-                                ) : null}
-                              </View>
-
-                              <View style={styles.inventoryRow}>
-                                <View style={[styles.inventoryCard, { backgroundColor: surfaceMuted }]}>
-                                  <ThemedText style={styles.inventoryLabel}>当前仓库库存</ThemedText>
-                                  <ThemedText style={styles.inventoryValue} type="defaultSemiBold">
-                                    {formatQty(currentWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
-                                  </ThemedText>
-                                </View>
-                                <View style={[styles.inventoryCard, { backgroundColor: surfaceMuted }]}>
-                                  <ThemedText style={styles.inventoryLabel}>修改后库存</ThemedText>
-                                  <ThemedText style={styles.inventoryValue} type="defaultSemiBold">
-                                    {formatQty(projectedWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
-                                  </ThemedText>
-                                </View>
-                              </View>
-
-                              <View style={styles.inlineGrid}>
-                                <View style={styles.inlineField}>
-                                  <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                    数量
-                                  </ThemedText>
-                                  <TextInput
-                                    editable={canEditItems}
-                                    keyboardType="decimal-pad"
-                                    onChangeText={(value) => handleItemChange(item.id, 'qty', value)}
-                                    placeholder="数量"
-                                    style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
-                                    value={item.qty}
-                                  />
-                                </View>
-                                <View style={styles.inlineField}>
-                                  <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                    实际采购价
-                                  </ThemedText>
-                                  <TextInput
-                                    editable={canEditItems}
-                                    keyboardType="decimal-pad"
-                                    onChangeText={(value) => handleItemChange(item.id, 'price', value)}
-                                    placeholder="留空则沿用默认采购价"
-                                    style={[styles.input, { backgroundColor: surfaceMuted, borderColor }]}
-                                    value={item.price}
-                                  />
-                                </View>
-                              </View>
-
-                              <View style={styles.fieldBlock}>
-                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                  入库仓库
-                                </ThemedText>
-                                <Pressable
-                                  disabled={!canEditItems}
-                                  onPress={() => openPicker(item.id, 'warehouse')}
-                                  style={[styles.selectorButton, { backgroundColor: surfaceMuted, borderColor, opacity: canEditItems ? 1 : 0.65 }]}>
-                                  <ThemedText style={styles.selectorButtonText}>
-                                    {item.warehouse || '选择入库仓库'}
-                                  </ThemedText>
-                                </Pressable>
-                              </View>
-
-                              <View style={styles.fieldBlock}>
-                                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                                  单位
-                                </ThemedText>
-                                <Pressable
-                                  disabled={!canEditItems}
-                                  onPress={() => openPicker(item.id, 'uom')}
-                                  style={[styles.selectorButton, { backgroundColor: surfaceMuted, borderColor, opacity: canEditItems ? 1 : 0.65 }]}>
-                                  <ThemedText style={styles.selectorButtonText}>
-                                    {item.uom || '选择录入单位'}
-                                  </ThemedText>
-                                </Pressable>
-                                <ThemedText style={styles.selectorHint}>
-                                  {item.stockUom && item.uom && item.stockUom !== item.uom
-                                    ? `库存单位 ${formatDisplayUom(item.stockUom)}，系统会按换算关系计算入库量。`
-                                    : item.stockUom
-                                      ? `当前库存单位 ${formatDisplayUom(item.stockUom)}。`
-                                      : '优先展示商品已配置单位。'}
-                                </ThemedText>
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  );
-                })}
+                    const currentQty = Number(currentItem.qty);
+                    const safeQty = Number.isFinite(currentQty) ? currentQty : 0;
+                    handleItemChange(itemId, 'qty', String(Math.max(safeQty + delta, 1)));
+                  }) : undefined}
+                  onChangeItem={isEditingItemsSection && canEditItems ? ((itemId, field, value) => handleItemChange(itemId, field, value)) : undefined}
+                  onEmptyAction={isEditingItemsSection && canEditItems ? handleAddItem : undefined}
+                  onOpenPicker={isEditingItemsSection && canEditItems ? openPicker : undefined}
+                  onRemoveItem={isEditingItemsSection && canEditItems ? handleRemoveItem : undefined}
+                  onToggleRow={isEditingItemsSection && canEditItems ? ((itemId, nextExpanded) =>
+                    setExpandedItemRows((current) => ({ ...current, [itemId]: nextExpanded }))
+                  ) : undefined}
+                  surface={surface}
+                  surfaceMuted={surfaceMuted}
+                  tintColor={tintColor}
+                />
               </View>
             </View>
           </>
@@ -1226,6 +1762,25 @@ const styles = StyleSheet.create({
   metaValue: {
     fontSize: 15,
   },
+  infoRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  infoLabel: {
+    color: '#475569',
+    fontSize: 14,
+  },
+  infoValue: {
+    color: '#0F172A',
+    flex: 1,
+    fontSize: 15,
+    textAlign: 'right',
+  },
+  infoStack: {
+    gap: 10,
+  },
   noticeCard: {
     borderRadius: 16,
     gap: 6,
@@ -1245,6 +1800,15 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 18,
   },
+  sectionHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  sectionHintText: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 19,
+  },
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1254,6 +1818,47 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   sectionHint: {
+    fontSize: 13,
+  },
+  referenceRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  referenceCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  referenceLabel: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  referenceValue: {
+    color: '#0F172A',
+    fontSize: 15,
+  },
+  linkButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  linkButtonText: {
+    fontSize: 14,
+  },
+  nextActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  nextActionButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 14,
+  },
+  nextActionText: {
     fontSize: 13,
   },
   itemsSummaryBar: {
@@ -1290,6 +1895,35 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 14,
+  },
+  quickPickerCard: {
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 88,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  quickPickerIconWrap: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
+  },
+  quickPickerCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  quickPickerLabel: {
+    fontSize: 16,
+  },
+  quickPickerHint: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
   },
   input: {
     borderRadius: 16,
@@ -1460,9 +2094,44 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingLeft: 4,
   },
+  footerWrap: {
+    gap: 10,
+  },
+  footerActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  footerGhostButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  footerGhostButtonText: {
+    color: '#475569',
+    fontSize: 15,
+  },
+  footerSummaryCard: {
+    borderRadius: 16,
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  footerSummaryTitle: {
+    color: '#0F172A',
+    fontSize: 14,
+  },
+  footerSummaryHint: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
   footerButton: {
     alignItems: 'center',
     borderRadius: 16,
+    flex: 1,
     justifyContent: 'center',
     minHeight: 52,
   },

@@ -41,6 +41,8 @@ const FORM_STORAGE_KEY = 'myapp-mobile.purchase-order-draft-form';
 
 let purchaseOrderDraft: PurchaseOrderDraftItem[] = [];
 let purchaseOrderDraftForm: PurchaseOrderDraftForm | null = null;
+const scopedPurchaseOrderDrafts: Record<string, PurchaseOrderDraftItem[] | undefined> = {};
+const scopedPurchaseOrderDraftForms: Record<string, PurchaseOrderDraftForm | undefined> = {};
 
 function canUseWebStorage() {
   return Platform.OS === 'web' && typeof window !== 'undefined' && !!window.localStorage;
@@ -114,88 +116,190 @@ function normalizeDraftForm(value: Partial<PurchaseOrderDraftForm> | null | unde
   };
 }
 
-function persistDraft(nextDraft: PurchaseOrderDraftItem[]) {
-  purchaseOrderDraft = nextDraft;
+function buildScopedStorageKey(baseKey: string, scopeKey?: string) {
+  return scopeKey ? `${baseKey}::${scopeKey}` : baseKey;
+}
+
+function getDraftStore(scopeKey?: string) {
+  if (!scopeKey) {
+    return {
+      get current() {
+        return purchaseOrderDraft;
+      },
+      set current(value: PurchaseOrderDraftItem[]) {
+        purchaseOrderDraft = value;
+      },
+    };
+  }
+
+  return {
+    get current() {
+      return scopedPurchaseOrderDrafts[scopeKey] ?? [];
+    },
+    set current(value: PurchaseOrderDraftItem[]) {
+      scopedPurchaseOrderDrafts[scopeKey] = value;
+    },
+  };
+}
+
+function getDraftFormStore(scopeKey?: string) {
+  if (!scopeKey) {
+    return {
+      get current() {
+        return purchaseOrderDraftForm;
+      },
+      set current(value: PurchaseOrderDraftForm | null) {
+        purchaseOrderDraftForm = value;
+      },
+    };
+  }
+
+  return {
+    get current() {
+      return scopedPurchaseOrderDraftForms[scopeKey];
+    },
+    set current(value: PurchaseOrderDraftForm | null) {
+      if (value) {
+        scopedPurchaseOrderDraftForms[scopeKey] = value;
+      } else {
+        delete scopedPurchaseOrderDraftForms[scopeKey];
+      }
+    },
+  };
+}
+
+function persistScopedDraft(nextDraft: PurchaseOrderDraftItem[], scopeKey?: string) {
+  const store = getDraftStore(scopeKey);
+  store.current = nextDraft;
   if (canUseWebStorage()) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDraft));
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEY, scopeKey), JSON.stringify(nextDraft));
   }
 }
 
-function persistDraftForm(nextDraftForm: PurchaseOrderDraftForm) {
-  purchaseOrderDraftForm = nextDraftForm;
+function persistScopedDraftForm(nextDraftForm: PurchaseOrderDraftForm, scopeKey?: string) {
+  const store = getDraftFormStore(scopeKey);
+  store.current = nextDraftForm;
   if (canUseWebStorage()) {
-    window.localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(nextDraftForm));
+    window.localStorage.setItem(buildScopedStorageKey(FORM_STORAGE_KEY, scopeKey), JSON.stringify(nextDraftForm));
   }
 }
 
-export function getPurchaseOrderDraft() {
-  if (!purchaseOrderDraft.length && canUseWebStorage()) {
+export function hasPurchaseOrderDraft(scopeKey?: string) {
+  const store = getDraftStore(scopeKey);
+  if (store.current.length > 0) {
+    return true;
+  }
+
+  if (canUseWebStorage()) {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      purchaseOrderDraft = raw
+      const raw = window.localStorage.getItem(buildScopedStorageKey(STORAGE_KEY, scopeKey));
+      if (!raw) {
+        return false;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return false;
+      }
+      return parsed.some(
+        (item) => item && typeof item === 'object' && typeof (item as Partial<PurchaseOrderDraftItem>).itemCode === 'string' && (item as Partial<PurchaseOrderDraftItem>).itemCode?.trim(),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+export function hasPurchaseOrderDraftForm(scopeKey?: string) {
+  const store = getDraftFormStore(scopeKey);
+  if (store.current) {
+    return true;
+  }
+
+  if (canUseWebStorage()) {
+    return Boolean(window.localStorage.getItem(buildScopedStorageKey(FORM_STORAGE_KEY, scopeKey)));
+  }
+
+  return false;
+}
+
+export function getPurchaseOrderDraft(scopeKey?: string) {
+  const store = getDraftStore(scopeKey);
+
+  if (!store.current.length && canUseWebStorage()) {
+    try {
+      const raw = window.localStorage.getItem(buildScopedStorageKey(STORAGE_KEY, scopeKey));
+      store.current = raw
         ? (JSON.parse(raw) as Partial<PurchaseOrderDraftItem>[]).map((item) => normalizeDraftItem(item)).filter((item) => item.itemCode)
         : [];
     } catch {
-      purchaseOrderDraft = [];
+      store.current = [];
     }
   }
 
-  purchaseOrderDraft = purchaseOrderDraft.map((item) => normalizeDraftItem(item)).filter((item) => item.itemCode);
-  return purchaseOrderDraft.map((item) => ({ ...item }));
+  store.current = store.current.map((item) => normalizeDraftItem(item)).filter((item) => item.itemCode);
+  return store.current.map((item) => ({ ...item }));
 }
 
-export function getPurchaseOrderDraftForm() {
-  if (!purchaseOrderDraftForm && canUseWebStorage()) {
+export function getPurchaseOrderDraftForm(scopeKey?: string) {
+  const store = getDraftFormStore(scopeKey);
+
+  if (!store.current && canUseWebStorage()) {
     try {
-      const raw = window.localStorage.getItem(FORM_STORAGE_KEY);
-      purchaseOrderDraftForm = raw ? normalizeDraftForm(JSON.parse(raw)) : normalizeDraftForm(null);
+      const raw = window.localStorage.getItem(buildScopedStorageKey(FORM_STORAGE_KEY, scopeKey));
+      store.current = raw ? normalizeDraftForm(JSON.parse(raw)) : normalizeDraftForm(null);
     } catch {
-      purchaseOrderDraftForm = normalizeDraftForm(null);
+      store.current = normalizeDraftForm(null);
     }
   }
 
-  return purchaseOrderDraftForm ?? normalizeDraftForm(null);
+  return store.current ?? normalizeDraftForm(null);
 }
 
-export function updatePurchaseOrderDraftForm(patch: Partial<PurchaseOrderDraftForm>) {
-  const current = getPurchaseOrderDraftForm();
+export function updatePurchaseOrderDraftForm(patch: Partial<PurchaseOrderDraftForm>, scopeKey?: string) {
+  const current = getPurchaseOrderDraftForm(scopeKey);
   const nextDraftForm = normalizeDraftForm({
     ...current,
     ...patch,
   });
-  persistDraftForm(nextDraftForm);
+  persistScopedDraftForm(nextDraftForm, scopeKey);
   return nextDraftForm;
 }
 
-export function replacePurchaseOrderDraft(items: PurchaseOrderDraftItem[]) {
+export function replacePurchaseOrderDraft(items: PurchaseOrderDraftItem[], scopeKey?: string) {
   const nextDraft = items.map((item) => normalizeDraftItem(item)).filter((item) => item.itemCode);
-  persistDraft(nextDraft);
+  persistScopedDraft(nextDraft, scopeKey);
 }
 
-export function clearPurchaseOrderDraft() {
-  purchaseOrderDraft = [];
-  purchaseOrderDraftForm = normalizeDraftForm(null);
+export function clearPurchaseOrderDraft(scopeKey?: string) {
+  const draftStore = getDraftStore(scopeKey);
+  const formStore = getDraftFormStore(scopeKey);
+  draftStore.current = [];
+  formStore.current = scopeKey ? null : normalizeDraftForm(null);
 
   if (canUseWebStorage()) {
-    window.localStorage.removeItem(STORAGE_KEY);
-    window.localStorage.removeItem(FORM_STORAGE_KEY);
+    window.localStorage.removeItem(buildScopedStorageKey(STORAGE_KEY, scopeKey));
+    window.localStorage.removeItem(buildScopedStorageKey(FORM_STORAGE_KEY, scopeKey));
   }
 }
 
-export function upsertPurchaseOrderDraftItem(item: PurchaseOrderDraftItem) {
+export function upsertPurchaseOrderDraftItem(item: PurchaseOrderDraftItem, scopeKey?: string) {
+  const currentDraft = getPurchaseOrderDraft(scopeKey);
   const normalizedItem = normalizeDraftItem(item);
-  const existingIndex = purchaseOrderDraft.findIndex((entry) => entry.id === normalizedItem.id);
+  const existingIndex = currentDraft.findIndex((entry) => entry.id === normalizedItem.id);
 
   if (existingIndex >= 0) {
-    const nextDraft = [...purchaseOrderDraft];
+    const nextDraft = [...currentDraft];
     nextDraft[existingIndex] = normalizedItem;
-    persistDraft(nextDraft);
+    persistScopedDraft(nextDraft, scopeKey);
     return;
   }
 
-  persistDraft([...purchaseOrderDraft, normalizedItem]);
+  persistScopedDraft([...currentDraft, normalizedItem], scopeKey);
 }
 
-export function removePurchaseOrderDraftItem(itemId: string) {
-  persistDraft(purchaseOrderDraft.filter((item) => item.id !== itemId));
+export function removePurchaseOrderDraftItem(itemId: string, scopeKey?: string) {
+  const currentDraft = getPurchaseOrderDraft(scopeKey);
+  persistScopedDraft(currentDraft.filter((item) => item.id !== itemId), scopeKey);
 }
