@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
@@ -248,6 +249,38 @@ function canEditPurchaseItems(detail: PurchaseOrderDetail | null) {
   return true;
 }
 
+function getPurchaseItemsLockHint(detail: PurchaseOrderDetail | null) {
+  if (!detail) {
+    return '当前订单已有收货或开票记录，商品明细已锁定，仅保留查看。';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已作废，商品明细不可修改。';
+  }
+  if (detail.purchaseInvoices.length) {
+    return `当前订单已关联采购发票 ${detail.purchaseInvoices[0]}，商品明细已锁定。`;
+  }
+  if (detail.purchaseReceipts.length) {
+    return `当前订单已关联采购收货单 ${detail.purchaseReceipts[0]}，商品明细已锁定。`;
+  }
+  if ((detail.receivedQty ?? 0) > 0) {
+    return `当前订单已发生收货（已收 ${formatQty(detail.receivedQty)}），商品明细已锁定。`;
+  }
+  return '当前订单已有收货或开票记录，商品明细已锁定，仅保留查看。';
+}
+
+function getPurchaseItemsLockAction(detail: PurchaseOrderDetail | null) {
+  if (!detail) {
+    return null;
+  }
+  if (detail.purchaseInvoices.length) {
+    return { type: 'invoice' as const, name: detail.purchaseInvoices[0] };
+  }
+  if (detail.purchaseReceipts.length) {
+    return { type: 'receipt' as const, name: detail.purchaseReceipts[0] };
+  }
+  return null;
+}
+
 function getAvailableUoms(item: EditablePurchaseOrderItem) {
   const values = new Set<string>();
   if (item.uom) {
@@ -328,6 +361,8 @@ function InfoRow({ label, value, valueColor }: { label: string; value: string; v
 export default function PurchaseOrderEditScreen() {
   const { orderName, resumeEdit } = useLocalSearchParams<{ orderName: string; resumeEdit?: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const { showError, showSuccess } = useFeedback();
   const draftScope = buildPurchaseEditDraftScope(orderName || '');
 
@@ -350,7 +385,12 @@ export default function PurchaseOrderEditScreen() {
   const [pickerQuery, setPickerQuery] = useState('');
   const [pickerOptions, setPickerOptions] = useState<{ label: string; value: string; description?: string }[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
+  const showErrorRef = useRef(showError);
+  const pendingNavigationActionRef = useRef<any>(null);
+  const pendingLeaveCallbackRef = useRef<(() => void) | null>(null);
+  const allowLeaveRef = useRef(false);
   const metaSectionYRef = useRef(0);
   const itemsSectionYRef = useRef(0);
   const hydratedKeysRef = useRef<Record<string, true>>({});
@@ -366,6 +406,10 @@ export default function PurchaseOrderEditScreen() {
   const businessStatus = getPurchaseBusinessStatusLabel(detail);
 
   useEffect(() => {
+    showErrorRef.current = showError;
+  }, [showError]);
+
+  useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
 
@@ -379,8 +423,16 @@ export default function PurchaseOrderEditScreen() {
         const detailItems = buildEditableItemsFromDetail(nextDetail);
         const nextDefaultWarehouse = getDefaultWarehouseFromItems(detailItems);
 
-        const hasScopedItems = hasPurchaseOrderDraft(draftScope);
-        const hasScopedForm = hasPurchaseOrderDraftForm(draftScope);
+        const shouldResumeMeta = resumeEdit === 'all' || resumeEdit === 'meta';
+        const shouldResumeItems = resumeEdit === 'all' || resumeEdit === 'items';
+        const shouldResumeFromRoute = shouldResumeMeta || shouldResumeItems;
+
+        if (!shouldResumeFromRoute) {
+          clearPurchaseOrderDraft(draftScope);
+        }
+
+        const hasScopedItems = shouldResumeFromRoute && hasPurchaseOrderDraft(draftScope);
+        const hasScopedForm = shouldResumeFromRoute && hasPurchaseOrderDraftForm(draftScope);
         const scopedForm = hasScopedForm ? getPurchaseOrderDraftForm(draftScope) : null;
         const scopedItems = hasScopedItems ? getPurchaseOrderDraft(draftScope) : [];
 
@@ -424,9 +476,9 @@ export default function PurchaseOrderEditScreen() {
             (scopedForm?.supplierRef || '') !== (nextDetail.supplierRef || '') ||
             (scopedForm?.remarks || '') !== (nextDetail.remarks || '')
           );
-        setIsEditingMeta(resumeEdit === 'all' || resumeEdit === 'meta' || hasDraftMetaChanges);
+        setIsEditingMeta(shouldResumeMeta || (shouldResumeFromRoute && hasDraftMetaChanges));
         setIsEditingItemsSection(
-          nextCanEditItems && (resumeEdit === 'all' || resumeEdit === 'items' || hasScopedItems),
+          nextCanEditItems && (shouldResumeItems || (shouldResumeFromRoute && hasScopedItems)),
         );
         originalMetaRef.current = JSON.stringify({
           transactionDate: nextDetail.transactionDate || '',
@@ -438,7 +490,7 @@ export default function PurchaseOrderEditScreen() {
       })
       .catch((error) => {
         if (!cancelled) {
-          showError(normalizeAppError(error).message);
+          showErrorRef.current(normalizeAppError(error).message);
         }
       })
       .finally(() => {
@@ -450,7 +502,7 @@ export default function PurchaseOrderEditScreen() {
     return () => {
       cancelled = true;
     };
-  }, [draftScope, orderName, resumeEdit, showError]);
+  }, [draftScope, orderName, resumeEdit]);
 
   useEffect(() => {
     const trimmedCompany = detail?.company?.trim();
@@ -783,6 +835,36 @@ export default function PurchaseOrderEditScreen() {
     [editableItems],
   );
   const isEditingAnySection = isEditingMeta || isEditingItemsSection;
+  const hasUnsavedEdits = isEditingAnySection && (headerChanged || itemsChanged);
+
+  const requestLeaveConfirmation = (onProceed?: () => void) => {
+    if (allowLeaveRef.current || !hasUnsavedEdits || isSaving) {
+      onProceed?.();
+      return true;
+    }
+    pendingLeaveCallbackRef.current = onProceed ?? null;
+    setShowLeaveConfirm(true);
+    return false;
+  };
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event: any) => {
+      if (allowLeaveRef.current || !hasUnsavedEdits || isSaving) {
+        return;
+      }
+      event.preventDefault();
+      pendingNavigationActionRef.current = event.data.action;
+      pendingLeaveCallbackRef.current = null;
+      setShowLeaveConfirm(true);
+    });
+    return unsubscribe;
+  }, [hasUnsavedEdits, isSaving, navigation]);
+
+  useEffect(() => {
+    if (isFocused) {
+      allowLeaveRef.current = false;
+    }
+  }, [isFocused]);
 
   const scrollToSection = (y: number) => {
     requestAnimationFrame(() => {
@@ -866,6 +948,34 @@ export default function PurchaseOrderEditScreen() {
       },
     });
   };
+
+  const workflowAction = !detail
+    ? null
+    : detail.canReceive
+      ? {
+          label: '收货',
+          onPress: openReceiptCreate,
+          tone: 'primary' as const,
+        }
+      : detail.canCreateInvoice
+        ? {
+            label: '开票',
+            onPress: openInvoiceCreate,
+            tone: 'primary' as const,
+          }
+        : detail.purchaseInvoices.length
+          ? {
+              label: '发票',
+              onPress: () => openLatestInvoice(detail.purchaseInvoices[0]),
+              tone: 'ghost' as const,
+            }
+          : detail.purchaseReceipts.length
+            ? {
+                label: '收货单',
+                onPress: () => openLatestReceipt(detail.purchaseReceipts[0]),
+                tone: 'ghost' as const,
+              }
+            : null;
 
   const handleItemChange = (itemId: string, field: keyof EditablePurchaseOrderItem, value: string) => {
     if (!isEditingItemsSection) {
@@ -1119,6 +1229,7 @@ export default function PurchaseOrderEditScreen() {
       );
 
       clearPurchaseOrderDraft(draftScope);
+      allowLeaveRef.current = true;
       router.replace({
         pathname: '/purchase/order/[orderName]',
         params: { orderName: nextOrderName },
@@ -1130,20 +1241,191 @@ export default function PurchaseOrderEditScreen() {
     }
   };
 
+  const itemsSection = detail ? (
+    <View
+      onLayout={(event) => {
+        itemsSectionYRef.current = event.nativeEvent.layout.y;
+      }}
+      style={[styles.card, { backgroundColor: surface, borderColor }]}>
+            <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderCopy}>
+                  <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                    商品明细
+                  </ThemedText>
+                  <ThemedText style={styles.sectionHintText}>
+                    {canEditItems
+                      ? '默认先查看采购商品；进入编辑后再调整默认仓、加商品和修改采购行。'
+                      : getPurchaseItemsLockHint(detail)}
+                  </ThemedText>
+                </View>
+                {(() => {
+                  const lockAction = getPurchaseItemsLockAction(detail);
+                  if (canEditItems) {
+                    return (
+                      <Pressable onPress={() => (isEditingItemsSection ? resetItemsSection() : enterEditMode('items'))} style={styles.linkButton}>
+                        <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                          {isEditingItemsSection ? '取消' : '修改商品'}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  }
+                  return (
+                    <View style={styles.lockedHeaderActions}>
+                      {lockAction?.type === 'invoice' ? (
+                        <Pressable onPress={() => openLatestInvoice(lockAction.name)} style={styles.linkButton}>
+                          <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                            查看发票
+                          </ThemedText>
+                        </Pressable>
+                      ) : null}
+                      {lockAction?.type === 'receipt' ? (
+                        <Pressable onPress={() => openLatestReceipt(lockAction.name)} style={styles.linkButton}>
+                          <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                            查看收货单
+                          </ThemedText>
+                        </Pressable>
+                      ) : null}
+                      <ThemedText style={[styles.sectionHint, { color: '#D97706' }]} type="defaultSemiBold">
+                        已锁定
+                      </ThemedText>
+                    </View>
+                  );
+                })()}
+              </View>
+
+      <View style={[styles.itemsSummaryBar, { backgroundColor: surfaceMuted }]}>
+        <ThemedText style={styles.itemsSummaryText}>
+          当前明细 {editableItems.length} 条
+        </ThemedText>
+        <ThemedText style={styles.itemsSummaryDivider}>·</ThemedText>
+        <ThemedText style={styles.itemsSummaryText}>
+          预计采购金额 <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">{formatMoney(totalPurchaseAmount, detail.currency || 'CNY')}</ThemedText>
+        </ThemedText>
+      </View>
+
+      <View style={styles.groupList}>
+        <PurchaseOrderItemGroups
+          borderColor={borderColor}
+          editable={isEditingItemsSection && canEditItems}
+          expandedRows={expandedItemRows}
+          items={editableItems}
+          onAddWarehouseRow={isEditingItemsSection && canEditItems ? handleAddWarehouseRow : undefined}
+          onAdjustItemQty={isEditingItemsSection && canEditItems ? ((itemId, delta) => {
+            const currentItem = editableItems.find((item) => item.id === itemId);
+            if (!currentItem) {
+              return;
+            }
+            const currentQty = Number(currentItem.qty);
+            const safeQty = Number.isFinite(currentQty) ? currentQty : 0;
+            handleItemChange(itemId, 'qty', String(Math.max(safeQty + delta, 1)));
+          }) : undefined}
+          onChangeItem={isEditingItemsSection && canEditItems ? ((itemId, field, value) => handleItemChange(itemId, field, value)) : undefined}
+          onEmptyAction={isEditingItemsSection && canEditItems ? handleAddItem : undefined}
+          onOpenPicker={isEditingItemsSection && canEditItems ? openPicker : undefined}
+          onRemoveItem={isEditingItemsSection && canEditItems ? handleRemoveItem : undefined}
+          onToggleRow={isEditingItemsSection && canEditItems ? ((itemId, nextExpanded) =>
+            setExpandedItemRows((current) => ({ ...current, [itemId]: nextExpanded }))
+          ) : undefined}
+          surface={surface}
+          surfaceMuted={surfaceMuted}
+          tintColor={tintColor}
+        />
+      </View>
+    </View>
+  ) : null;
+
+  const itemControlSection = detail && isEditingItemsSection && canEditItems ? (
+    <View style={[styles.card, styles.compactCard, { backgroundColor: surface, borderColor }]}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionHeaderCopy}>
+          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+            选择商品
+          </ThemedText>
+          <ThemedText style={styles.sectionHintText}>
+            先确认新增商品默认带入哪个仓，再进入采购商品搜索页继续添加；后续明细仍可单独调整。
+          </ThemedText>
+        </View>
+      </View>
+
+      <LinkOptionInput
+        helperText="未手动指定时优先带当前公司的默认仓；后续每条采购明细仍可单独改仓。"
+        inputActionText="切换"
+        label="默认入库仓（新增商品默认带入）"
+        loadOptions={(text) => searchWarehouses(text, detail.company || undefined)}
+        onChangeText={handleDefaultWarehouseChange}
+        onOptionSelect={handleDefaultWarehouseChange}
+        placeholder={companyDefaultWarehouse || '未设置'}
+        value={defaultWarehouse}
+      />
+
+      <Pressable
+        onPress={handleAddItem}
+        style={[styles.quickPickerCard, { backgroundColor: surfaceMuted, borderColor }]}>
+        <View style={[styles.quickPickerIconWrap, { backgroundColor: surface }]}>
+          <IconSymbol color={tintColor} name="shippingbox.fill" size={18} />
+        </View>
+        <View style={styles.quickPickerCopy}>
+          <ThemedText style={styles.quickPickerLabel} type="defaultSemiBold">
+            选择商品
+          </ThemedText>
+          <ThemedText style={styles.quickPickerHint}>
+            进入采购商品搜索页选择，也可在页内扫码添加。
+          </ThemedText>
+        </View>
+        <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+          去选择
+        </ThemedText>
+      </Pressable>
+    </View>
+  ) : null;
+
   return (
     <AppShell
       compactHeader
       contentCard={false}
       description="查看采购订单详情，并按区块进入头信息或商品明细编辑。"
+      headerRightAction={
+        isEditingAnySection || !workflowAction ? (
+          <View style={styles.headerActionPlaceholder} />
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => requestLeaveConfirmation(workflowAction.onPress)}
+            style={[
+              styles.headerActionButton,
+              workflowAction.tone === 'primary' ? styles.headerActionPrimaryButton : styles.headerActionGhostButton,
+            ]}>
+            <ThemedText
+              numberOfLines={1}
+              style={workflowAction.tone === 'primary' ? styles.headerActionPrimaryText : styles.headerActionGhostText}
+              type="defaultSemiBold">
+              {workflowAction.label}
+            </ThemedText>
+          </Pressable>
+        )
+      }
+      headerSideWidth={96}
+      showWorkflowQuickNav={false}
+      footerNoShadow
       footer={
         <View style={styles.footerWrap}>
           <View style={[styles.footerSummaryCard, { backgroundColor: surfaceMuted }]}>
-            <ThemedText style={styles.footerSummaryTitle} type="defaultSemiBold">
-              当前明细 {editableItems.length} 条 · 预计采购金额 {formatMoney(totalPurchaseAmount, detail?.currency || 'CNY')}
-            </ThemedText>
-            <ThemedText style={styles.footerSummaryHint}>
-              计划入库 {formatQty(validItems.reduce((sum, item) => sum + item.qty, 0))} · 到货 {scheduleDate || '未设置'}
-            </ThemedText>
+            <View style={styles.footerSummaryTopRow}>
+              <View style={styles.footerSummaryLeftWrap}>
+                <ThemedText style={styles.footerSummaryCount} type="defaultSemiBold">
+                  当前明细 {editableItems.length} 条
+                </ThemedText>
+                <ThemedText style={styles.footerSummaryHint}>
+                  计划入库 {formatQty(validItems.reduce((sum, item) => sum + item.qty, 0))} · 到货 {scheduleDate || '未设置'}
+                </ThemedText>
+              </View>
+              <View style={styles.footerSummaryAmountWrap}>
+                <ThemedText style={styles.footerSummaryAmountLabel}>预计采购金额</ThemedText>
+                <ThemedText style={styles.footerSummaryAmount} type="defaultSemiBold">
+                  {formatMoney(totalPurchaseAmount, detail?.currency || 'CNY')}
+                </ThemedText>
+              </View>
+            </View>
           </View>
 
           {isEditingAnySection ? (
@@ -1157,11 +1439,11 @@ export default function PurchaseOrderEditScreen() {
                 </ThemedText>
               </Pressable>
               <Pressable
-                disabled={isSaving}
+                disabled={isSaving || (!headerChanged && !itemsChanged)}
                 onPress={() => void handleSave()}
                 style={[
                   styles.footerButton,
-                  { backgroundColor: isSaving ? surfaceMuted : tintColor },
+                  { backgroundColor: isSaving || (!headerChanged && !itemsChanged) ? surfaceMuted : tintColor },
                 ]}>
                 <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
                   {isSaving ? '正在保存采购订单...' : headerChanged || itemsChanged ? '保存采购订单' : '暂无修改'}
@@ -1192,7 +1474,11 @@ export default function PurchaseOrderEditScreen() {
           </View>
         ) : detail ? (
           <>
-            <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+            <View
+              onLayout={(event) => {
+                metaSectionYRef.current = event.nativeEvent.layout.y;
+              }}
+              style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
               <View style={styles.heroHeader}>
                 <View style={styles.heroCopy}>
                   <ThemedText style={styles.heroTitle} type="defaultSemiBold">
@@ -1210,246 +1496,28 @@ export default function PurchaseOrderEditScreen() {
               </View>
 
               <View style={styles.metaGrid}>
-                <MetaBlock label="供应商" value={detail.supplierName || detail.supplier} />
                 <MetaBlock label="订单金额" value={formatMoney(detail.orderAmountEstimate, detail.currency || 'CNY')} />
                 <MetaBlock
                   label="待收数量"
                   value={`${formatQty(detail.totalQty != null && detail.receivedQty != null ? detail.totalQty - detail.receivedQty : detail.totalQty)} ${summaryUom}`.trim()}
                 />
+                <MetaBlock
+                  label="已收数量"
+                  value={`${formatQty(detail.receivedQty)} ${summaryUom}`.trim()}
+                />
                 <MetaBlock label="计划到货" value={detail.scheduleDate || '未设置'} />
               </View>
-
-              {!canEditItems ? (
-                <View style={[styles.noticeCard, { backgroundColor: surfaceMuted }]}>
-                  <ThemedText style={styles.noticeTitle} type="defaultSemiBold">
-                    商品区已锁定
-                  </ThemedText>
-                  <ThemedText style={styles.noticeText}>
-                    当前采购订单已经存在收货或开票记录，后端不允许继续修改商品明细。你仍然可以调整计划到货、备注和供应商单号等头部字段。
-                  </ThemedText>
-                </View>
-              ) : (
-                <View style={[styles.noticeCard, { backgroundColor: surfaceMuted }]}>
-                  <ThemedText style={styles.noticeTitle} type="defaultSemiBold">
-                    商品编辑说明
-                  </ThemedText>
-                  <ThemedText style={styles.noticeText}>
-                    修改商品区时，后端会按 v2 规则整体替换采购明细；如果当前订单已提交，系统可能生成新的修订单号。
-                  </ThemedText>
-                </View>
-              )}
-            </View>
-
-            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
-              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                订单概览
-              </ThemedText>
-              <InfoRow label="我方公司" value={detail.company || '—'} />
-              <InfoRow
-                label="单据状态"
-                value={getDocumentStatusLabel(detail.documentStatus || '')}
-                valueColor={getStatusValueColor(detail.documentStatus || '', 'document')}
-              />
-              <InfoRow
-                label="收货状态"
-                value={getReceivingStatusLabel(detail.receivingStatus || '')}
-                valueColor={getStatusValueColor(detail.receivingStatus || '', 'receiving')}
-              />
-              <InfoRow
-                label="付款状态"
-                value={getPaymentStatusLabel(detail.paymentStatus || '')}
-                valueColor={getStatusValueColor(detail.paymentStatus || '', 'payment')}
-              />
-              <InfoRow
-                label="完成状态"
-                value={getCompletionStatusLabel(detail.completionStatus || '')}
-                valueColor={getStatusValueColor(detail.completionStatus || '', 'completion')}
-              />
-              <InfoRow label="下单日期" value={detail.transactionDate || '—'} />
-            </View>
-
-            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+              <View style={[styles.compactDivider, { borderColor }]} />
               <View style={styles.sectionHeader}>
-                <View style={styles.sectionHeaderCopy}>
-                  <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                    供应商与地址
-                  </ThemedText>
-                  <ThemedText style={styles.sectionHintText}>
-                    这里展示的是当前采购订单保存下来的供应商和地址快照。
-                  </ThemedText>
-                </View>
-              </View>
-              <InfoRow label="供应商" value={detail.supplierName || detail.supplier || '—'} />
-              <InfoRow label="联系人" value={detail.supplierContactDisplay || '未配置'} />
-              <InfoRow label="联系电话" value={detail.supplierContactPhone || '未配置'} />
-              <InfoRow label="联系邮箱" value={detail.supplierContactEmail || '未配置'} />
-              <InfoRow label="地址" value={detail.supplierAddressDisplay || detail.defaultAddressDisplay || '未配置'} />
-            </View>
-
-            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
-              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                付款摘要
-              </ThemedText>
-              <InfoRow
-                label="订单金额"
-                value={formatMoney(detail.orderAmountEstimate, detail.currency || 'CNY')}
-              />
-              <InfoRow
-                label="已开票应付"
-                value={formatMoney(detail.receivableAmount, detail.currency || 'CNY')}
-              />
-              <InfoRow
-                label="已付款"
-                value={formatMoney(detail.paidAmount, detail.currency || 'CNY')}
-              />
-              <InfoRow
-                label="待付款"
-                value={formatMoney(detail.outstandingAmount, detail.currency || 'CNY')}
-                valueColor={detail.outstandingAmount && detail.outstandingAmount > 0 ? '#C2410C' : undefined}
-              />
-              <InfoRow label="最近付款单" value={detail.latestPaymentEntry || '暂无'} />
-            </View>
-
-            {(detail.purchaseReceipts.length ||
-              detail.purchaseInvoices.length ||
-              detail.latestPaymentEntry ||
-              detail.canReceive ||
-              detail.canCreateInvoice ||
-              detail.canRecordPayment ||
-              detail.canProcessReturn) ? (
-              <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
                 <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                  业务单据
+                  头部信息
                 </ThemedText>
-
-                {detail.purchaseReceipts.length ? (
-                  <View style={styles.referenceRow}>
-                    <View style={styles.referenceCopy}>
-                      <ThemedText style={styles.referenceLabel}>
-                        采购收货单{detail.purchaseReceipts.length > 1 ? `（共 ${detail.purchaseReceipts.length} 张）` : ''}
-                      </ThemedText>
-                      <ThemedText style={styles.referenceValue} type="defaultSemiBold">
-                        {detail.purchaseReceipts[0]}
-                      </ThemedText>
-                    </View>
-                    <Pressable onPress={() => openLatestReceipt(detail.purchaseReceipts[0])} style={styles.linkButton}>
-                      <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
-                        查看
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                ) : null}
-
-                {detail.purchaseInvoices.length ? (
-                  <View style={styles.referenceRow}>
-                    <View style={styles.referenceCopy}>
-                      <ThemedText style={styles.referenceLabel}>
-                        采购发票{detail.purchaseInvoices.length > 1 ? `（共 ${detail.purchaseInvoices.length} 张）` : ''}
-                      </ThemedText>
-                      <ThemedText style={styles.referenceValue} type="defaultSemiBold">
-                        {detail.purchaseInvoices[0]}
-                      </ThemedText>
-                    </View>
-                    <Pressable onPress={() => openLatestInvoice(detail.purchaseInvoices[0])} style={styles.linkButton}>
-                      <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
-                        查看
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                ) : null}
-
-                {detail.latestPaymentEntry ? (
-                  <View style={styles.referenceRow}>
-                    <View style={styles.referenceCopy}>
-                      <ThemedText style={styles.referenceLabel}>供应商付款</ThemedText>
-                      <ThemedText style={styles.referenceValue} type="defaultSemiBold">
-                        {detail.latestPaymentEntry}
-                      </ThemedText>
-                    </View>
-                    {primaryInvoiceName ? (
-                      <Pressable onPress={openPaymentCreate} style={styles.linkButton}>
-                        <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
-                          去付款
-                        </ThemedText>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ) : null}
-
-                {(detail.canReceive || detail.canCreateInvoice || (detail.canRecordPayment && primaryInvoiceName) || detail.canProcessReturn) ? (
-                  <View style={styles.nextActionRow}>
-                    {detail.canReceive ? (
-                      <Pressable onPress={openReceiptCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                          继续收货
-                        </ThemedText>
-                      </Pressable>
-                    ) : null}
-                    {detail.canCreateInvoice ? (
-                      <Pressable onPress={openInvoiceCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                          继续开票
-                        </ThemedText>
-                      </Pressable>
-                    ) : null}
-                    {detail.canRecordPayment && primaryInvoiceName ? (
-                      <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                          去付款
-                        </ThemedText>
-                      </Pressable>
-                    ) : null}
-                    {detail.canProcessReturn ? (
-                      <Pressable onPress={openReturnCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                          退货
-                        </ThemedText>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-
-            <View
-              onLayout={(event) => {
-                metaSectionYRef.current = event.nativeEvent.layout.y;
-              }}
-              style={[styles.card, { backgroundColor: surface, borderColor }]}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionHeaderCopy}>
-                  <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                    头部信息
-                  </ThemedText>
-                  <ThemedText style={styles.sectionHintText}>
-                    这里维护采购单头部日期、对方单号和备注，不影响已锁定的下游单据。
-                  </ThemedText>
-                </View>
                 <Pressable onPress={() => (isEditingMeta ? resetMetaSection() : enterEditMode('meta'))} style={styles.linkButton}>
                   <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
                     {isEditingMeta ? '取消' : '修改'}
                   </ThemedText>
                 </Pressable>
               </View>
-
-              <View style={styles.fieldBlock}>
-                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                  供应商
-                </ThemedText>
-                <View style={[styles.readonlyField, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText>{detail.supplierName || detail.supplier}</ThemedText>
-                </View>
-              </View>
-
-              <View style={styles.fieldBlock}>
-                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                  我方公司
-                </ThemedText>
-                <View style={[styles.readonlyField, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText>{detail.company || '未设置'}</ThemedText>
-                </View>
-              </View>
-
               {isEditingMeta ? (
                 <>
                   <View style={styles.inlineGrid}>
@@ -1502,114 +1570,166 @@ export default function PurchaseOrderEditScreen() {
                 <View style={styles.infoStack}>
                   <InfoRow label="下单日期" value={detail.transactionDate || '未设置'} />
                   <InfoRow label="计划到货" value={detail.scheduleDate || '未设置'} />
+                  <InfoRow label="我方公司" value={detail.company || '—'} />
                   <InfoRow label="供应商单号" value={detail.supplierRef || '未填写'} />
                   <InfoRow label="备注" value={detail.remarks || '暂无备注'} />
                 </View>
               )}
             </View>
 
-            <View
-              onLayout={(event) => {
-                itemsSectionYRef.current = event.nativeEvent.layout.y;
-              }}
-              style={[styles.card, { backgroundColor: surface, borderColor }]}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionHeaderCopy}>
-                  <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                    商品明细
-                  </ThemedText>
-                  <ThemedText style={styles.sectionHintText}>
-                    {canEditItems
-                      ? '和销售订单一样，默认先查看；进入编辑后再修改默认仓、加商品和调整采购行。'
-                      : '当前订单已有收货或开票记录，商品明细已锁定，仅保留查看。'}
-                  </ThemedText>
+            {(detail.purchaseReceipts.length ||
+              detail.purchaseInvoices.length ||
+              detail.latestPaymentEntry ||
+              detail.canReceive ||
+              detail.canCreateInvoice ||
+              detail.canRecordPayment ||
+              detail.canProcessReturn) ? (
+              <View style={[styles.card, styles.compactCard, { backgroundColor: surface, borderColor }]}>
+                <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                  业务单据
+                </ThemedText>
+
+                <View style={styles.compactInfoGrid}>
+                  <InfoRow label="收货单" value={detail.purchaseReceipts.length ? `${detail.purchaseReceipts.length} 张` : '暂无'} />
+                  <InfoRow label="采购发票" value={detail.purchaseInvoices.length ? `${detail.purchaseInvoices.length} 张` : '暂无'} />
+                  <InfoRow label="供应商付款" value={detail.latestPaymentEntry ? '已有记录' : '暂无'} />
                 </View>
-                {canEditItems ? (
-                  <Pressable onPress={() => (isEditingItemsSection ? resetItemsSection() : enterEditMode('items'))} style={styles.linkButton}>
-                    <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
-                      {isEditingItemsSection ? '取消' : '修改商品'}
-                    </ThemedText>
-                  </Pressable>
+
+                {(detail.purchaseReceipts[0] || detail.purchaseInvoices[0] || detail.latestPaymentEntry) ? (
+                  <View style={styles.nextActionRow}>
+                    {detail.purchaseReceipts[0] ? (
+                      <Pressable onPress={() => openLatestReceipt(detail.purchaseReceipts[0])} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          查看收货单
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {detail.purchaseInvoices[0] ? (
+                      <Pressable onPress={() => openLatestInvoice(detail.purchaseInvoices[0])} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          查看发票
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {detail.latestPaymentEntry && primaryInvoiceName ? (
+                      <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          去付款
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {(detail.canReceive || detail.canCreateInvoice || (detail.canRecordPayment && primaryInvoiceName) || detail.canProcessReturn) ? (
+                  <View style={styles.nextActionRow}>
+                    {detail.canReceive ? (
+                      <Pressable onPress={openReceiptCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          继续收货
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {detail.canCreateInvoice ? (
+                      <Pressable onPress={openInvoiceCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          继续开票
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {detail.canRecordPayment && primaryInvoiceName ? (
+                      <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          去付款
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                    {detail.canProcessReturn ? (
+                      <Pressable onPress={openReturnCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                        <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                          退货
+                        </ThemedText>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 ) : (
-                  <ThemedText style={[styles.sectionHint, { color: '#D97706' }]} type="defaultSemiBold">
-                    已锁定
+                  <ThemedText style={styles.sectionSubtleText}>
+                    当前暂无可执行动作。
                   </ThemedText>
                 )}
               </View>
+            ) : null}
 
-              {isEditingItemsSection && canEditItems ? (
-                <>
-                  <LinkOptionInput
-                    helperText="未手动指定时优先带当前公司的默认仓；后续每条采购明细仍可单独改仓。"
-                    inputActionText="切换"
-                    label="默认入库仓（新增商品默认带入）"
-                    loadOptions={(text) => searchWarehouses(text, detail.company || undefined)}
-                    onChangeText={handleDefaultWarehouseChange}
-                    onOptionSelect={handleDefaultWarehouseChange}
-                    placeholder={companyDefaultWarehouse || '未设置'}
-                    value={defaultWarehouse}
-                  />
+            {itemControlSection}
 
-                  <Pressable
-                    onPress={handleAddItem}
-                    style={[styles.quickPickerCard, { backgroundColor: surfaceMuted, borderColor }]}>
-                    <View style={[styles.quickPickerIconWrap, { backgroundColor: surface }]}>
-                      <IconSymbol color={tintColor} name="shippingbox.fill" size={18} />
-                    </View>
-                    <View style={styles.quickPickerCopy}>
-                      <ThemedText style={styles.quickPickerLabel} type="defaultSemiBold">
-                        选择商品
-                      </ThemedText>
-                      <ThemedText style={styles.quickPickerHint}>
-                        进入采购商品搜索页继续添加商品，也可在页内扫码加入。
-                      </ThemedText>
-                    </View>
-                    <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                      去选择
-                    </ThemedText>
-                  </Pressable>
-                </>
-              ) : null}
+            {itemsSection}
 
-              <View style={[styles.itemsSummaryBar, { backgroundColor: surfaceMuted }]}>
-                <ThemedText style={styles.itemsSummaryText}>
-                  当前明细 {editableItems.length} 条
-                </ThemedText>
-                <ThemedText style={styles.itemsSummaryDivider}>·</ThemedText>
-                <ThemedText style={styles.itemsSummaryText}>
-                  预计采购金额 <ThemedText style={styles.amountHighlightText} type="defaultSemiBold">{formatMoney(totalPurchaseAmount, detail.currency || 'CNY')}</ThemedText>
-                </ThemedText>
-              </View>
-
-              <View style={styles.groupList}>
-                <PurchaseOrderItemGroups
-                  borderColor={borderColor}
-                  editable={isEditingItemsSection && canEditItems}
-                  expandedRows={expandedItemRows}
-                  items={editableItems}
-                  onAddWarehouseRow={isEditingItemsSection && canEditItems ? handleAddWarehouseRow : undefined}
-                  onAdjustItemQty={isEditingItemsSection && canEditItems ? ((itemId, delta) => {
-                    const currentItem = editableItems.find((item) => item.id === itemId);
-                    if (!currentItem) {
-                      return;
-                    }
-                    const currentQty = Number(currentItem.qty);
-                    const safeQty = Number.isFinite(currentQty) ? currentQty : 0;
-                    handleItemChange(itemId, 'qty', String(Math.max(safeQty + delta, 1)));
-                  }) : undefined}
-                  onChangeItem={isEditingItemsSection && canEditItems ? ((itemId, field, value) => handleItemChange(itemId, field, value)) : undefined}
-                  onEmptyAction={isEditingItemsSection && canEditItems ? handleAddItem : undefined}
-                  onOpenPicker={isEditingItemsSection && canEditItems ? openPicker : undefined}
-                  onRemoveItem={isEditingItemsSection && canEditItems ? handleRemoveItem : undefined}
-                  onToggleRow={isEditingItemsSection && canEditItems ? ((itemId, nextExpanded) =>
-                    setExpandedItemRows((current) => ({ ...current, [itemId]: nextExpanded }))
-                  ) : undefined}
-                  surface={surface}
-                  surfaceMuted={surfaceMuted}
-                  tintColor={tintColor}
+            <View style={[styles.card, styles.compactCard, { backgroundColor: surface, borderColor }]}>
+              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                订单与付款
+              </ThemedText>
+              <View style={styles.compactInfoGrid}>
+                <InfoRow label="我方公司" value={detail.company || '—'} />
+                <InfoRow label="下单日期" value={detail.transactionDate || '—'} />
+                <InfoRow
+                  label="单据状态"
+                  value={getDocumentStatusLabel(detail.documentStatus || '')}
+                  valueColor={getStatusValueColor(detail.documentStatus || '', 'document')}
+                />
+                <InfoRow
+                  label="收货状态"
+                  value={getReceivingStatusLabel(detail.receivingStatus || '')}
+                  valueColor={getStatusValueColor(detail.receivingStatus || '', 'receiving')}
+                />
+                <InfoRow
+                  label="付款状态"
+                  value={getPaymentStatusLabel(detail.paymentStatus || '')}
+                  valueColor={getStatusValueColor(detail.paymentStatus || '', 'payment')}
+                />
+                <InfoRow
+                  label="完成状态"
+                  value={getCompletionStatusLabel(detail.completionStatus || '')}
+                  valueColor={getStatusValueColor(detail.completionStatus || '', 'completion')}
                 />
               </View>
+              <View style={[styles.compactDivider, { borderColor }]} />
+              <View style={styles.compactInfoGrid}>
+                <InfoRow
+                  label="已开票应付"
+                  value={formatMoney(detail.receivableAmount, detail.currency || 'CNY')}
+                />
+                <InfoRow
+                  label="已付款"
+                  value={formatMoney(detail.paidAmount, detail.currency || 'CNY')}
+                />
+                <InfoRow
+                  label="待付款"
+                  value={formatMoney(detail.outstandingAmount, detail.currency || 'CNY')}
+                  valueColor={detail.outstandingAmount && detail.outstandingAmount > 0 ? '#C2410C' : undefined}
+                />
+                <InfoRow label="最近付款单" value={detail.latestPaymentEntry || '暂无'} />
+              </View>
             </View>
+
+            {!isEditingAnySection ? (
+              <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionHeaderCopy}>
+                    <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                      供应商与地址
+                    </ThemedText>
+                    <ThemedText style={styles.sectionHintText}>
+                      这里展示的是当前采购订单保存下来的供应商和地址快照。
+                    </ThemedText>
+                  </View>
+                </View>
+                <InfoRow label="联系人" value={detail.supplierContactDisplay || '未配置'} />
+                <InfoRow label="联系电话" value={detail.supplierContactPhone || '未配置'} />
+                <InfoRow label="联系邮箱" value={detail.supplierContactEmail || '未配置'} />
+                <InfoRow label="地址" value={detail.supplierAddressDisplay || detail.defaultAddressDisplay || '未配置'} />
+              </View>
+            ) : null}
+
           </>
         ) : (
           <View style={[styles.loadingCard, { backgroundColor: surface, borderColor }]}>
@@ -1689,6 +1809,53 @@ export default function PurchaseOrderEditScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal animationType="fade" onRequestClose={() => setShowLeaveConfirm(false)} transparent visible={showLeaveConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={[styles.dialogTitle, styles.dialogTitleWarning]} type="defaultSemiBold">
+              当前修改尚未保存
+            </ThemedText>
+            <ThemedText style={styles.dialogMessage}>
+              你正在编辑采购订单，离开后将丢失本次修改。
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => {
+                  pendingNavigationActionRef.current = null;
+                  pendingLeaveCallbackRef.current = null;
+                  setShowLeaveConfirm(false);
+                }}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  继续编辑
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowLeaveConfirm(false);
+                  const pendingAction = pendingNavigationActionRef.current;
+                  pendingNavigationActionRef.current = null;
+                  const pendingCallback = pendingLeaveCallbackRef.current;
+                  pendingLeaveCallbackRef.current = null;
+                  allowLeaveRef.current = true;
+                  if (pendingAction) {
+                    (navigation as any).dispatch(pendingAction);
+                  } else if (pendingCallback) {
+                    pendingCallback();
+                  } else {
+                    router.back();
+                  }
+                }}
+                style={[styles.dialogButton, styles.dialogDangerButton]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  放弃修改
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AppShell>
   );
 }
@@ -1708,6 +1875,32 @@ const styles = StyleSheet.create({
   container: {
     gap: 12,
     paddingBottom: 28,
+  },
+  headerActionButton: {
+    alignItems: 'center',
+    borderRadius: 999,
+    justifyContent: 'center',
+    minHeight: 34,
+    minWidth: 74,
+    paddingHorizontal: 14,
+  },
+  headerActionPrimaryButton: {
+    backgroundColor: '#2563EB',
+  },
+  headerActionGhostButton: {
+    backgroundColor: '#EEF2FF',
+  },
+  headerActionPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+  },
+  headerActionGhostText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+  },
+  headerActionPlaceholder: {
+    height: 34,
+    width: 74,
   },
   loadingCard: {
     alignItems: 'center',
@@ -1800,6 +1993,16 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 18,
   },
+  compactCard: {
+    gap: 10,
+    paddingVertical: 16,
+  },
+  compactInfoGrid: {
+    gap: 8,
+  },
+  compactDivider: {
+    borderTopWidth: 1,
+  },
   sectionHeaderCopy: {
     flex: 1,
     gap: 4,
@@ -1814,29 +2017,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  lockedHeaderActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   sectionTitle: {
     fontSize: 18,
   },
   sectionHint: {
     fontSize: 13,
   },
-  referenceRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  referenceCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  referenceLabel: {
+  sectionSubtleText: {
     color: '#64748B',
     fontSize: 13,
-  },
-  referenceValue: {
-    color: '#0F172A',
-    fontSize: 15,
+    lineHeight: 18,
   },
   linkButton: {
     paddingHorizontal: 4,
@@ -1857,6 +2052,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 42,
     paddingHorizontal: 14,
+  },
+  compactActionButton: {
+    minHeight: 36,
+    paddingHorizontal: 12,
   },
   nextActionText: {
     fontSize: 13,
@@ -2115,17 +2314,48 @@ const styles = StyleSheet.create({
   },
   footerSummaryCard: {
     borderRadius: 16,
-    gap: 4,
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  footerSummaryTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  footerSummaryLeftWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  footerSummaryCount: {
+    color: '#0F172A',
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  footerSummaryAmountWrap: {
+    alignItems: 'flex-end',
+    flex: 1,
+    gap: 2,
+  },
+  footerSummaryAmountLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'right',
+  },
+  footerSummaryAmount: {
+    color: '#C2410C',
+    fontSize: 24,
+    lineHeight: 28,
+    textAlign: 'right',
   },
   footerSummaryTitle: {
     color: '#0F172A',
     fontSize: 14,
   },
   footerSummaryHint: {
-    color: '#64748B',
-    fontSize: 12,
+    color: '#475569',
+    fontSize: 13,
     lineHeight: 18,
   },
   footerButton: {
@@ -2210,5 +2440,58 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     gap: 6,
     padding: 16,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15,23,42,0.36)',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  dialogCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+    maxWidth: 420,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    width: '100%',
+  },
+  dialogTitle: {
+    fontSize: 18,
+  },
+  dialogTitleWarning: {
+    color: '#D97706',
+  },
+  dialogMessage: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  dialogButton: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  dialogGhostButton: {
+    borderWidth: 1,
+  },
+  dialogGhostText: {
+    color: '#475569',
+    fontSize: 14,
+  },
+  dialogDangerButton: {
+    backgroundColor: '#DC2626',
+  },
+  dialogPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
   },
 });

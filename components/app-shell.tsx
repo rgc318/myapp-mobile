@@ -23,7 +23,10 @@ type AppShellProps = {
   contentCard?: boolean;
   compactHeader?: boolean;
   showWorkflowQuickNav?: boolean;
+  headerRightAction?: ReactNode;
+  headerSideWidth?: number;
   footer?: ReactNode;
+  footerNoShadow?: boolean;
 };
 
 export function AppShell({
@@ -32,7 +35,10 @@ export function AppShell({
   actions = [],
   contentCard = true,
   showWorkflowQuickNav,
+  headerRightAction,
+  headerSideWidth,
   footer,
+  footerNoShadow = false,
 }: AppShellProps) {
   const segments = useSegments();
   const isTabRoot = segments[0] === '(tabs)';
@@ -42,7 +48,12 @@ export function AppShell({
 
   return (
     <View style={[styles.screen, { backgroundColor: useThemeColor({}, 'background') }]}>
-      <MobilePageHeader showBack={!isTabRoot} title={title} />
+      <MobilePageHeader
+        rightAction={headerRightAction}
+        sideWidth={headerSideWidth}
+        showBack={!isTabRoot}
+        title={title}
+      />
 
       <ScrollView contentContainerStyle={styles.container}>
         {shouldShowWorkflowQuickNav ? <WorkflowQuickNav /> : null}
@@ -73,7 +84,11 @@ export function AppShell({
         {children && !contentCard ? <View style={styles.contentPlain}>{children}</View> : null}
       </ScrollView>
 
-      {footer ? <View style={[styles.footer, { borderTopColor: borderColor }]}>{footer}</View> : null}
+      {footer ? (
+        <View style={[styles.footer, { borderTopColor: borderColor }, footerNoShadow ? styles.footerFlat : null]}>
+          {footer}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -112,5 +127,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  footerFlat: {
+    borderTopWidth: 0,
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
   },
 });

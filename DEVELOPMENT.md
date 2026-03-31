@@ -4973,3 +4973,54 @@ This round pulled purchase back toward the same interaction model already used b
 - item-row actions on mobile must stay visually stable:
   - the operator should always be able to find `编辑 / 收起`
   - destructive actions should require an explicit in-app confirmation
+
+## Purchase Detail Density And Edit Safety Pass (2026-03-31)
+
+After several iterations, purchase order detail/edit still had friction in daily use:
+
+- editing state was easy to misread because read-only snapshot blocks looked like editable fields
+- important summary numbers in the fixed footer were not visually dominant
+- item-lock state only showed a generic label, without actionable downstream links
+- bottom fixed area had an unwanted layered/shadow feel
+- item-control actions (`默认入库仓` + `选择商品`) were mixed inside the item-detail card and felt crowded
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/app-shell.tsx`
+
+### What Changed
+
+- strengthened edit-state safety:
+  - added unsaved-change leave guard (`beforeRemove`) for purchase detail editing
+  - added in-app leave confirmation modal (`继续编辑` / `放弃修改`)
+  - wired header right workflow action through the same leave-confirmation gate
+- improved save affordance:
+  - save button now disables when there are no effective edits
+  - button color state now matches disabled/editability state
+- improved locked-item explainability:
+  - item-section lock hint now explains concrete reason (`已作废` / `已收货` / `已关联收货单` / `已关联发票`)
+  - lock state now exposes direct quick-links (`查看收货单` / `查看发票`) when available
+- refined page information architecture:
+  - merged top summary and header-edit intent into one primary hero area
+  - moved and compacted business-document section for faster workflow scanning
+  - split item controls into an independent block (same mental model as create-order):
+    - `默认入库仓（新增商品默认带入）`
+    - `选择商品`
+  - removed duplicated explanatory copy that reduced information density
+- refined footer summary visual hierarchy:
+  - summary now uses left/right two-column composition
+  - amount block is right-aligned and emphasized with larger type + stronger color
+  - removed awkward vertical whitespace introduced by previous amount emphasis
+- flattened bottom fixed area appearance:
+  - added `footerNoShadow` support in `AppShell`
+  - enabled `footerNoShadow` on purchase order detail page to remove the layered/shadow look
+
+### Why
+
+- purchase operators mostly need fast, high-confidence decisions:
+  - what is editable now
+  - what is locked and why
+  - where to go next in the chain
+- high-density pages still need clear visual hierarchy; otherwise repeated cards and helper text lower scanning speed
+- sticky footers should feel stable and unobtrusive on mobile, not visually detached from content
