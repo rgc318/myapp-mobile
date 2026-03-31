@@ -983,17 +983,20 @@ export default function PurchaseOrderEditScreen() {
           onPress: openReceiptCreate,
           tone: 'primary' as const,
         }
-      : canCreateInvoiceFromReceipt
+      : detail.purchaseInvoices.length
         ? {
-            label: '开票',
-            onPress: openInvoiceCreate,
-            tone: 'primary' as const,
+            label: detail.canRecordPayment && primaryInvoiceName ? '去付款' : '发票',
+            onPress:
+              detail.canRecordPayment && primaryInvoiceName
+                ? openPaymentCreate
+                : () => openLatestInvoice(detail.purchaseInvoices[0]),
+            tone: detail.canRecordPayment && primaryInvoiceName ? ('primary' as const) : ('ghost' as const),
           }
-        : detail.purchaseInvoices.length
+        : canCreateInvoiceFromReceipt
           ? {
-              label: '发票',
-              onPress: () => openLatestInvoice(detail.purchaseInvoices[0]),
-              tone: 'ghost' as const,
+              label: '开票',
+              onPress: openInvoiceCreate,
+              tone: 'primary' as const,
             }
           : detail.purchaseReceipts.length
             ? {
