@@ -5024,3 +5024,43 @@ After several iterations, purchase order detail/edit still had friction in daily
   - where to go next in the chain
 - high-density pages still need clear visual hierarchy; otherwise repeated cards and helper text lower scanning speed
 - sticky footers should feel stable and unobtrusive on mobile, not visually detached from content
+
+## Purchase Edit State Simplification Pass (2026-03-31)
+
+This round focused on stabilizing the purchase order detail/edit page state machine before continuing downstream workflow expansion.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+
+### What Changed
+
+- simplified edit-mode state:
+  - replaced the previous dual-boolean editing flags with a single `editMode` state:
+    - `view`
+    - `meta`
+    - `items`
+    - `all`
+  - derived `isEditingMeta` and `isEditingItemsSection` from `editMode` to avoid conflicting combinations
+- stabilized edit enter/cancel/reset transitions:
+  - unified transitions for:
+    - enter meta/items/all editing
+    - cancel current editing section
+    - reset full-page edits when both sections are in edit mode
+  - removed timing-sensitive reset behavior that previously relied on deferred updates
+- aligned save/leave behavior to the single edit mode:
+  - `isEditingAnySection` now maps directly to `editMode !== 'view'`
+  - unsaved-change guard continues to work, but now against one canonical edit state source
+- fixed order-to-invoice handoff:
+  - purchase order page now opens invoice create using `receiptName` (from related purchase receipt)
+  - if no receipt exists, the page shows a clear in-app message and blocks invalid invoice entry
+- refined invoice action visibility:
+  - invoice-related action buttons now require both:
+    - backend permission (`canCreateInvoice`)
+    - at least one linked purchase receipt
+
+### Why
+
+- the previous two-flag edit model was functional but fragile; complex user paths could leave the page in ambiguous editing combinations
+- purchase detail/edit is the core page that all downstream actions depend on; stabilizing it first reduces rework in receipt/invoice/payment/return iterations
+- invoice creation in this chain is receipt-based; order page navigation should enforce that domain rule instead of allowing empty or misleading entry context

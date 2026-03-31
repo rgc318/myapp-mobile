@@ -53,6 +53,7 @@ type EditablePurchaseOrderItem = {
 };
 
 type EditSection = 'meta' | 'items' | 'all';
+type EditMode = 'view' | 'meta' | 'items' | 'all';
 
 function buildEditableId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -377,8 +378,7 @@ export default function PurchaseOrderEditScreen() {
   const [defaultWarehouse, setDefaultWarehouse] = useState('');
   const [defaultWarehouseTouched, setDefaultWarehouseTouched] = useState(false);
   const [editableItems, setEditableItems] = useState<EditablePurchaseOrderItem[]>([]);
-  const [isEditingMeta, setIsEditingMeta] = useState(false);
-  const [isEditingItemsSection, setIsEditingItemsSection] = useState(false);
+  const [editMode, setEditMode] = useState<EditMode>('view');
   const [expandedItemRows, setExpandedItemRows] = useState<Record<string, boolean>>({});
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{ itemId: string; field: 'warehouse' | 'uom' } | null>(null);
@@ -404,6 +404,8 @@ export default function PurchaseOrderEditScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const statusTone = getPurchaseStatusTone(detail);
   const businessStatus = getPurchaseBusinessStatusLabel(detail);
+  const isEditingMeta = editMode === 'meta' || editMode === 'all';
+  const isEditingItemsSection = editMode === 'items' || editMode === 'all';
 
   useEffect(() => {
     showErrorRef.current = showError;
@@ -476,9 +478,11 @@ export default function PurchaseOrderEditScreen() {
             (scopedForm?.supplierRef || '') !== (nextDetail.supplierRef || '') ||
             (scopedForm?.remarks || '') !== (nextDetail.remarks || '')
           );
-        setIsEditingMeta(shouldResumeMeta || (shouldResumeFromRoute && hasDraftMetaChanges));
-        setIsEditingItemsSection(
-          nextCanEditItems && (shouldResumeItems || (shouldResumeFromRoute && hasScopedItems)),
+        const shouldOpenMeta = shouldResumeMeta || (shouldResumeFromRoute && hasDraftMetaChanges);
+        const shouldOpenItems =
+          nextCanEditItems && (shouldResumeItems || (shouldResumeFromRoute && hasScopedItems));
+        setEditMode(
+          shouldOpenMeta && shouldOpenItems ? 'all' : shouldOpenMeta ? 'meta' : shouldOpenItems ? 'items' : 'view',
         );
         originalMetaRef.current = JSON.stringify({
           transactionDate: nextDetail.transactionDate || '',
@@ -834,7 +838,7 @@ export default function PurchaseOrderEditScreen() {
       }, 0),
     [editableItems],
   );
-  const isEditingAnySection = isEditingMeta || isEditingItemsSection;
+  const isEditingAnySection = editMode !== 'view';
   const hasUnsavedEdits = isEditingAnySection && (headerChanged || itemsChanged);
 
   const requestLeaveConfirmation = (onProceed?: () => void) => {
@@ -902,9 +906,15 @@ export default function PurchaseOrderEditScreen() {
       return;
     }
 
+    const sourceReceipt = detail.purchaseReceipts[0]?.trim() || '';
+    if (!sourceReceipt) {
+      showError('当前订单还没有可开票的收货单，请先完成收货。');
+      return;
+    }
+
     router.push({
       pathname: '/purchase/invoice/create',
-      params: { orderName: detail.name },
+      params: { receiptName: sourceReceipt },
     });
   };
 
@@ -949,6 +959,8 @@ export default function PurchaseOrderEditScreen() {
     });
   };
 
+  const canCreateInvoiceFromReceipt = Boolean(detail?.canCreateInvoice && detail?.purchaseReceipts.length);
+
   const workflowAction = !detail
     ? null
     : detail.canReceive
@@ -957,7 +969,7 @@ export default function PurchaseOrderEditScreen() {
           onPress: openReceiptCreate,
           tone: 'primary' as const,
         }
-      : detail.canCreateInvoice
+      : canCreateInvoiceFromReceipt
         ? {
             label: '开票',
             onPress: openInvoiceCreate,
@@ -1070,12 +1082,13 @@ export default function PurchaseOrderEditScreen() {
     if (!detail) {
       return;
     }
+    const keepItemsEditing = isEditingItemsSection;
     setTransactionDate(detail.transactionDate || '');
     setScheduleDate(detail.scheduleDate || '');
     setSupplierRef(detail.supplierRef || '');
     setRemarks(detail.remarks || '');
-    setIsEditingMeta(false);
-    if (!isEditingItemsSection) {
+    setEditMode(keepItemsEditing ? 'items' : 'view');
+    if (!keepItemsEditing) {
       clearPurchaseOrderDraft(draftScope);
     } else {
       updatePurchaseOrderDraftForm(
@@ -1098,13 +1111,14 @@ export default function PurchaseOrderEditScreen() {
     if (!detail) {
       return;
     }
+    const keepMetaEditing = isEditingMeta;
     const detailItems = buildEditableItemsFromDetail(detail);
     setEditableItems(detailItems);
     setExpandedItemRows({});
     setDefaultWarehouse(getDefaultWarehouseFromItems(detailItems));
     setDefaultWarehouseTouched(false);
-    setIsEditingItemsSection(false);
-    if (!isEditingMeta) {
+    setEditMode(keepMetaEditing ? 'meta' : 'view');
+    if (!keepMetaEditing) {
       clearPurchaseOrderDraft(draftScope);
     } else {
       replacePurchaseOrderDraft(detailItems, draftScope);
@@ -1125,13 +1139,29 @@ export default function PurchaseOrderEditScreen() {
   };
 
   const cancelEditing = () => {
+    if (editMode === 'all') {
+      if (!detail) {
+        return;
+      }
+      const detailItems = buildEditableItemsFromDetail(detail);
+      setEditableItems(detailItems);
+      setExpandedItemRows({});
+      setDefaultWarehouse(getDefaultWarehouseFromItems(detailItems));
+      setDefaultWarehouseTouched(false);
+      setTransactionDate(detail.transactionDate || '');
+      setScheduleDate(detail.scheduleDate || '');
+      setSupplierRef(detail.supplierRef || '');
+      setRemarks(detail.remarks || '');
+      setEditMode('view');
+      clearPurchaseOrderDraft(draftScope);
+      return;
+    }
+
     if (isEditingItemsSection) {
       resetItemsSection();
     }
     if (isEditingMeta) {
-      setTimeout(() => {
-        resetMetaSection();
-      }, 0);
+      resetMetaSection();
       return;
     }
     clearPurchaseOrderDraft(draftScope);
@@ -1142,21 +1172,18 @@ export default function PurchaseOrderEditScreen() {
       return;
     }
     if (section === 'all') {
-      setIsEditingMeta(true);
-      if (canEditItems) {
-        setIsEditingItemsSection(true);
-      }
+      setEditMode(canEditItems ? 'all' : 'meta');
       return;
     }
     if (section === 'meta') {
-      setIsEditingMeta(true);
+      setEditMode(isEditingItemsSection ? 'all' : 'meta');
       return;
     }
     if (!canEditItems) {
       showError('当前采购订单已有收货或开票记录，暂不允许修改商品明细。');
       return;
     }
-    setIsEditingItemsSection(true);
+    setEditMode(isEditingMeta ? 'all' : 'items');
   };
 
   const handleSave = async () => {
@@ -1581,7 +1608,7 @@ export default function PurchaseOrderEditScreen() {
               detail.purchaseInvoices.length ||
               detail.latestPaymentEntry ||
               detail.canReceive ||
-              detail.canCreateInvoice ||
+              canCreateInvoiceFromReceipt ||
               detail.canRecordPayment ||
               detail.canProcessReturn) ? (
               <View style={[styles.card, styles.compactCard, { backgroundColor: surface, borderColor }]}>
@@ -1621,7 +1648,7 @@ export default function PurchaseOrderEditScreen() {
                   </View>
                 ) : null}
 
-                {(detail.canReceive || detail.canCreateInvoice || (detail.canRecordPayment && primaryInvoiceName) || detail.canProcessReturn) ? (
+                {(detail.canReceive || canCreateInvoiceFromReceipt || (detail.canRecordPayment && primaryInvoiceName) || detail.canProcessReturn) ? (
                   <View style={styles.nextActionRow}>
                     {detail.canReceive ? (
                       <Pressable onPress={openReceiptCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
@@ -1630,7 +1657,7 @@ export default function PurchaseOrderEditScreen() {
                         </ThemedText>
                       </Pressable>
                     ) : null}
-                    {detail.canCreateInvoice ? (
+                    {canCreateInvoiceFromReceipt ? (
                       <Pressable onPress={openInvoiceCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
                         <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
                           继续开票
