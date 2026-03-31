@@ -33,7 +33,7 @@ const MODE_OF_PAYMENT_LABELS: Record<string, string> = {
   支付宝支付: '支付宝支付',
 };
 
-const FEATURED_MODE_KEYS = ['Wire Transfer', 'Bank Draft', 'Cash', '银行转账', '银行汇票', '现金'] as const;
+const FEATURED_MODE_KEYS = ['微信支付', 'WeChat Pay', 'Cash', '现金', '支付宝支付', 'Alipay'] as const;
 
 function formatMoney(value: number | null, currency = 'CNY') {
   if (typeof value !== 'number') {
@@ -189,9 +189,12 @@ export default function PurchasePaymentCreateScreen() {
       setModeOptions(options);
       if (!modeOfPayment && options.length) {
         const preferred =
-          options.find((option) => option.value === 'Wire Transfer') ??
-          options.find((option) => option.value === 'Bank Draft') ??
+          options.find((option) => option.value === '微信支付') ??
+          options.find((option) => option.value === 'WeChat Pay') ??
           options.find((option) => option.value === 'Cash') ??
+          options.find((option) => option.value === '现金') ??
+          options.find((option) => option.value === '支付宝支付') ??
+          options.find((option) => option.value === 'Alipay') ??
           options[0];
         setModeOfPayment(preferred?.value ?? '');
       }
