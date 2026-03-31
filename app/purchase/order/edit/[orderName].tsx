@@ -386,6 +386,7 @@ export default function PurchaseOrderEditScreen() {
   const [pickerOptions, setPickerOptions] = useState<{ label: string; value: string; description?: string }[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [isBusinessDocsExpanded, setIsBusinessDocsExpanded] = useState(true);
   const scrollRef = useRef<ScrollView | null>(null);
   const showErrorRef = useRef(showError);
   const pendingNavigationActionRef = useRef<any>(null);
@@ -964,6 +965,10 @@ export default function PurchaseOrderEditScreen() {
   };
 
   const canCreateInvoiceFromReceipt = Boolean(detail?.canCreateInvoice && detail?.purchaseReceipts.length);
+  const hasPendingBusinessAction = Boolean(
+    detail &&
+      (detail.canReceive || canCreateInvoiceFromReceipt || (detail.canRecordPayment && primaryInvoiceName) || detail.canProcessReturn),
+  );
   const showBusinessDocsSection = Boolean(
     detail &&
       (detail.purchaseReceipts.length ||
@@ -974,6 +979,14 @@ export default function PurchaseOrderEditScreen() {
         detail.canRecordPayment ||
         detail.canProcessReturn),
   );
+
+  useEffect(() => {
+    if (!showBusinessDocsSection) {
+      setIsBusinessDocsExpanded(false);
+      return;
+    }
+    setIsBusinessDocsExpanded(hasPendingBusinessAction);
+  }, [detail?.name, hasPendingBusinessAction, showBusinessDocsSection]);
 
   const workflowAction = !detail
     ? null
@@ -1008,75 +1021,90 @@ export default function PurchaseOrderEditScreen() {
 
   const businessDocsSection = showBusinessDocsSection && detail ? (
     <View style={[styles.card, styles.compactCard, { backgroundColor: surface, borderColor }]}>
-      <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-        业务单据
-      </ThemedText>
-      <View style={styles.compactInfoGrid}>
-        <InfoRow label="收货单" value={detail.purchaseReceipts.length ? `${detail.purchaseReceipts.length} 张` : '暂无'} />
-        <InfoRow label="采购发票" value={detail.purchaseInvoices.length ? `${detail.purchaseInvoices.length} 张` : '暂无'} />
-        <InfoRow label="供应商付款" value={detail.latestPaymentEntry ? '已有记录' : '暂无'} />
+      <View style={styles.sectionHeader}>
+        <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+          业务单据
+        </ThemedText>
+        <Pressable onPress={() => setIsBusinessDocsExpanded((current) => !current)} style={styles.linkButton}>
+          <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+            {isBusinessDocsExpanded ? '收起' : '展开'}
+          </ThemedText>
+        </Pressable>
       </View>
+      {isBusinessDocsExpanded ? (
+        <>
+          <View style={styles.compactInfoGrid}>
+            <InfoRow label="收货单" value={detail.purchaseReceipts.length ? `${detail.purchaseReceipts.length} 张` : '暂无'} />
+            <InfoRow label="采购发票" value={detail.purchaseInvoices.length ? `${detail.purchaseInvoices.length} 张` : '暂无'} />
+            <InfoRow label="供应商付款" value={detail.latestPaymentEntry ? '已有记录' : '暂无'} />
+          </View>
 
-      {(detail.purchaseReceipts[0] || detail.purchaseInvoices[0] || detail.latestPaymentEntry) ? (
-        <View style={styles.nextActionRow}>
-          {detail.purchaseReceipts[0] ? (
-            <Pressable onPress={() => openLatestReceipt(detail.purchaseReceipts[0])} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-              <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                查看收货单
-              </ThemedText>
-            </Pressable>
+          {(detail.purchaseReceipts[0] || detail.purchaseInvoices[0] || detail.latestPaymentEntry) ? (
+            <View style={styles.nextActionRow}>
+              {detail.purchaseReceipts[0] ? (
+                <Pressable onPress={() => openLatestReceipt(detail.purchaseReceipts[0])} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                    查看收货单
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              {detail.purchaseInvoices[0] ? (
+                <Pressable onPress={() => openLatestInvoice(detail.purchaseInvoices[0])} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                    查看发票
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              {detail.latestPaymentEntry && primaryInvoiceName ? (
+                <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                    去付款
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
-          {detail.purchaseInvoices[0] ? (
-            <Pressable onPress={() => openLatestInvoice(detail.purchaseInvoices[0])} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-              <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                查看发票
-              </ThemedText>
-            </Pressable>
-          ) : null}
-          {detail.latestPaymentEntry && primaryInvoiceName ? (
-            <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-              <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                去付款
-              </ThemedText>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
 
-      {(detail.canReceive || canCreateInvoiceFromReceipt || (detail.canRecordPayment && primaryInvoiceName) || detail.canProcessReturn) ? (
-        <View style={styles.nextActionRow}>
-          {detail.canReceive ? (
-            <Pressable onPress={openReceiptCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-              <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                继续收货
-              </ThemedText>
-            </Pressable>
-          ) : null}
-          {canCreateInvoiceFromReceipt ? (
-            <Pressable onPress={openInvoiceCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-              <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                继续开票
-              </ThemedText>
-            </Pressable>
-          ) : null}
-          {detail.canRecordPayment && primaryInvoiceName ? (
-            <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-              <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                去付款
-              </ThemedText>
-            </Pressable>
-          ) : null}
-          {detail.canProcessReturn ? (
-            <Pressable onPress={openReturnCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-              <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                退货
-              </ThemedText>
-            </Pressable>
-          ) : null}
-        </View>
+          {hasPendingBusinessAction ? (
+            <View style={styles.nextActionRow}>
+              {detail.canReceive ? (
+                <Pressable onPress={openReceiptCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                    继续收货
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              {canCreateInvoiceFromReceipt ? (
+                <Pressable onPress={openInvoiceCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                    继续开票
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              {detail.canRecordPayment && primaryInvoiceName ? (
+                <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                    去付款
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              {detail.canProcessReturn ? (
+                <Pressable onPress={openReturnCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                    退货
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            <ThemedText style={styles.sectionSubtleText}>
+              当前暂无可执行动作。
+            </ThemedText>
+          )}
+        </>
       ) : (
-        <ThemedText style={styles.sectionSubtleText}>
-          当前暂无可执行动作。
+        <ThemedText style={styles.sectionHintText}>
+          已折叠。展开后可查看收货单、发票、付款等链路入口。
         </ThemedText>
       )}
     </View>
@@ -1712,11 +1740,11 @@ export default function PurchaseOrderEditScreen() {
               )}
             </View>
 
+            {businessDocsSection}
+
             {itemControlSection}
 
             {itemsSection}
-
-            {businessDocsSection}
 
             <View style={[styles.card, styles.compactCard, { backgroundColor: surface, borderColor }]}>
               <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
