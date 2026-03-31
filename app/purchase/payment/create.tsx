@@ -33,7 +33,7 @@ const MODE_OF_PAYMENT_LABELS: Record<string, string> = {
   支付宝支付: '支付宝支付',
 };
 
-const FEATURED_MODE_KEYS = ['微信支付', 'WeChat Pay', 'Cash', '现金', '支付宝支付', 'Alipay'] as const;
+const FEATURED_MODE_KEYS = ['Wire Transfer', 'Bank Draft', 'Cash', '银行转账', '银行汇票', '现金'] as const;
 
 function formatMoney(value: number | null, currency = 'CNY') {
   if (typeof value !== 'number') {
@@ -502,7 +502,7 @@ export default function PurchasePaymentCreateScreen() {
               </ThemedText>
             </Pressable>
             <ThemedText style={styles.selectorHelper}>
-              常用方式可直接点选；如需其他方式，请从额外支付方式中选择 ERPNext 已配置项。
+              常用方式可直接点选；其他方式请从“额外支付方式”中选择。
             </ThemedText>
           </View>
 
@@ -800,6 +800,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: 10,
+    marginTop: 4,
   },
   label: {
     fontSize: 14,
@@ -905,6 +906,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 12,
     lineHeight: 18,
+    marginTop: 2,
   },
   submitHintCard: {
     borderRadius: 16,
