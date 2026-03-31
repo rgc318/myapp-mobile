@@ -11,13 +11,29 @@ import { normalizeAppError } from '@/lib/app-error';
 import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
 import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import { useFeedback } from '@/providers/feedback-provider';
+import { type LinkOption } from '@/services/master-data';
 import {
+  cancelSupplierPayment,
   fetchPurchaseInvoiceDetail,
   searchModeOfPayments,
   searchPurchaseInvoices,
   submitSupplierPayment,
   type PurchaseInvoiceDetail,
 } from '@/services/purchases';
+
+const MODE_OF_PAYMENT_LABELS: Record<string, string> = {
+  Cash: '现金',
+  'Bank Draft': '银行汇票',
+  'Wire Transfer': '银行转账',
+  'Credit Card': '信用卡',
+  Cheque: '支票',
+  'WeChat Pay': '微信支付',
+  Alipay: '支付宝',
+  微信支付: '微信支付',
+  支付宝支付: '支付宝支付',
+};
+
+const FEATURED_MODE_KEYS = ['微信支付', 'WeChat Pay', 'Cash', '现金', '支付宝支付', 'Alipay'] as const;
 
 function formatMoney(value: number | null, currency = 'CNY') {
   if (typeof value !== 'number') {
@@ -29,6 +45,14 @@ function formatMoney(value: number | null, currency = 'CNY') {
     currency,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function getModeOfPaymentLabel(value: string) {
+  return MODE_OF_PAYMENT_LABELS[value] ?? value;
+}
+
+function isFeaturedMode(value: string) {
+  return FEATURED_MODE_KEYS.includes(value as (typeof FEATURED_MODE_KEYS)[number]);
 }
 
 type ResultDialogState = {
@@ -57,8 +81,13 @@ export default function PurchasePaymentCreateScreen() {
   const [invoiceDetail, setInvoiceDetail] = useState<PurchaseInvoiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRollingBack, setIsRollingBack] = useState(false);
   const [confirmMismatchOpen, setConfirmMismatchOpen] = useState(false);
+  const [confirmRollbackOpen, setConfirmRollbackOpen] = useState(false);
   const [resultDialog, setResultDialog] = useState<ResultDialogState>(null);
+  const [modePickerOpen, setModePickerOpen] = useState(false);
+  const [modeQuery, setModeQuery] = useState('');
+  const [modeOptions, setModeOptions] = useState<LinkOption[]>([]);
 
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
@@ -66,6 +95,19 @@ export default function PurchasePaymentCreateScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const paymentSourceName = referenceName.trim();
   const expectedAmount = useMemo(() => invoiceDetail?.outstandingAmount ?? null, [invoiceDetail]);
+
+  const featuredModeOptions = modeOptions.filter((option, index, array) => {
+    if (!isFeaturedMode(option.value)) {
+      return false;
+    }
+
+    return (
+      array.findIndex(
+        (candidate) => getModeOfPaymentLabel(candidate.value) === getModeOfPaymentLabel(option.value),
+      ) === index
+    );
+  });
+  const extraModeOptions = modeOptions.filter((option) => !isFeaturedMode(option.value));
 
   const currentAmount = Number(paidAmount);
   const normalizedAmount = Number.isFinite(currentAmount) && currentAmount > 0 ? currentAmount : 0;
@@ -115,8 +157,8 @@ export default function PurchasePaymentCreateScreen() {
         const detail = await fetchPurchaseInvoiceDetail(trimmedReferenceName);
         if (!cancelled) {
           setInvoiceDetail(detail);
-          if (detail?.outstandingAmount && !paidAmount.trim()) {
-            setPaidAmount(String(detail.outstandingAmount));
+          if (typeof detail?.outstandingAmount === 'number') {
+            setPaidAmount((current) => (current.trim() ? current : String(detail.outstandingAmount)));
           }
         }
       } catch {
@@ -134,17 +176,64 @@ export default function PurchasePaymentCreateScreen() {
     return () => {
       cancelled = true;
     };
-  }, [paidAmount, referenceName]);
+  }, [referenceName]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void searchModeOfPayments('').then((options) => {
+      if (cancelled) {
+        return;
+      }
+
+      setModeOptions(options);
+      if (!modeOfPayment && options.length) {
+        const preferred =
+          options.find((option) => option.value === 'Wire Transfer') ??
+          options.find((option) => option.value === 'Bank Draft') ??
+          options.find((option) => option.value === 'Cash') ??
+          options[0];
+        setModeOfPayment(preferred?.value ?? '');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modeOfPayment]);
+
+  useEffect(() => {
+    if (!modePickerOpen) {
+      return;
+    }
+
+    let cancelled = false;
+    void searchModeOfPayments(modeQuery).then((options) => {
+      if (!cancelled) {
+        setModeOptions(options);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modePickerOpen, modeQuery]);
 
   const submitPayment = async () => {
     const trimmedReference = referenceName.trim();
     const amount = Number(paidAmount);
+    const trimmedModeOfPayment = modeOfPayment.trim();
+
     if (!trimmedReference) {
       showError('请先填写采购发票号。');
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
       showError('请输入有效的付款金额。');
+      return;
+    }
+    if (!trimmedModeOfPayment) {
+      showError('请选择付款方式。');
       return;
     }
     if (!isValidIsoDate(referenceDate)) {
@@ -157,7 +246,7 @@ export default function PurchasePaymentCreateScreen() {
       const result = await submitSupplierPayment({
         referenceName: trimmedReference,
         paidAmount: amount,
-        modeOfPayment: modeOfPayment.trim() || undefined,
+        modeOfPayment: trimmedModeOfPayment,
         referenceNo: referenceNo.trim() || undefined,
         referenceDate: referenceDate.trim() || undefined,
       });
@@ -189,6 +278,43 @@ export default function PurchasePaymentCreateScreen() {
     }
   };
 
+  const rollbackLatestPayment = async () => {
+    const latestPaymentEntry = invoiceDetail?.latestPaymentEntry?.trim();
+    if (!latestPaymentEntry) {
+      showError('当前没有可回退的付款单。');
+      return;
+    }
+
+    try {
+      setIsRollingBack(true);
+      await cancelSupplierPayment(latestPaymentEntry);
+      const refreshed = await fetchPurchaseInvoiceDetail(referenceName.trim());
+      setInvoiceDetail(refreshed);
+      setResultDialog({
+        tone: 'success',
+        title: '付款回退成功',
+        message: `已回退付款单 ${latestPaymentEntry}。如需更正，可重新登记供应商付款。`,
+        confirmLabel: '继续',
+        onConfirm: () => {
+          setResultDialog(null);
+        },
+      });
+    } catch (error) {
+      setResultDialog({
+        tone: 'error',
+        title: '付款回退失败',
+        message: normalizeAppError(error).message || '回退供应商付款失败。',
+        confirmLabel: '继续处理',
+        onConfirm: () => {
+          setResultDialog(null);
+        },
+      });
+    } finally {
+      setIsRollingBack(false);
+      setConfirmRollbackOpen(false);
+    }
+  };
+
   const handleSubmit = () => {
     if (isAmountDifferent) {
       setConfirmMismatchOpen(true);
@@ -213,9 +339,13 @@ export default function PurchasePaymentCreateScreen() {
             </ThemedText>
           </Pressable>
           <Pressable
-            disabled={isSubmitting}
+            disabled={isSubmitting || isRollingBack}
             onPress={handleSubmit}
-            style={[styles.footerButton, styles.primaryFooterButton, { backgroundColor: isSubmitting ? surfaceMuted : tintColor }]}>
+            style={[
+              styles.footerButton,
+              styles.primaryFooterButton,
+              { backgroundColor: isSubmitting || isRollingBack ? surfaceMuted : tintColor },
+            ]}>
             <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
               {isSubmitting ? '登记中...' : '提交供应商付款'}
             </ThemedText>
@@ -268,6 +398,25 @@ export default function PurchasePaymentCreateScreen() {
                 </ThemedText>
               </View>
             </View>
+
+            {invoiceDetail.latestPaymentEntry ? (
+              <View style={styles.rollbackCard}>
+                <ThemedText style={styles.rollbackTitle} type="defaultSemiBold">
+                  回退最近付款
+                </ThemedText>
+                <ThemedText style={styles.rollbackText}>
+                  最近付款单：{invoiceDetail.latestPaymentEntry}。若本次付款登记有误，可先回退再重新登记。
+                </ThemedText>
+                <Pressable
+                  disabled={isRollingBack}
+                  onPress={() => setConfirmRollbackOpen(true)}
+                  style={[styles.rollbackButton, { opacity: isRollingBack ? 0.6 : 1 }]}>
+                  <ThemedText style={styles.rollbackButtonText} type="defaultSemiBold">
+                    {isRollingBack ? '回退中...' : '回退最近付款'}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -311,20 +460,51 @@ export default function PurchasePaymentCreateScreen() {
                   付款金额与建议值不一致
                 </ThemedText>
                 <ThemedText style={styles.warningText}>
-                  当前建议付款为 {formatMoney(expectedAmount, invoiceDetail?.currency || 'CNY')}，
-                  你填写的是 {formatMoney(normalizedAmount, invoiceDetail?.currency || 'CNY')}。
+                  当前建议付款为 {formatMoney(expectedAmount, invoiceDetail?.currency || 'CNY')}，你填写的是{' '}
+                  {formatMoney(normalizedAmount, invoiceDetail?.currency || 'CNY')}。
                 </ThemedText>
               </View>
             ) : null}
           </View>
 
-          <LinkOptionInput
-            label="付款方式"
-            loadOptions={searchModeOfPayments}
-            onChangeText={setModeOfPayment}
-            placeholder="例如 Cash / Wire Transfer"
-            value={modeOfPayment}
-          />
+          <View style={styles.field}>
+            <ThemedText style={styles.label} type="defaultSemiBold">
+              付款方式
+            </ThemedText>
+            <View style={styles.featuredModeGrid}>
+              {featuredModeOptions.map((option) => {
+                const selected = modeOfPayment === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => setModeOfPayment(option.value)}
+                    style={[styles.featuredModeChip, selected ? styles.featuredModeChipActive : null]}>
+                    <ThemedText
+                      style={selected ? styles.featuredModeChipTextActive : styles.featuredModeChipText}
+                      type="defaultSemiBold">
+                      {getModeOfPaymentLabel(option.value)}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <ThemedText style={styles.extraModeLabel} type="defaultSemiBold">
+              额外支付方式
+            </ThemedText>
+            <Pressable onPress={() => setModePickerOpen(true)} style={[styles.selectorInput, { borderColor }]}> 
+              <ThemedText
+                style={modeOfPayment ? styles.selectorValue : styles.selectorPlaceholder}
+                type={modeOfPayment ? 'defaultSemiBold' : 'default'}>
+                {modeOfPayment ? getModeOfPaymentLabel(modeOfPayment) : '选择付款方式'}
+              </ThemedText>
+              <ThemedText style={styles.selectorAction} type="defaultSemiBold">
+                选择
+              </ThemedText>
+            </Pressable>
+            <ThemedText style={styles.selectorHelper}>
+              常用方式可直接点选；如需其他方式，请从额外支付方式中选择 ERPNext 已配置项。
+            </ThemedText>
+          </View>
 
           <View style={styles.row}>
             <View style={styles.field}>
@@ -356,7 +536,7 @@ export default function PurchasePaymentCreateScreen() {
               </ThemedText>
               <ThemedText style={styles.submitHintText}>
                 即将为发票 {paymentSourceName || '未指定发票'} 登记 {formatMoney(normalizedAmount || null, invoiceDetail?.currency || 'CNY')}，
-                付款方式为 {modeOfPayment.trim() || '未指定'}。
+                付款方式为 {modeOfPayment.trim() ? getModeOfPaymentLabel(modeOfPayment.trim()) : '未指定'}。
               </ThemedText>
             </View>
           ) : null}
@@ -407,6 +587,35 @@ export default function PurchasePaymentCreateScreen() {
 
       <Modal
         animationType="fade"
+        onRequestClose={() => setConfirmRollbackOpen(false)}
+        transparent
+        visible={confirmRollbackOpen}>
+        <View style={styles.dialogBackdrop}>
+          <View style={styles.dialogCard}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              回退最近付款？
+            </ThemedText>
+            <ThemedText style={styles.dialogMessage}>
+              将回退付款单 {invoiceDetail?.latestPaymentEntry || '未知'}。回退后可重新登记正确付款。
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable onPress={() => setConfirmRollbackOpen(false)} style={styles.dialogGhostButton}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  先不回退
+                </ThemedText>
+              </Pressable>
+              <Pressable onPress={() => void rollbackLatestPayment()} style={styles.dialogDangerButton}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  确认回退
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
         onRequestClose={() => setResultDialog(null)}
         transparent
         visible={!!resultDialog}>
@@ -433,6 +642,54 @@ export default function PurchasePaymentCreateScreen() {
                 </ThemedText>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setModePickerOpen(false)}
+        transparent
+        visible={modePickerOpen}>
+        <View style={styles.dialogBackdrop}>
+          <View style={styles.pickerCard}>
+            <ThemedText style={styles.pickerTitle} type="defaultSemiBold">
+              选择付款方式
+            </ThemedText>
+            <TextInput
+              onChangeText={setModeQuery}
+              placeholder="搜索付款方式"
+              placeholderTextColor="#9CA3AF"
+              style={[styles.input, styles.pickerSearchInput]}
+              value={modeQuery}
+            />
+            <ScrollView contentContainerStyle={styles.pickerList} style={styles.pickerScroll}>
+              {(extraModeOptions.length ? extraModeOptions : modeOptions).map((option) => (
+                <Pressable
+                  key={option.value}
+                  onPress={() => {
+                    setModeOfPayment(option.value);
+                    setModePickerOpen(false);
+                    setModeQuery('');
+                  }}
+                  style={[styles.pickerOption, modeOfPayment === option.value ? styles.pickerOptionActive : null]}>
+                  <ThemedText style={styles.pickerOptionText} type="defaultSemiBold">
+                    {getModeOfPaymentLabel(option.label)}
+                  </ThemedText>
+                  <ThemedText style={styles.pickerOptionAction} type="defaultSemiBold">
+                    {modeOfPayment === option.value ? '已选' : '选择'}
+                  </ThemedText>
+                </Pressable>
+              ))}
+              {!modeOptions.length ? (
+                <ThemedText style={styles.emptyPickerText}>未找到可用付款方式</ThemedText>
+              ) : null}
+            </ScrollView>
+            <Pressable onPress={() => setModePickerOpen(false)} style={styles.dialogGhostButton}>
+              <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                关闭
+              </ThemedText>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -503,6 +760,39 @@ const styles = StyleSheet.create({
   warningTextStrong: {
     color: '#C2410C',
   },
+  rollbackCard: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  rollbackTitle: {
+    color: '#991B1B',
+    fontSize: 14,
+  },
+  rollbackText: {
+    color: '#7F1D1D',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rollbackButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  rollbackButtonText: {
+    color: '#B91C1C',
+    fontSize: 13,
+  },
   field: {
     flex: 1,
     gap: 8,
@@ -555,6 +845,64 @@ const styles = StyleSheet.create({
   },
   warningText: {
     color: '#9A3412',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  featuredModeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  featuredModeChip: {
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  featuredModeChipActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  featuredModeChipText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+  },
+  featuredModeChipTextActive: {
+    color: '#FFFFFF',
+    fontSize: 13,
+  },
+  extraModeLabel: {
+    fontSize: 13,
+  },
+  selectorInput: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: 14,
+  },
+  selectorPlaceholder: {
+    color: '#94A3B8',
+    fontSize: 15,
+  },
+  selectorValue: {
+    color: '#0F172A',
+    fontSize: 15,
+  },
+  selectorAction: {
+    color: '#2563EB',
+    fontSize: 14,
+  },
+  selectorHelper: {
+    color: '#64748B',
     fontSize: 12,
     lineHeight: 18,
   },
@@ -652,6 +1000,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
   },
+  dialogDangerButton: {
+    alignItems: 'center',
+    backgroundColor: '#DC2626',
+    borderRadius: 14,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
   dialogPrimaryText: {
     color: '#FFFFFF',
     fontSize: 14,
@@ -667,5 +1023,55 @@ const styles = StyleSheet.create({
   },
   resultErrorButton: {
     backgroundColor: '#DC2626',
+  },
+  pickerCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    gap: 12,
+    maxHeight: '70%',
+    padding: 18,
+    width: '100%',
+  },
+  pickerTitle: {
+    fontSize: 17,
+  },
+  pickerSearchInput: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D7DEE7',
+  },
+  pickerScroll: {
+    maxHeight: 320,
+  },
+  pickerList: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  pickerOption: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D7DEE7',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  pickerOptionActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#93C5FD',
+  },
+  pickerOptionText: {
+    color: '#0F172A',
+    fontSize: 14,
+  },
+  pickerOptionAction: {
+    color: '#2563EB',
+    fontSize: 13,
+  },
+  emptyPickerText: {
+    color: '#64748B',
+    fontSize: 13,
+    textAlign: 'center',
   },
 });
