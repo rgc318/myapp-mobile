@@ -143,6 +143,8 @@ export default function PurchaseInvoiceCreateScreen() {
 
   const purchaseInvoiceName =
     typeof params.purchaseInvoice === 'string' ? params.purchaseInvoice.trim() : '';
+  const primaryOrderNameFromInvoice = invoiceDetail?.purchaseOrders[0]?.trim() || '';
+  const primaryReceiptNameFromInvoice = invoiceDetail?.purchaseReceipts[0]?.trim() || '';
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
@@ -379,34 +381,75 @@ export default function PurchaseInvoiceCreateScreen() {
                 ? '当前发票已作废，建议返回上游单据确认最新链路状态。'
                 : '发票提交后建议优先在这里继续付款或回到上游单据，不必反复滚动查找操作入口。'}
             </ThemedText>
+            {primaryOrderNameFromInvoice || primaryReceiptNameFromInvoice ? (
+              <View style={styles.footerQuickLinkRow}>
+                {primaryOrderNameFromInvoice ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/purchase/order/[orderName]',
+                        params: { orderName: primaryOrderNameFromInvoice },
+                      })
+                    }
+                    style={[styles.footerQuickLinkButton, { borderColor }]}>
+                    <ThemedText style={[styles.footerQuickLinkText, { color: tintColor }]} type="defaultSemiBold">
+                      查看采购订单
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+                {primaryReceiptNameFromInvoice ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/purchase/receipt/create',
+                        params: { receiptName: primaryReceiptNameFromInvoice },
+                      })
+                    }
+                    style={[styles.footerQuickLinkButton, { borderColor }]}>
+                    <ThemedText style={[styles.footerQuickLinkText, { color: tintColor }]} type="defaultSemiBold">
+                      查看收货单
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
             <View style={styles.footerActionRow}>
-              {invoiceDetail.purchaseOrders[0] ? (
-                <Pressable
-                  onPress={() =>
+              <Pressable
+                disabled={!primaryOrderNameFromInvoice && !primaryReceiptNameFromInvoice}
+                onPress={() => {
+                  if (primaryOrderNameFromInvoice) {
                     router.push({
                       pathname: '/purchase/order/[orderName]',
-                      params: { orderName: invoiceDetail.purchaseOrders[0] },
-                    })
+                      params: { orderName: primaryOrderNameFromInvoice },
+                    });
+                    return;
                   }
-                  style={[styles.footerActionButton, styles.secondaryActionButton, { borderColor }]}>
-                  <ThemedText style={[styles.secondaryActionText, { color: tintColor }]} type="defaultSemiBold">
-                    返回采购订单
-                  </ThemedText>
-                </Pressable>
-              ) : invoiceDetail.purchaseReceipts[0] ? (
-                <Pressable
-                  onPress={() =>
+                  if (primaryReceiptNameFromInvoice) {
                     router.push({
                       pathname: '/purchase/receipt/create',
-                      params: { receiptName: invoiceDetail.purchaseReceipts[0] },
-                    })
+                      params: { receiptName: primaryReceiptNameFromInvoice },
+                    });
                   }
-                  style={[styles.footerActionButton, styles.secondaryActionButton, { borderColor }]}>
-                  <ThemedText style={[styles.secondaryActionText, { color: tintColor }]} type="defaultSemiBold">
-                    查看收货单
-                  </ThemedText>
-                </Pressable>
-              ) : null}
+                }}
+                style={[
+                  styles.footerActionButton,
+                  styles.secondaryActionButton,
+                  {
+                    borderColor:
+                      primaryOrderNameFromInvoice || primaryReceiptNameFromInvoice
+                        ? borderColor
+                        : surfaceMuted,
+                    opacity: primaryOrderNameFromInvoice || primaryReceiptNameFromInvoice ? 1 : 0.6,
+                  },
+                ]}>
+                <ThemedText style={[styles.secondaryActionText, { color: tintColor }]} type="defaultSemiBold">
+                  {primaryOrderNameFromInvoice
+                    ? '返回采购订单'
+                    : primaryReceiptNameFromInvoice
+                      ? '返回收货单'
+                      : '暂无上游单据'}
+                </ThemedText>
+              </Pressable>
 
               {invoiceDetail.documentStatus !== 'cancelled' ? (
                 <Pressable
@@ -1083,6 +1126,25 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 12,
     lineHeight: 18,
+  },
+  footerQuickLinkRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  footerQuickLinkButton: {
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 32,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  footerQuickLinkText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   footerActionRow: {
     flexDirection: 'row',
