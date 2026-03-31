@@ -387,6 +387,7 @@ export default function PurchaseOrderEditScreen() {
   const [pickerLoading, setPickerLoading] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [isBusinessDocsExpanded, setIsBusinessDocsExpanded] = useState(true);
+  const [showMoreBusinessActions, setShowMoreBusinessActions] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const showErrorRef = useRef(showError);
   const pendingNavigationActionRef = useRef<any>(null);
@@ -988,6 +989,10 @@ export default function PurchaseOrderEditScreen() {
     setIsBusinessDocsExpanded(hasPendingBusinessAction);
   }, [detail?.name, hasPendingBusinessAction, showBusinessDocsSection]);
 
+  useEffect(() => {
+    setShowMoreBusinessActions(false);
+  }, [detail?.name, isBusinessDocsExpanded]);
+
   const workflowAction = !detail
     ? null
     : detail.canReceive
@@ -1018,6 +1023,29 @@ export default function PurchaseOrderEditScreen() {
                 tone: 'ghost' as const,
               }
             : null;
+
+  const businessActionItems = detail
+    ? [
+        detail.canReceive
+          ? { key: 'receive', label: '继续收货', onPress: openReceiptCreate, tone: 'primary' as const }
+          : null,
+        canCreateInvoiceFromReceipt
+          ? { key: 'invoice', label: '继续开票', onPress: openInvoiceCreate, tone: 'primary' as const }
+          : null,
+        detail.canRecordPayment && primaryInvoiceName
+          ? { key: 'payment', label: '去付款', onPress: openPaymentCreate, tone: 'primary' as const }
+          : null,
+        detail.canProcessReturn
+          ? { key: 'return', label: '退货', onPress: openReturnCreate, tone: 'ghost' as const }
+          : null,
+      ].filter(
+        (
+          item,
+        ): item is { key: string; label: string; onPress: () => void; tone: 'primary' | 'ghost' } => Boolean(item),
+      )
+    : [];
+  const visibleBusinessActions = businessActionItems.slice(0, 2);
+  const overflowBusinessActions = businessActionItems.slice(2);
 
   const businessDocsSection = showBusinessDocsSection && detail ? (
     <View style={[styles.card, styles.compactCard, { backgroundColor: surface, borderColor }]}>
@@ -1056,31 +1084,32 @@ export default function PurchaseOrderEditScreen() {
 
           {hasPendingBusinessAction ? (
             <View style={styles.businessPrimaryActions}>
-              {detail.canReceive ? (
-                <Pressable onPress={openReceiptCreate} style={[styles.businessPrimaryButton, { backgroundColor: tintColor }]}>
-                  <ThemedText style={styles.businessPrimaryButtonText} type="defaultSemiBold">
-                    继续收货
+              {visibleBusinessActions.map((action) => (
+                <Pressable
+                  key={action.key}
+                  onPress={action.onPress}
+                  style={
+                    action.tone === 'primary'
+                      ? [styles.businessPrimaryButton, { backgroundColor: tintColor }]
+                      : [styles.businessGhostButton, { borderColor }]
+                  }>
+                  <ThemedText
+                    style={
+                      action.tone === 'primary'
+                        ? styles.businessPrimaryButtonText
+                        : [styles.businessGhostButtonText, { color: tintColor }]
+                    }
+                    type="defaultSemiBold">
+                    {action.label}
                   </ThemedText>
                 </Pressable>
-              ) : null}
-              {canCreateInvoiceFromReceipt ? (
-                <Pressable onPress={openInvoiceCreate} style={[styles.businessPrimaryButton, { backgroundColor: tintColor }]}>
-                  <ThemedText style={styles.businessPrimaryButtonText} type="defaultSemiBold">
-                    继续开票
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              {detail.canRecordPayment && primaryInvoiceName ? (
-                <Pressable onPress={openPaymentCreate} style={[styles.businessPrimaryButton, { backgroundColor: tintColor }]}>
-                  <ThemedText style={styles.businessPrimaryButtonText} type="defaultSemiBold">
-                    去付款
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              {detail.canProcessReturn ? (
-                <Pressable onPress={openReturnCreate} style={[styles.businessGhostButton, { borderColor }]}>
+              ))}
+              {overflowBusinessActions.length ? (
+                <Pressable
+                  onPress={() => setShowMoreBusinessActions((current) => !current)}
+                  style={[styles.businessGhostButton, { borderColor }]}>
                   <ThemedText style={[styles.businessGhostButtonText, { color: tintColor }]} type="defaultSemiBold">
-                    退货
+                    {showMoreBusinessActions ? '收起更多' : '更多'}
                   </ThemedText>
                 </Pressable>
               ) : null}
@@ -1090,6 +1119,31 @@ export default function PurchaseOrderEditScreen() {
               当前暂无可执行动作。
             </ThemedText>
           )}
+
+          {showMoreBusinessActions && overflowBusinessActions.length ? (
+            <View style={styles.businessOverflowActions}>
+              {overflowBusinessActions.map((action) => (
+                <Pressable
+                  key={action.key}
+                  onPress={action.onPress}
+                  style={
+                    action.tone === 'primary'
+                      ? [styles.businessPrimaryButton, { backgroundColor: tintColor }]
+                      : [styles.businessGhostButton, { borderColor }]
+                  }>
+                  <ThemedText
+                    style={
+                      action.tone === 'primary'
+                        ? styles.businessPrimaryButtonText
+                        : [styles.businessGhostButtonText, { color: tintColor }]
+                    }
+                    type="defaultSemiBold">
+                    {action.label}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
 
           {(detail.purchaseReceipts[0] || detail.purchaseInvoices[0]) ? (
             <View style={styles.businessSecondaryActions}>
@@ -2152,6 +2206,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   businessPrimaryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  businessOverflowActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
