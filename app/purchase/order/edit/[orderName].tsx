@@ -826,6 +826,21 @@ export default function PurchaseOrderEditScreen() {
     () => Boolean(detail && detail.documentStatus !== 'cancelled' && canEditItems),
     [canEditItems, detail],
   );
+  const paymentProgressRatio = useMemo(() => {
+    if (!detail) {
+      return 0;
+    }
+
+    const total = detail.receivableAmount ?? detail.orderAmountEstimate ?? 0;
+    const paid = detail.paidAmount ?? 0;
+    if (!Number.isFinite(total) || total <= 0) {
+      return 0;
+    }
+    if (!Number.isFinite(paid) || paid <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.min(1, paid / total));
+  }, [detail]);
   const summaryUom = useMemo(() => getOrderSummaryUom(detail), [detail]);
   const primaryInvoiceName = useMemo(() => getPrimaryPurchaseInvoice(detail), [detail]);
 
@@ -1739,32 +1754,48 @@ export default function PurchaseOrderEditScreen() {
                 />
                 <MetaBlock label="计划到货" value={detail.scheduleDate || '未设置'} />
               </View>
-              <View
-                style={[
-                  styles.paymentProgressCard,
-                  { backgroundColor: getPaymentStatusTone(detail.paymentStatus || '').backgroundColor },
-                ]}>
+              <View style={[styles.paymentProgressCard, { borderColor }]}>
                 <View style={styles.paymentProgressHeader}>
                   <ThemedText style={styles.paymentProgressLabel} type="defaultSemiBold">
                     付款进度
                   </ThemedText>
-                  <ThemedText
+                  <View
                     style={[
-                      styles.paymentProgressStatus,
-                      { color: getPaymentStatusTone(detail.paymentStatus || '').textColor },
-                    ]}
-                    type="defaultSemiBold">
-                    {getPaymentStatusLabel(detail.paymentStatus || '')}
-                  </ThemedText>
+                      styles.paymentProgressStatusBadge,
+                      { backgroundColor: getPaymentStatusTone(detail.paymentStatus || '').backgroundColor },
+                    ]}>
+                    <ThemedText
+                      style={[
+                        styles.paymentProgressStatus,
+                        { color: getPaymentStatusTone(detail.paymentStatus || '').textColor },
+                      ]}
+                      type="defaultSemiBold">
+                      {getPaymentStatusLabel(detail.paymentStatus || '')}
+                    </ThemedText>
+                  </View>
                 </View>
+                <View style={styles.paymentProgressBarTrack}>
+                  <View
+                    style={[
+                      styles.paymentProgressBarFill,
+                      {
+                        width: `${Math.round(paymentProgressRatio * 100)}%`,
+                        backgroundColor: getPaymentStatusTone(detail.paymentStatus || '').textColor,
+                      },
+                    ]}
+                  />
+                </View>
+                <ThemedText style={styles.paymentProgressHint}>
+                  已付 {Math.round(paymentProgressRatio * 100)}%
+                </ThemedText>
                 <View style={styles.paymentProgressAmounts}>
-                  <View style={styles.paymentProgressAmountBlock}>
+                  <View style={[styles.paymentProgressAmountBlock, styles.paymentProgressAmountCard]}>
                     <ThemedText style={styles.paymentProgressAmountLabel}>已付款</ThemedText>
                     <ThemedText style={styles.paymentProgressAmountValue} type="defaultSemiBold">
                       {formatMoney(detail.paidAmount, detail.currency || 'CNY')}
                     </ThemedText>
                   </View>
-                  <View style={styles.paymentProgressAmountBlock}>
+                  <View style={[styles.paymentProgressAmountBlock, styles.paymentProgressAmountCard]}>
                     <ThemedText style={styles.paymentProgressAmountLabel}>待付款</ThemedText>
                     <ThemedText style={[styles.paymentProgressAmountValue, styles.paymentProgressOutstanding]} type="defaultSemiBold">
                       {formatMoney(detail.outstandingAmount, detail.currency || 'CNY')}
@@ -2139,7 +2170,9 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   paymentProgressCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
+    borderWidth: 1,
     gap: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -2153,8 +2186,28 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 13,
   },
+  paymentProgressStatusBadge: {
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   paymentProgressStatus: {
-    fontSize: 14,
+    fontSize: 13,
+  },
+  paymentProgressBarTrack: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 999,
+    height: 8,
+    overflow: 'hidden',
+  },
+  paymentProgressBarFill: {
+    borderRadius: 999,
+    height: '100%',
+    minWidth: 0,
+  },
+  paymentProgressHint: {
+    color: '#64748B',
+    fontSize: 13,
   },
   paymentProgressAmounts: {
     flexDirection: 'row',
@@ -2163,6 +2216,12 @@ const styles = StyleSheet.create({
   paymentProgressAmountBlock: {
     flex: 1,
     gap: 3,
+  },
+  paymentProgressAmountCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   paymentProgressAmountLabel: {
     color: '#64748B',
