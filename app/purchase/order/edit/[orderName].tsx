@@ -234,6 +234,19 @@ function getStatusValueColor(value: string, type: 'document' | 'receiving' | 'pa
   return '#0F172A';
 }
 
+function getPaymentStatusTone(value: string) {
+  if (value === 'paid') {
+    return { backgroundColor: '#DCFCE7', textColor: '#166534' };
+  }
+  if (value === 'partial') {
+    return { backgroundColor: '#FFEDD5', textColor: '#C2410C' };
+  }
+  if (value === 'unpaid') {
+    return { backgroundColor: '#FEE2E2', textColor: '#B91C1C' };
+  }
+  return { backgroundColor: '#DBEAFE', textColor: '#1D4ED8' };
+}
+
 function canEditPurchaseItems(detail: PurchaseOrderDetail | null) {
   if (!detail) {
     return false;
@@ -1726,6 +1739,39 @@ export default function PurchaseOrderEditScreen() {
                 />
                 <MetaBlock label="计划到货" value={detail.scheduleDate || '未设置'} />
               </View>
+              <View
+                style={[
+                  styles.paymentProgressCard,
+                  { backgroundColor: getPaymentStatusTone(detail.paymentStatus || '').backgroundColor },
+                ]}>
+                <View style={styles.paymentProgressHeader}>
+                  <ThemedText style={styles.paymentProgressLabel} type="defaultSemiBold">
+                    付款进度
+                  </ThemedText>
+                  <ThemedText
+                    style={[
+                      styles.paymentProgressStatus,
+                      { color: getPaymentStatusTone(detail.paymentStatus || '').textColor },
+                    ]}
+                    type="defaultSemiBold">
+                    {getPaymentStatusLabel(detail.paymentStatus || '')}
+                  </ThemedText>
+                </View>
+                <View style={styles.paymentProgressAmounts}>
+                  <View style={styles.paymentProgressAmountBlock}>
+                    <ThemedText style={styles.paymentProgressAmountLabel}>已付款</ThemedText>
+                    <ThemedText style={styles.paymentProgressAmountValue} type="defaultSemiBold">
+                      {formatMoney(detail.paidAmount, detail.currency || 'CNY')}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.paymentProgressAmountBlock}>
+                    <ThemedText style={styles.paymentProgressAmountLabel}>待付款</ThemedText>
+                    <ThemedText style={[styles.paymentProgressAmountValue, styles.paymentProgressOutstanding]} type="defaultSemiBold">
+                      {formatMoney(detail.outstandingAmount, detail.currency || 'CNY')}
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
               <View style={[styles.compactDivider, { borderColor }]} />
               <View style={styles.sectionHeader}>
                 <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
@@ -2091,6 +2137,43 @@ const styles = StyleSheet.create({
     flexBasis: '48%',
     gap: 4,
     padding: 12,
+  },
+  paymentProgressCard: {
+    borderRadius: 16,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  paymentProgressHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  paymentProgressLabel: {
+    color: '#334155',
+    fontSize: 13,
+  },
+  paymentProgressStatus: {
+    fontSize: 14,
+  },
+  paymentProgressAmounts: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  paymentProgressAmountBlock: {
+    flex: 1,
+    gap: 3,
+  },
+  paymentProgressAmountLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  paymentProgressAmountValue: {
+    color: '#0F172A',
+    fontSize: 18,
+  },
+  paymentProgressOutstanding: {
+    color: '#C2410C',
   },
   metaLabel: {
     color: '#64748B',
