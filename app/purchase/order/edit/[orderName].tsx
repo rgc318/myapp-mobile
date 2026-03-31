@@ -1033,64 +1033,53 @@ export default function PurchaseOrderEditScreen() {
       </View>
       {isBusinessDocsExpanded ? (
         <>
-          <View style={styles.compactInfoGrid}>
-            <InfoRow label="收货单" value={detail.purchaseReceipts.length ? `${detail.purchaseReceipts.length} 张` : '暂无'} />
-            <InfoRow label="采购发票" value={detail.purchaseInvoices.length ? `${detail.purchaseInvoices.length} 张` : '暂无'} />
-            <InfoRow label="供应商付款" value={detail.latestPaymentEntry ? '已有记录' : '暂无'} />
+          <View style={styles.businessMetricsRow}>
+            <View style={styles.businessMetricCard}>
+              <ThemedText style={styles.businessMetricLabel}>收货单</ThemedText>
+              <ThemedText style={styles.businessMetricValue} type="defaultSemiBold">
+                {detail.purchaseReceipts.length ? `${detail.purchaseReceipts.length} 张` : '暂无'}
+              </ThemedText>
+            </View>
+            <View style={styles.businessMetricCard}>
+              <ThemedText style={styles.businessMetricLabel}>采购发票</ThemedText>
+              <ThemedText style={styles.businessMetricValue} type="defaultSemiBold">
+                {detail.purchaseInvoices.length ? `${detail.purchaseInvoices.length} 张` : '暂无'}
+              </ThemedText>
+            </View>
+            <View style={styles.businessMetricCard}>
+              <ThemedText style={styles.businessMetricLabel}>供应商付款</ThemedText>
+              <ThemedText style={styles.businessMetricValue} type="defaultSemiBold">
+                {detail.latestPaymentEntry ? '已有记录' : '暂无'}
+              </ThemedText>
+            </View>
           </View>
 
-          {(detail.purchaseReceipts[0] || detail.purchaseInvoices[0] || detail.latestPaymentEntry) ? (
-            <View style={styles.nextActionRow}>
-              {detail.purchaseReceipts[0] ? (
-                <Pressable onPress={() => openLatestReceipt(detail.purchaseReceipts[0])} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                    查看收货单
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              {detail.purchaseInvoices[0] ? (
-                <Pressable onPress={() => openLatestInvoice(detail.purchaseInvoices[0])} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                    查看发票
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              {detail.latestPaymentEntry && primaryInvoiceName ? (
-                <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, styles.compactActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
-                    去付款
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
-
           {hasPendingBusinessAction ? (
-            <View style={styles.nextActionRow}>
+            <View style={styles.businessPrimaryActions}>
               {detail.canReceive ? (
-                <Pressable onPress={openReceiptCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                <Pressable onPress={openReceiptCreate} style={[styles.businessPrimaryButton, { backgroundColor: tintColor }]}>
+                  <ThemedText style={styles.businessPrimaryButtonText} type="defaultSemiBold">
                     继续收货
                   </ThemedText>
                 </Pressable>
               ) : null}
               {canCreateInvoiceFromReceipt ? (
-                <Pressable onPress={openInvoiceCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                <Pressable onPress={openInvoiceCreate} style={[styles.businessPrimaryButton, { backgroundColor: tintColor }]}>
+                  <ThemedText style={styles.businessPrimaryButtonText} type="defaultSemiBold">
                     继续开票
                   </ThemedText>
                 </Pressable>
               ) : null}
               {detail.canRecordPayment && primaryInvoiceName ? (
-                <Pressable onPress={openPaymentCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                <Pressable onPress={openPaymentCreate} style={[styles.businessPrimaryButton, { backgroundColor: tintColor }]}>
+                  <ThemedText style={styles.businessPrimaryButtonText} type="defaultSemiBold">
                     去付款
                   </ThemedText>
                 </Pressable>
               ) : null}
               {detail.canProcessReturn ? (
-                <Pressable onPress={openReturnCreate} style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                <Pressable onPress={openReturnCreate} style={[styles.businessGhostButton, { borderColor }]}>
+                  <ThemedText style={[styles.businessGhostButtonText, { color: tintColor }]} type="defaultSemiBold">
                     退货
                   </ThemedText>
                 </Pressable>
@@ -1101,6 +1090,25 @@ export default function PurchaseOrderEditScreen() {
               当前暂无可执行动作。
             </ThemedText>
           )}
+
+          {(detail.purchaseReceipts[0] || detail.purchaseInvoices[0]) ? (
+            <View style={styles.businessSecondaryActions}>
+              {detail.purchaseReceipts[0] ? (
+                <Pressable onPress={() => openLatestReceipt(detail.purchaseReceipts[0])} style={[styles.businessLinkButton, { borderColor }]}>
+                  <ThemedText style={[styles.businessLinkText, { color: tintColor }]} type="defaultSemiBold">
+                    查看收货单
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              {detail.purchaseInvoices[0] ? (
+                <Pressable onPress={() => openLatestInvoice(detail.purchaseInvoices[0])} style={[styles.businessLinkButton, { borderColor }]}>
+                  <ThemedText style={[styles.businessLinkText, { color: tintColor }]} type="defaultSemiBold">
+                    查看发票
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
         </>
       ) : (
         <ThemedText style={styles.sectionHintText}>
@@ -2121,6 +2129,76 @@ const styles = StyleSheet.create({
   },
   linkButtonText: {
     fontSize: 14,
+  },
+  businessMetricsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  businessMetricCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    flex: 1,
+    gap: 4,
+    minHeight: 70,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  businessMetricLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  businessMetricValue: {
+    color: '#0F172A',
+    fontSize: 16,
+  },
+  businessPrimaryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  businessPrimaryButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 110,
+    paddingHorizontal: 14,
+  },
+  businessPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  businessGhostButton: {
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 96,
+    paddingHorizontal: 14,
+  },
+  businessGhostButtonText: {
+    fontSize: 14,
+  },
+  businessSecondaryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  businessLinkButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  businessLinkText: {
+    fontSize: 13,
   },
   nextActionRow: {
     flexDirection: 'row',
