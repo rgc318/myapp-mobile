@@ -5064,3 +5064,43 @@ This round focused on stabilizing the purchase order detail/edit page state mach
 - the previous two-flag edit model was functional but fragile; complex user paths could leave the page in ambiguous editing combinations
 - purchase detail/edit is the core page that all downstream actions depend on; stabilizing it first reduces rework in receipt/invoice/payment/return iterations
 - invoice creation in this chain is receipt-based; order page navigation should enforce that domain rule instead of allowing empty or misleading entry context
+
+## Purchase Receipt/Invoice Rollback And Action Alignment (2026-03-31)
+
+This round focused on closing the loop between purchase order, receipt, invoice, and payment when rollback is needed in real operations.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/receipt/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/invoice/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+
+### What Changed
+
+- added purchase rollback service calls:
+  - `cancelPurchaseReceipt()`
+  - `cancelPurchaseInvoice()`
+  - `cancelSupplierPayment()`
+- purchase receipt page now supports:
+  - in-app cancel receipt confirmation modal
+  - success-result modal and guided return to purchase order
+  - explicit rollback section with backend `cancelHint`
+  - grouped item summary with optional line expansion for multi-warehouse rows
+  - action-first sticky footer (`返回订单` / `继续开票` / `收货单已作废`)
+- purchase invoice page now supports:
+  - two rollback modes:
+    - invoice-only cancel
+    - rollback latest supplier payment then cancel invoice
+  - explicit rollback section and confirmation modal
+  - grouped item summary with optional line expansion
+  - action-first sticky footer (`返回订单/收货单` + `去登记付款`)
+- purchase order detail/edit now hard-locks edit mode when order is not editable:
+  - footer button shows `订单已锁定`
+  - entering edit mode shows explicit in-app reason instead of silent disable
+
+### Why
+
+- purchase rollback is chain-sensitive and operators need clear, safe in-app guidance instead of trial-and-error button taps
+- order pages, receipt pages, and invoice pages should expose consistent action semantics from backend flags rather than mixing inferred local rules
+- locked-state behavior should be explicit and actionable to reduce accidental data inconsistency across downstream documents

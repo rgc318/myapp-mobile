@@ -168,6 +168,7 @@ export type PurchaseReceiptDetail = {
   totalQty: number | null;
   receivingStatus: string;
   canCancel: boolean;
+  cancelHint: string;
   canCreateInvoice: boolean;
   purchaseOrders: string[];
   purchaseInvoices: string[];
@@ -726,6 +727,27 @@ export async function submitPurchaseReceipt(payload: {
   return typeof data?.purchase_receipt === 'string' ? data.purchase_receipt : '';
 }
 
+export async function cancelPurchaseReceipt(receiptName: string) {
+  const trimmedReceiptName = receiptName.trim();
+  if (!trimmedReceiptName) {
+    throw new Error('缺少采购收货单号。');
+  }
+
+  const data = await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.cancel_purchase_receipt_v2', {
+    receipt_name: trimmedReceiptName,
+    request_id: randomRequestId('mobile-purchase-receipt-cancel'),
+  });
+
+  return {
+    receiptName:
+      typeof data?.purchase_receipt === 'string'
+        ? data.purchase_receipt
+        : trimmedReceiptName,
+    status: typeof data?.document_status === 'string' ? data.document_status : '',
+    message: typeof data?.message === 'string' ? data.message : '',
+  };
+}
+
 export async function submitPurchaseInvoiceFromReceipt(payload: {
   receiptName: string;
   dueDate?: string;
@@ -742,6 +764,43 @@ export async function submitPurchaseInvoiceFromReceipt(payload: {
   );
 
   return typeof data?.purchase_invoice === 'string' ? data.purchase_invoice : '';
+}
+
+export async function cancelPurchaseInvoice(invoiceName: string) {
+  const trimmedInvoiceName = invoiceName.trim();
+  if (!trimmedInvoiceName) {
+    throw new Error('缺少采购发票号。');
+  }
+
+  const data = await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.cancel_purchase_invoice_v2', {
+    invoice_name: trimmedInvoiceName,
+    request_id: randomRequestId('mobile-purchase-invoice-cancel'),
+  });
+
+  return {
+    invoiceName: typeof data?.purchase_invoice === 'string' ? data.purchase_invoice : trimmedInvoiceName,
+    status: typeof data?.document_status === 'string' ? data.document_status : '',
+    message: typeof data?.message === 'string' ? data.message : '',
+  };
+}
+
+export async function cancelSupplierPayment(paymentEntryName: string) {
+  const trimmedPaymentEntryName = paymentEntryName.trim();
+  if (!trimmedPaymentEntryName) {
+    throw new Error('缺少供应商付款单号。');
+  }
+
+  const data = await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.cancel_supplier_payment', {
+    payment_entry_name: trimmedPaymentEntryName,
+    request_id: randomRequestId('mobile-supplier-payment-cancel'),
+  });
+
+  return {
+    paymentEntry:
+      typeof data?.payment_entry === 'string' ? data.payment_entry : trimmedPaymentEntryName,
+    status: typeof data?.document_status === 'string' ? data.document_status : '',
+    message: typeof data?.message === 'string' ? data.message : '',
+  };
 }
 
 export async function submitSupplierPayment(payload: {
@@ -961,6 +1020,7 @@ export async function fetchPurchaseReceiptDetail(receiptName: string): Promise<P
     totalQty: toOptionalNumber(receiving.total_qty),
     receivingStatus: typeof receiving.status === 'string' ? receiving.status : '',
     canCancel: Boolean(actions.can_cancel_purchase_receipt),
+    cancelHint: typeof actions.cancel_purchase_receipt_hint === 'string' ? actions.cancel_purchase_receipt_hint : '',
     canCreateInvoice: Boolean(actions.can_create_purchase_invoice),
     purchaseOrders: Array.isArray(references.purchase_orders)
       ? references.purchase_orders.map((value: unknown) => String(value ?? '')).filter(Boolean)

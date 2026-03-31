@@ -807,6 +807,10 @@ export default function PurchaseOrderEditScreen() {
   );
 
   const canEditItems = useMemo(() => canEditPurchaseItems(detail), [detail]);
+  const canEditOrder = useMemo(
+    () => Boolean(detail && detail.documentStatus !== 'cancelled' && canEditItems),
+    [canEditItems, detail],
+  );
   const summaryUom = useMemo(() => getOrderSummaryUom(detail), [detail]);
   const primaryInvoiceName = useMemo(() => getPrimaryPurchaseInvoice(detail), [detail]);
 
@@ -1181,6 +1185,10 @@ export default function PurchaseOrderEditScreen() {
     if (!detail) {
       return;
     }
+    if (!canEditOrder) {
+      showError('当前采购订单已有收货或开票记录，订单已锁定，不可直接编辑。');
+      return;
+    }
     if (section === 'all') {
       setEditMode(canEditItems ? 'all' : 'meta');
       return;
@@ -1489,14 +1497,19 @@ export default function PurchaseOrderEditScreen() {
             </View>
           ) : (
             <Pressable
-              disabled={detail?.documentStatus === 'cancelled'}
-              onPress={() => enterEditMode(canEditItems ? 'all' : 'meta')}
+              disabled={!canEditOrder}
+              onPress={() => {
+                if (!canEditOrder) {
+                  return;
+                }
+                enterEditMode('all');
+              }}
               style={[
                 styles.footerButton,
-                { backgroundColor: detail?.documentStatus === 'cancelled' ? surfaceMuted : tintColor },
+                { backgroundColor: canEditOrder ? tintColor : surfaceMuted },
               ]}>
               <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
-                {canEditItems ? '编辑采购订单' : '修改头部信息'}
+                {canEditOrder ? '编辑采购订单' : '订单已锁定'}
               </ThemedText>
             </Pressable>
           )}
@@ -1549,11 +1562,17 @@ export default function PurchaseOrderEditScreen() {
                 <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
                   头部信息
                 </ThemedText>
-                <Pressable onPress={() => (isEditingMeta ? resetMetaSection() : enterEditMode('meta'))} style={styles.linkButton}>
-                  <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
-                    {isEditingMeta ? '取消' : '修改'}
+                {canEditOrder ? (
+                  <Pressable onPress={() => (isEditingMeta ? resetMetaSection() : enterEditMode('meta'))} style={styles.linkButton}>
+                    <ThemedText style={[styles.linkButtonText, { color: tintColor }]} type="defaultSemiBold">
+                      {isEditingMeta ? '取消' : '修改'}
+                    </ThemedText>
+                  </Pressable>
+                ) : (
+                  <ThemedText style={[styles.sectionHint, { color: '#D97706' }]} type="defaultSemiBold">
+                    已锁定
                   </ThemedText>
-                </Pressable>
+                )}
               </View>
               {isEditingMeta ? (
                 <>
