@@ -164,13 +164,27 @@ export default function PurchaseReceiptCreateScreen() {
     );
   }, [orderDetail, receiptDetail]);
 
+  const primaryOrderNameFromReceipt = receiptDetail?.purchaseOrders[0]?.trim() || '';
   const actions = receiptDetail?.name
     ? [
-        {
-          href: `/purchase/invoice/create?receiptName=${encodeURIComponent(receiptDetail.name)}` as Href,
-          label: '登记供应商发票',
-          description: '基于这张收货单继续登记采购发票',
-        },
+        ...(receiptDetail.canCreateInvoice
+          ? [
+              {
+                href: `/purchase/invoice/create?receiptName=${encodeURIComponent(receiptDetail.name)}` as Href,
+                label: '登记供应商发票',
+                description: '基于这张收货单继续登记采购发票',
+              },
+            ]
+          : []),
+        ...(primaryOrderNameFromReceipt
+          ? [
+              {
+                href: `/purchase/order/${encodeURIComponent(primaryOrderNameFromReceipt)}` as Href,
+                label: '返回采购订单',
+                description: '回到订单详情继续查看或后续处理',
+              },
+            ]
+          : []),
       ]
     : [];
 
@@ -366,6 +380,11 @@ export default function PurchaseReceiptCreateScreen() {
                 value={`${orderDetail.receivedQty ?? '—'} / ${orderDetail.totalQty ?? '—'}`}
               />
               <DetailRow label="默认地址" value={orderDetail.defaultAddressDisplay || '未设置'} multiline />
+              {!orderDetail.canReceive ? (
+                <ThemedText style={styles.noticeText}>
+                  这张采购订单当前不能继续收货。通常是已全部收货，或存在后续单据导致锁定。
+                </ThemedText>
+              ) : null}
             </View>
 
             <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
@@ -471,6 +490,47 @@ export default function PurchaseReceiptCreateScreen() {
               />
               <DetailRow label="总数量" value={String(receiptDetail.totalQty ?? '—')} />
               <DetailRow label="关联订单" value={receiptDetail.purchaseOrders.join('、') || '暂无'} multiline />
+            </View>
+
+            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                后续操作
+              </ThemedText>
+              <View style={styles.nextActionRow}>
+                {receiptDetail.canCreateInvoice ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/purchase/invoice/create',
+                        params: { receiptName: receiptDetail.name },
+                      })
+                    }
+                    style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                    <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                      去登记发票
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+                {primaryOrderNameFromReceipt ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/purchase/order/[orderName]',
+                        params: { orderName: primaryOrderNameFromReceipt },
+                      })
+                    }
+                    style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                    <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                      返回采购订单
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+              {!receiptDetail.canCreateInvoice ? (
+                <ThemedText style={styles.noticeText}>
+                  这张收货单当前不能继续开票，可能已经完成开票。
+                </ThemedText>
+              ) : null}
             </View>
 
             <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
@@ -606,6 +666,27 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 13,
     lineHeight: 19,
+  },
+  noticeText: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  nextActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  nextActionButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 14,
+  },
+  nextActionText: {
+    fontSize: 13,
   },
   footerButton: {
     alignItems: 'center',

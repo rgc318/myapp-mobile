@@ -13,6 +13,7 @@ import { isValidIsoDate } from '@/lib/date-value';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
   fetchPurchaseInvoiceDetail,
+  fetchPurchaseOrderDetail,
   fetchPurchaseReceiptDetail,
   searchPurchaseReceipts,
   submitPurchaseInvoiceFromReceipt,
@@ -34,7 +35,7 @@ function formatMoney(value: number | null, currency = 'CNY') {
 
 export default function PurchaseInvoiceCreateScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ receiptName?: string; purchaseInvoice?: string; notice?: string }>();
+  const params = useLocalSearchParams<{ receiptName?: string; orderName?: string; purchaseInvoice?: string; notice?: string }>();
   const { showError, showSuccess, showInfo } = useFeedback();
   const [receiptName, setReceiptName] = useState(
     typeof params.receiptName === 'string' ? params.receiptName.trim() : '',
@@ -64,6 +65,36 @@ export default function PurchaseInvoiceCreateScreen() {
       setReceiptName(params.receiptName.trim());
     }
   }, [params.receiptName]);
+
+  useEffect(() => {
+    const incomingOrderName = typeof params.orderName === 'string' ? params.orderName.trim() : '';
+    if (!incomingOrderName || purchaseInvoiceName || receiptName.trim()) {
+      return;
+    }
+
+    let cancelled = false;
+    void fetchPurchaseOrderDetail(incomingOrderName)
+      .then((orderDetail) => {
+        if (cancelled || !orderDetail) {
+          return;
+        }
+        const candidateReceipt = orderDetail.purchaseReceipts[0]?.trim() || '';
+        if (!candidateReceipt) {
+          showInfo('当前采购订单还没有收货单，请先收货后再登记发票。');
+          return;
+        }
+        setReceiptName((current) => current.trim() || candidateReceipt);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          showError(normalizeAppError(error).message);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.orderName, purchaseInvoiceName, receiptName, showError, showInfo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +158,24 @@ export default function PurchaseInvoiceCreateScreen() {
           label: '登记供应商付款',
           description: '基于这张采购发票继续登记付款',
         },
+        ...(invoiceDetail.purchaseReceipts[0]
+          ? [
+              {
+                href: `/purchase/receipt/create?receiptName=${encodeURIComponent(invoiceDetail.purchaseReceipts[0])}` as Href,
+                label: '查看收货单',
+                description: '回到本发票关联的采购收货单',
+              },
+            ]
+          : []),
+        ...(invoiceDetail.purchaseOrders[0]
+          ? [
+              {
+                href: `/purchase/order/${encodeURIComponent(invoiceDetail.purchaseOrders[0])}` as Href,
+                label: '返回采购订单',
+                description: '回到采购订单详情继续处理',
+              },
+            ]
+          : []),
       ]
     : [];
 
@@ -270,6 +319,33 @@ export default function PurchaseInvoiceCreateScreen() {
                 ))}
               </View>
             </View>
+
+            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                后续操作
+              </ThemedText>
+              <View style={styles.nextActionRow}>
+                {receiptDetail.purchaseOrders[0] ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/purchase/order/[orderName]',
+                        params: { orderName: receiptDetail.purchaseOrders[0] },
+                      })
+                    }
+                    style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                    <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                      返回采购订单
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+              {!receiptDetail.canCreateInvoice ? (
+                <ThemedText style={styles.noticeText}>
+                  这张收货单当前不能继续开票，可能已经完成开票。
+                </ThemedText>
+              ) : null}
+            </View>
           </>
         ) : null}
 
@@ -307,6 +383,54 @@ export default function PurchaseInvoiceCreateScreen() {
                     </ThemedText>
                   </View>
                 ))}
+              </View>
+            </View>
+
+            <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
+              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                后续操作
+              </ThemedText>
+              <View style={styles.nextActionRow}>
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/purchase/payment/create',
+                      params: { referenceName: invoiceDetail.name },
+                    })
+                  }
+                  style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                    去登记付款
+                  </ThemedText>
+                </Pressable>
+                {invoiceDetail.purchaseReceipts[0] ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/purchase/receipt/create',
+                        params: { receiptName: invoiceDetail.purchaseReceipts[0] },
+                      })
+                    }
+                    style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                    <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                      查看收货单
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+                {invoiceDetail.purchaseOrders[0] ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/purchase/order/[orderName]',
+                        params: { orderName: invoiceDetail.purchaseOrders[0] },
+                      })
+                    }
+                    style={[styles.nextActionButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                    <ThemedText style={[styles.nextActionText, { color: tintColor }]} type="defaultSemiBold">
+                      返回采购订单
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           </>
@@ -396,6 +520,27 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 13,
     lineHeight: 18,
+  },
+  noticeText: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  nextActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  nextActionButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 14,
+  },
+  nextActionText: {
+    fontSize: 13,
   },
   footerButton: {
     alignItems: 'center',
