@@ -414,43 +414,6 @@ export default function PurchaseInvoiceCreateScreen() {
               </View>
             ) : null}
             <View style={styles.footerActionRow}>
-              <Pressable
-                disabled={!primaryOrderNameFromInvoice && !primaryReceiptNameFromInvoice}
-                onPress={() => {
-                  if (primaryOrderNameFromInvoice) {
-                    router.push({
-                      pathname: '/purchase/order/[orderName]',
-                      params: { orderName: primaryOrderNameFromInvoice },
-                    });
-                    return;
-                  }
-                  if (primaryReceiptNameFromInvoice) {
-                    router.push({
-                      pathname: '/purchase/receipt/create',
-                      params: { receiptName: primaryReceiptNameFromInvoice },
-                    });
-                  }
-                }}
-                style={[
-                  styles.footerActionButton,
-                  styles.secondaryActionButton,
-                  {
-                    borderColor:
-                      primaryOrderNameFromInvoice || primaryReceiptNameFromInvoice
-                        ? borderColor
-                        : surfaceMuted,
-                    opacity: primaryOrderNameFromInvoice || primaryReceiptNameFromInvoice ? 1 : 0.6,
-                  },
-                ]}>
-                <ThemedText style={[styles.secondaryActionText, { color: tintColor }]} type="defaultSemiBold">
-                  {primaryOrderNameFromInvoice
-                    ? '返回采购订单'
-                    : primaryReceiptNameFromInvoice
-                      ? '返回收货单'
-                      : '暂无上游单据'}
-                </ThemedText>
-              </Pressable>
-
               {invoiceDetail.documentStatus !== 'cancelled' ? (
                 <Pressable
                   onPress={() =>
@@ -459,7 +422,7 @@ export default function PurchaseInvoiceCreateScreen() {
                       params: { referenceName: invoiceDetail.name },
                     })
                   }
-                  style={[styles.footerActionButton, styles.footerButton, { backgroundColor: tintColor }]}>
+                  style={[styles.footerButton, styles.primaryFooterButton, { backgroundColor: tintColor }]}>
                   <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
                     去登记付款
                   </ThemedText>
@@ -467,7 +430,7 @@ export default function PurchaseInvoiceCreateScreen() {
               ) : (
                 <Pressable
                   disabled
-                  style={[styles.footerActionButton, styles.footerButton, { backgroundColor: surfaceMuted }]}>
+                  style={[styles.footerButton, styles.primaryFooterButton, { backgroundColor: surfaceMuted }]}>
                   <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
                     发票已作废
                   </ThemedText>
@@ -1223,6 +1186,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     minHeight: 52,
+  },
+  primaryFooterButton: {
+    flex: 1,
   },
   footerButtonText: {
     color: '#FFFFFF',
