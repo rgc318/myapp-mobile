@@ -441,6 +441,48 @@ This round corrected a design mismatch between the purchase workbench UI and the
     - `status_filter = unfinished`
     - `exclude_cancelled = true`
 
+### Current Purchase Desk UI Rules
+
+- search input now owns its clear action
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/purchase.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/ui/icon-symbol.tsx`
+  - the clear action is now rendered inside the search box instead of occupying a separate helper row
+  - `xmark.circle.fill` was added to the cross-platform icon mapping so the clear affordance is visible outside SF Symbols environments
+
+- filter controls and result summary are visually separated on purpose
+  - `查询公司`
+  - `订单状态`
+  - `排序方式`
+  - are interactive filter cards
+  - `当前结果`
+    - is a neutral result-summary card
+    - should not look like an editable search condition
+
+- result summary is now shown as a fraction
+  - current mobile display uses:
+    - `visible / total`
+  - example:
+    - `1 / 198 单`
+  - this is intentionally more compact than a long sentence such as:
+    - `有效订单 1 单，另有已作废 197 单`
+
+- purchase desk order rows were compressed from mini-detail cards into denser search-result entries
+  - order-row structure now prioritizes:
+    - supplier name
+    - order name
+    - main workflow status
+    - order amount
+    - outstanding amount
+    - one next-step action
+  - the row should **not** repeat a full second status block below the main badge
+  - the action button should share a row with key money figures instead of occupying a dedicated full-width action row
+
+- purchase desk list now follows paged loading
+  - current mobile behavior uses backend paging instead of fetching a large flat batch up front
+  - the list should append more results with `start + limit`
+  - this is better aligned with the new dedicated search interface and is safer for long-lived workbench usage
+
 This default matters because showing cancelled orders together with active orders was causing avoidable noise and confusion in the purchase workbench.
 
 ### Confirmed Search Coverage
@@ -558,6 +600,57 @@ Current request handling now does the following:
 This is important because the bug can look misleading in practice:
 
 - many different POST APIs fail at the same time
+- but the root cause is still the shared web-session CSRF state, not that many unrelated business APIs suddenly broke at once
+
+### Current Purchase Invoice Detail Rule
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/invoice/create.tsx`
+
+- the purchase-invoice detail footer must no longer offer `去登记付款` just because the invoice is not cancelled
+- current mobile rule is stricter:
+  - show `去登记付款` only when:
+    - invoice is not cancelled
+    - `outstandingAmount > 0`
+    - `invoiceAmountEstimate > 0`
+- otherwise:
+  - cancelled invoice -> `发票已作废`
+  - zero or negative payable balance -> `无需付款`
+
+This matters because return or offset-style invoices can still be submitted documents while having no positive payable balance. In that state, surfacing a payment CTA is misleading.
+
+### Current Purchase Order Detail Rule
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+
+- order-detail header status and top-right action now follow real downstream-document state instead of an old `canReceive`-first shortcut
+- current priority is:
+  - if invoice exists and payment is still needed -> `去付款`
+  - if invoice exists but no payment is needed -> `发票`
+  - if receipt exists and invoicing can continue -> `开票`
+  - if receipt exists -> `收货单`
+  - only pure pre-receipt orders should still show `收货`
+
+- the `业务单据` section is now intended to be document-first rather than branch-heavy
+  - it should summarize:
+    - `收货单`
+    - `采购发票`
+    - `供应商付款`
+  - it should recommend **one** primary next step only
+  - it should not surface a heavy multi-button control panel that keeps pushing:
+    - `继续收货`
+    - `继续开票`
+    at the same time after downstream documents already exist
+
+- current mobile direction is:
+  - once a receipt exists, the UI should move the user toward:
+    - `去开票`
+    - or `查看收货单`
+  - once an invoice exists, the UI should move the user toward:
+    - `去付款`
+    - or `查看发票`
+  - secondary document links should stay lightweight and visually subordinate to the single recommended next action
 - backend logs point to `frappe.auth.validate_csrf_token`
 - it may look like a purchase API regression even when the real issue is request/session state
 

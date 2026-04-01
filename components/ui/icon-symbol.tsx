@@ -33,6 +33,7 @@ const MAPPING = {
   'ruler.fill': 'straighten',
   'creditcard.fill': 'credit-card',
   'arrow.uturn.backward.circle.fill': 'assignment-return',
+  'xmark.circle.fill': 'cancel',
 } as IconMapping;
 
 /**

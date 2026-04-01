@@ -122,6 +122,23 @@ function groupInvoiceItems(items: InvoiceItemLine[]) {
   );
 }
 
+function hasPositivePayableBalance(invoiceDetail: PurchaseInvoiceDetail | null) {
+  if (!invoiceDetail || invoiceDetail.documentStatus === 'cancelled') {
+    return false;
+  }
+
+  const outstandingAmount =
+    typeof invoiceDetail.outstandingAmount === 'number' && Number.isFinite(invoiceDetail.outstandingAmount)
+      ? invoiceDetail.outstandingAmount
+      : 0;
+  const invoiceAmount =
+    typeof invoiceDetail.invoiceAmountEstimate === 'number' && Number.isFinite(invoiceDetail.invoiceAmountEstimate)
+      ? invoiceDetail.invoiceAmountEstimate
+      : 0;
+
+  return outstandingAmount > 0.0001 && invoiceAmount > 0;
+}
+
 export default function PurchaseInvoiceCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ receiptName?: string; orderName?: string; purchaseInvoice?: string; notice?: string }>();
@@ -255,6 +272,7 @@ export default function PurchaseInvoiceCreateScreen() {
     (!dueDate.trim() || isValidIsoDate(dueDate));
   const receiptItemGroups = receiptDetail ? groupInvoiceItems(receiptDetail.items) : [];
   const invoiceItemGroups = invoiceDetail ? groupInvoiceItems(invoiceDetail.items) : [];
+  const canOpenPaymentFlow = hasPositivePayableBalance(invoiceDetail);
 
   useEffect(() => {
     if (!receiptDetail) {
@@ -379,7 +397,9 @@ export default function PurchaseInvoiceCreateScreen() {
             <ThemedText style={styles.footerHint}>
               {invoiceDetail.documentStatus === 'cancelled'
                 ? '当前发票已作废，建议返回上游单据确认最新链路状态。'
-                : '发票提交后建议优先在这里继续付款或回到上游单据，不必反复滚动查找操作入口。'}
+                : canOpenPaymentFlow
+                  ? '发票提交后建议优先在这里继续付款或回到上游单据，不必反复滚动查找操作入口。'
+                  : '当前发票没有待付余额，可回到上游单据继续查看链路状态。'}
             </ThemedText>
             {primaryOrderNameFromInvoice || primaryReceiptNameFromInvoice ? (
               <View style={styles.footerQuickLinkRow}>
@@ -414,7 +434,7 @@ export default function PurchaseInvoiceCreateScreen() {
               </View>
             ) : null}
             <View style={styles.footerActionRow}>
-              {invoiceDetail.documentStatus !== 'cancelled' ? (
+              {canOpenPaymentFlow ? (
                 <Pressable
                   onPress={() =>
                     router.push({
@@ -427,12 +447,20 @@ export default function PurchaseInvoiceCreateScreen() {
                     去登记付款
                   </ThemedText>
                 </Pressable>
-              ) : (
+              ) : invoiceDetail.documentStatus === 'cancelled' ? (
                 <Pressable
                   disabled
                   style={[styles.footerButton, styles.primaryFooterButton, { backgroundColor: surfaceMuted }]}>
                   <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
                     发票已作废
+                  </ThemedText>
+                </Pressable>
+              ) : (
+                <Pressable
+                  disabled
+                  style={[styles.footerButton, styles.primaryFooterButton, { backgroundColor: surfaceMuted }]}>
+                  <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
+                    无需付款
                   </ThemedText>
                 </Pressable>
               )}
