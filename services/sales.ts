@@ -6,7 +6,7 @@ import {
   quickCreateSalesOrderV2,
   type SalesOrderItemInput,
 } from '@/services/gateway';
-import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
+import { checkLinkOptionExists, searchLinkOptions, type LinkOption } from '@/services/master-data';
 
 export type CreateSalesOrderPayload = {
   customer: string;
@@ -710,6 +710,44 @@ export async function cancelPaymentEntryV2(paymentEntryName: string) {
     documentStatus: String(data?.document_status ?? ''),
     references: Array.isArray(data?.references) ? data.references : [],
   };
+}
+
+function randomRequestId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export function searchDeliveryNotes(query: string): Promise<LinkOption[]> {
+  return searchLinkOptions('Delivery Note', query, ['customer', 'company']);
+}
+
+export function searchSalesInvoices(query: string): Promise<LinkOption[]> {
+  return searchLinkOptions('Sales Invoice', query, ['customer', 'company']);
+}
+
+export async function submitSalesReturn(payload: {
+  sourceDoctype: 'Delivery Note' | 'Sales Invoice';
+  sourceName: string;
+  remarks?: string;
+  postingDate?: string;
+  returnItems?: Record<string, unknown>[];
+}) {
+  return callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.process_sales_return', {
+    source_doctype: payload.sourceDoctype,
+    source_name: payload.sourceName.trim(),
+    remarks: normalizeOptionalText(payload.remarks),
+    posting_date: normalizeOptionalText(payload.postingDate),
+    return_items: Array.isArray(payload.returnItems) && payload.returnItems.length ? payload.returnItems : undefined,
+    request_id: randomRequestId('mobile-sales-return'),
+  });
 }
 
 function toOptionalNumber(value: unknown) {

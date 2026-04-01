@@ -68,7 +68,7 @@ export default function LoginScreen() {
           </View>
           <View style={styles.heroNoteRow}>
             <View style={[styles.heroDot, { backgroundColor: tintColor }]} />
-            <ThemedText style={styles.heroNoteText}>采购：收货、开票、付款、退货</ThemedText>
+            <ThemedText style={styles.heroNoteText}>采购：收货、开票、付款</ThemedText>
           </View>
         </View>
       </View>

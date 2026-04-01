@@ -5375,3 +5375,101 @@ This round focused on closing the loop between purchase order, receipt, invoice,
 - purchase rollback is chain-sensitive and operators need clear, safe in-app guidance instead of trial-and-error button taps
 - order pages, receipt pages, and invoice pages should expose consistent action semantics from backend flags rather than mixing inferred local rules
 - locked-state behavior should be explicit and actionable to reduce accidental data inconsistency across downstream documents
+
+## Unified Return Flow Shell (2026-04-01)
+
+This round moved sales return and purchase return away from separate placeholder-style pages into one shared return-flow shell backed by the new unified backend return context API.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/return-create-screen.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/returns.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/return/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/return/create.tsx`
+
+### What Changed
+
+- introduced a shared return screen shell for both business lines:
+  - sales return entry and purchase return entry now both render the same `ReturnCreateScreen`
+  - business-specific behavior is driven by `businessType` and source doctype selection instead of two independent pages
+- added a dedicated mobile return service layer:
+  - `fetchReturnSourceContext()`
+  - `searchReturnSourceOptions()`
+  - `submitReturnDocument()`
+- connected the frontend to backend `get_return_source_context_v2`
+  - source summary now comes from a unified backend contract instead of manually stitching delivery/invoice/receipt detail pages
+  - supported source doctypes:
+    - `Delivery Note`
+    - `Sales Invoice`
+    - `Purchase Receipt`
+    - `Purchase Invoice`
+- enabled line-level partial return editing in the UI:
+  - default quantity is the backend-returned `default_return_qty`
+  - operators may reduce the quantity per line
+  - frontend validates:
+    - qty must be `> 0`
+    - qty must be `<= max_returnable_qty`
+- sales and purchase submit helpers now both accept `return_items`
+  - this allows the shared screen to submit one normalized item-selection payload and keep business-specific gateway methods behind the adapter layer
+- added a success-result state after submit
+  - shows return document number
+  - shows quantity / amount summary
+  - shows backend-suggested next-step hint such as:
+    - `review_refund`
+    - `review_supplier_refund`
+  - keeps direct actions to:
+    - view return document
+    - return to source document
+
+### Why
+
+- sales and purchase return share the same operator task shape even though their downstream finance handling differs
+- the new backend context/result payloads are now strong enough to support a common UI shell without guessing source structure on the client
+- this keeps the first version focused on one reliable goal:
+  - create an independent return document from a factual source document
+- refund / supplier-refund closure remains intentionally separate for now; the UI should show the next suggested action instead of pretending the return already completed the finance loop
+
+## Return Module Priority Decision (2026-04-02)
+
+After reviewing real field scenarios, return has been explicitly lowered in priority for the current mobile workstream.
+
+### Decision
+
+- keep the current source-document-based return capability in place
+- do not treat return as the primary next investment area right now
+- current product priority remains:
+  - sales order / delivery / invoice / payment
+  - purchase order / receipt / invoice / payment
+  - workbench clarity and action consistency
+
+### Why
+
+- real return operations are not always tied to a single original source document
+- one real return event may combine:
+  - items from multiple orders
+  - items from multiple batches / warehouses
+  - items that do not all belong to the same original transaction
+- this means the current model:
+  - `return against one source document`
+  is valid for strict traceable reversal scenarios, but does not cover all real-world “mixed return” operations
+
+### Current Position
+
+- current mobile and backend return flow should be treated as:
+  - a standard, source-document-based return path
+- it should not yet be expanded into a fully generalized reverse-trade / mixed-source return center
+- line-level quantity editing stays supported because it is already aligned with backend capability
+- price editing should remain out of scope for now
+- frontend action entry points for return should stay hidden for this phase
+  - the shared return screen shell may remain in code for later reactivation
+  - but tabs / workbench / order-detail should not actively expose return as a primary operator action right now
+
+### Implication For Next Work
+
+- do not spend the next major frontend iteration on advanced return scenarios
+- if return becomes a higher-priority topic later, redesign should likely split the domain into:
+  - source-document return
+  - mixed / ad-hoc field return
+- until then, keep return available but secondary, and focus current development on the main order-to-settlement chains

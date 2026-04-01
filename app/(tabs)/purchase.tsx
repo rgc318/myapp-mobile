@@ -306,14 +306,6 @@ export default function PurchaseTabScreen() {
       toneBorder: '#DDD6FE',
       toneText: '#6D28D9',
     },
-    {
-      href: '/purchase/return/create' as Href,
-      label: '采购退货',
-      icon: 'arrow.uturn.backward.circle.fill' as const,
-      toneBackground: '#FEF2F2',
-      toneBorder: '#FECACA',
-      toneText: '#B91C1C',
-    },
   ];
 
   const activeFilterLabel = FILTER_OPTIONS.find((option) => option.value === filterMode)?.label ?? '全部订单';

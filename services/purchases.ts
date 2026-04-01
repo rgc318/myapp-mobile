@@ -1010,12 +1010,14 @@ export async function submitPurchaseReturn(payload: {
   sourceName: string;
   remarks?: string;
   postingDate?: string;
+  returnItems?: Record<string, unknown>[];
 }) {
   return callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.process_purchase_return', {
     source_doctype: payload.sourceDoctype,
     source_name: payload.sourceName.trim(),
     remarks: normalizeOptionalText(payload.remarks),
     posting_date: normalizeOptionalText(payload.postingDate),
+    return_items: Array.isArray(payload.returnItems) && payload.returnItems.length ? payload.returnItems : undefined,
     request_id: randomRequestId('mobile-purchase-return'),
   });
 }

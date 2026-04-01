@@ -1009,40 +1009,10 @@ export default function PurchaseOrderEditScreen() {
     });
   };
 
-  const openReturnCreate = () => {
-    if (!detail?.canProcessReturn) {
-      return;
-    }
-
-    if (primaryInvoiceName) {
-      router.push({
-        pathname: '/purchase/return/create',
-        params: {
-          sourceDoctype: 'Purchase Invoice',
-          sourceName: primaryInvoiceName,
-        },
-      });
-      return;
-    }
-
-    const sourceReceipt = detail.purchaseReceipts[0] || '';
-    if (!sourceReceipt) {
-      return;
-    }
-
-    router.push({
-      pathname: '/purchase/return/create',
-      params: {
-        sourceDoctype: 'Purchase Receipt',
-        sourceName: sourceReceipt,
-      },
-    });
-  };
-
   const canCreateInvoiceFromReceipt = Boolean(detail?.canCreateInvoice && detail?.purchaseReceipts.length);
   const hasPendingBusinessAction = Boolean(
     detail &&
-      (detail.canReceive || canCreateInvoiceFromReceipt || (detail.canRecordPayment && primaryInvoiceName) || detail.canProcessReturn),
+      (detail.canReceive || canCreateInvoiceFromReceipt || (detail.canRecordPayment && primaryInvoiceName)),
   );
   const showBusinessDocsSection = Boolean(
     detail &&
@@ -1051,8 +1021,7 @@ export default function PurchaseOrderEditScreen() {
         detail.latestPaymentEntry ||
         detail.canReceive ||
         canCreateInvoiceFromReceipt ||
-        detail.canRecordPayment ||
-        detail.canProcessReturn),
+        detail.canRecordPayment),
   );
 
   useEffect(() => {
@@ -1116,7 +1085,6 @@ export default function PurchaseOrderEditScreen() {
         detail.purchaseInvoices[0] && primaryBusinessAction?.key !== 'view-invoice'
           ? { key: 'view-invoice', label: '查看发票', onPress: () => openLatestInvoice(detail.purchaseInvoices[0]) }
           : null,
-        detail.canProcessReturn ? { key: 'return', label: '退货', onPress: openReturnCreate } : null,
       ].filter((item): item is { key: string; label: string; onPress: () => void } => Boolean(item))
     : [];
 
