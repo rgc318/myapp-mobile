@@ -408,6 +408,99 @@ For purchase workflows, mobile should prefer backend-computed business semantics
 In practice this means:
 
 - detail pages should consume purchase aggregation interfaces
+
+## Purchase Quick Flow Notes (2026-04-01)
+
+This round aligned the mobile purchase quick-flow UI with the now-completed backend quick create / quick rollback behavior, and also fixed a web-session request-layer issue that surfaced during purchase-page work.
+
+### Completed
+
+- purchase order create page quick-flow wording was corrected
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/settings.tsx`
+  - the old wording `收货并结算` was misleading because the original immediate purchase flow only did:
+    - order creation
+    - receipt creation
+    - invoice creation
+  - it did **not** automatically record supplier payment
+  - the quick mode wording is now aligned to `收货并开票`
+
+- purchase quick-create confirm dialog now exposes explicit downstream choices
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+  - current options:
+    - `仅收货并开票`
+    - `收货、开票并登记付款`
+  - when the second option is selected, the dialog also allows choosing the payment method directly
+
+- purchase quick create now correctly forwards payment intent
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+  - mobile now sends:
+    - `immediate_payment`
+    - `mode_of_payment`
+  - success feedback and navigation now distinguish:
+    - quick create with invoice only
+    - quick create with invoice + supplier payment
+
+- web-session CSRF handling was hardened in the unified request layer
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/api-client.ts`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/frappe-http.ts`
+  - this was necessary because purchase-page work exposed a latent web-session issue where multiple POST calls could suddenly fail together with:
+    - `CSRFTokenError`
+    - `Invalid Request`
+    - `无效请求`
+  - affected requests were not limited to purchase gateways; even generic POST methods such as:
+    - `frappe.client.get_list`
+    - `frappe.client.get_value`
+    - `frappe.core.doctype.user.user.get_roles`
+    could fail together
+
+### Current Request-Layer Rule
+
+For web session mode, frontend should not assume that an old CSRF token remaining in browser state will continue to work.
+
+Current request handling now does the following:
+
+- before POST requests, explicitly ensure a CSRF token is available
+- support more than one desk HTML token format while bootstrapping from `/app`
+- inject the explicit token into request headers instead of only relying on passive browser state
+- if a POST still fails with CSRF-style errors, force-refresh the token once and retry once
+
+This is important because the bug can look misleading in practice:
+
+- many different POST APIs fail at the same time
+- backend logs point to `frappe.auth.validate_csrf_token`
+- it may look like a purchase API regression even when the real issue is request/session state
+
+### Current Purchase Quick-Flow Semantics
+
+Mobile purchase quick flow should currently be understood as:
+
+- `deferred`
+  - create purchase order only
+- `immediate`
+  - open a quick confirm dialog
+  - allow the operator to decide whether to stop at:
+    - receipt + invoice
+    - or continue through supplier payment
+
+Do not describe the immediate purchase flow as "already settled" unless supplier payment was actually recorded.
+
+### Confirmed Backend Limitation Relevant To Frontend
+
+Backend regression testing confirmed that purchase invoices currently do **not** support the same successful `writeoff` settlement path that sales invoices use through `update_payment_status`.
+
+Practical frontend implication:
+
+- do not present purchase `writeoff` as a normal ready-to-use payment completion path
+- current purchase payment UX should continue to focus on:
+  - standard supplier payment
+  - partial payment
+  - rollback / cancellation flows
 - list pages should consume purchase status-summary interfaces
 - action buttons should follow backend-returned allowed actions and hints
 - frontend should avoid inferring purchase completion, invoicing, or payment state from raw DocType fields alone

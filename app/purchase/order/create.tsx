@@ -46,6 +46,9 @@ import {
 } from '@/services/purchases';
 
 type SubmitMode = 'save' | 'quick';
+type QuickCreateMode = 'invoice' | 'payment';
+
+const QUICK_PAYMENT_METHODS = ['微信支付', '支付宝', '现金'] as const;
 
 function normalizeOptionalText(value: string) {
   const trimmed = value.trim();
@@ -149,6 +152,8 @@ export default function PurchaseOrderCreateScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMode, setSubmitMode] = useState<SubmitMode>('save');
   const [showQuickCreateConfirm, setShowQuickCreateConfirm] = useState(false);
+  const [quickCreateMode, setQuickCreateMode] = useState<QuickCreateMode>('invoice');
+  const [quickPaymentMethod, setQuickPaymentMethod] = useState<(typeof QUICK_PAYMENT_METHODS)[number]>('微信支付');
   const [supplierError, setSupplierError] = useState('');
   const [companyError, setCompanyError] = useState('');
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -810,6 +815,8 @@ export default function PurchaseOrderCreateScreen() {
               remarks,
               immediateReceive: true,
               immediateInvoice: true,
+              immediatePayment: quickCreateMode === 'payment',
+              modeOfPayment: quickCreateMode === 'payment' ? quickPaymentMethod : null,
             })
           : { orderName: await submitPurchaseOrder({
               supplier: trimmedSupplier,
@@ -831,9 +838,11 @@ export default function PurchaseOrderCreateScreen() {
 
       showSuccess(
         mode === 'quick'
-          ? result.invoiceName
-            ? `已快速开单，采购发票 ${result.invoiceName} 已生成。`
-            : `采购订单 ${orderName} 已完成收货与开票。`
+          ? result.paymentEntry
+            ? `已快速开单，采购发票 ${result.invoiceName || '已生成'}，并登记付款 ${result.paymentEntry}。`
+            : result.invoiceName
+              ? `已快速开单，采购发票 ${result.invoiceName} 已生成。`
+              : `采购订单 ${orderName} 已完成收货与开票。`
           : `采购订单 ${orderName} 已创建。`,
       );
       clearPurchaseOrderDraft();
@@ -842,7 +851,10 @@ export default function PurchaseOrderCreateScreen() {
       if (mode === 'quick' && result.invoiceName) {
         router.replace({
           pathname: '/purchase/invoice/create',
-          params: { purchaseInvoice: result.invoiceName, notice: 'created' },
+          params: {
+            purchaseInvoice: result.invoiceName,
+            notice: result.paymentEntry ? 'created-and-paid' : 'created',
+          },
         });
       } else if (mode === 'quick' && result.receiptName) {
         router.replace({
@@ -1198,10 +1210,12 @@ export default function PurchaseOrderCreateScreen() {
           <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
             {isSubmitting
               ? submitMode === 'quick'
-                ? '正在收货并结算...'
+                ? quickCreateMode === 'payment'
+                  ? '正在收货、开票并付款...'
+                  : '正在收货并开票...'
                 : '正在提交采购订单...'
               : preferences.purchaseFlowMode === 'immediate'
-                ? '收货并结算'
+                ? '收货并开票'
                 : '提交采购订单'}
           </ThemedText>
         </Pressable>
@@ -1283,11 +1297,85 @@ export default function PurchaseOrderCreateScreen() {
         <View style={styles.dialogBackdrop}>
           <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
             <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
-              确认收货并结算？
+              确认快捷处理采购单？
             </ThemedText>
             <ThemedText style={styles.dialogText}>
-              系统将自动创建采购订单、提交收货单，并基于收货结果直接生成采购发票。若单据还可能调整，建议先选择“收货后结算”模式。
+              系统会先创建采购订单并自动完成收货。你可以继续选择“直接开票”，或者一步登记付款。
             </ThemedText>
+            <View style={[styles.dialogOptionCard, { backgroundColor: surfaceMuted, borderColor }]}>
+              <ThemedText style={styles.dialogOptionTitle} type="defaultSemiBold">
+                快捷模式
+              </ThemedText>
+              <View style={styles.dialogOptionList}>
+                <Pressable
+                  onPress={() => setQuickCreateMode('invoice')}
+                  style={[
+                    styles.dialogOptionButton,
+                    {
+                      backgroundColor:
+                        quickCreateMode === 'invoice' ? 'rgba(37,99,235,0.08)' : surface,
+                      borderColor: quickCreateMode === 'invoice' ? tintColor : borderColor,
+                    },
+                  ]}>
+                  <ThemedText style={styles.dialogOptionButtonTitle} type="defaultSemiBold">
+                    仅收货并开票
+                  </ThemedText>
+                  <ThemedText style={styles.dialogOptionButtonHint}>
+                    创建采购订单、收货单和采购发票，后续再去付款页登记付款。
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => setQuickCreateMode('payment')}
+                  style={[
+                    styles.dialogOptionButton,
+                    {
+                      backgroundColor:
+                        quickCreateMode === 'payment' ? 'rgba(37,99,235,0.08)' : surface,
+                      borderColor: quickCreateMode === 'payment' ? tintColor : borderColor,
+                    },
+                  ]}>
+                  <ThemedText style={styles.dialogOptionButtonTitle} type="defaultSemiBold">
+                    收货、开票并登记付款
+                  </ThemedText>
+                  <ThemedText style={styles.dialogOptionButtonHint}>
+                    在开票后立即登记一笔全额付款，适合现场已经完成结算的采购单。
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+            {quickCreateMode === 'payment' ? (
+              <View style={[styles.dialogOptionCard, { backgroundColor: surfaceMuted, borderColor }]}>
+                <ThemedText style={styles.dialogOptionTitle} type="defaultSemiBold">
+                  付款方式
+                </ThemedText>
+                <View style={styles.paymentMethodRow}>
+                  {QUICK_PAYMENT_METHODS.map((method) => {
+                    const active = quickPaymentMethod === method;
+                    return (
+                      <Pressable
+                        key={method}
+                        onPress={() => setQuickPaymentMethod(method)}
+                        style={[
+                          styles.paymentMethodChip,
+                          {
+                            backgroundColor: active ? 'rgba(37,99,235,0.08)' : surface,
+                            borderColor: active ? tintColor : borderColor,
+                          },
+                        ]}>
+                        <ThemedText
+                          style={[styles.paymentMethodChipText, active ? { color: tintColor } : null]}
+                          type="defaultSemiBold">
+                          {method}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <ThemedText style={styles.dialogOptionHint}>
+                  会按发票未付金额自动登记一笔付款；如需拆分付款或使用别的复杂结算方式，建议先停在“仅收货并开票”。
+                </ThemedText>
+              </View>
+            ) : null}
             <View style={styles.dialogActions}>
               <Pressable
                 onPress={() => setShowQuickCreateConfirm(false)}
@@ -1303,7 +1391,11 @@ export default function PurchaseOrderCreateScreen() {
                 }}
                 style={[styles.dialogButton, styles.dialogPrimaryButton, { backgroundColor: tintColor }]}>
                 <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
-                  {isSubmitting && submitMode === 'quick' ? '处理中...' : '确认执行'}
+                  {isSubmitting && submitMode === 'quick'
+                    ? '处理中...'
+                    : quickCreateMode === 'payment'
+                      ? '确认快捷付款'
+                      : '确认快捷开票'}
                 </ThemedText>
               </Pressable>
             </View>
@@ -2019,6 +2111,53 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 14,
     lineHeight: 21,
+  },
+  dialogOptionCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  dialogOptionTitle: {
+    fontSize: 14,
+  },
+  dialogOptionList: {
+    gap: 10,
+  },
+  dialogOptionButton: {
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  dialogOptionButtonTitle: {
+    fontSize: 14,
+  },
+  dialogOptionButtonHint: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  dialogOptionHint: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  paymentMethodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  paymentMethodChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  paymentMethodChipText: {
+    color: '#0F172A',
+    fontSize: 13,
   },
   dialogActions: {
     flexDirection: 'row',

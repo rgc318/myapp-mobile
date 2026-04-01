@@ -54,15 +54,27 @@ async function fetchCsrfTokenFromDesk() {
   });
 
   const html = await response.text().catch(() => '');
-  const match = html.match(/csrf_token\s*=\s*"([^"]+)"/);
-  if (match?.[1]) {
-    return match[1];
+  const patterns = [
+    /csrf_token\s*[:=]\s*"([^"]+)"/,
+    /csrf_token\s*[:=]\s*'([^']+)'/,
+    /"csrf_token"\s*:\s*"([^"]+)"/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
   }
 
   return null;
 }
 
-async function ensureCsrfToken() {
+async function ensureCsrfToken(options?: { forceRefresh?: boolean }) {
+  if (options?.forceRefresh) {
+    saveStoredCsrfToken(null);
+  }
+
   const storedToken = loadStoredCsrfToken();
   if (storedToken?.trim()) {
     return storedToken.trim();
@@ -84,41 +96,58 @@ async function ensureCsrfToken() {
   return csrfBootstrapPromise;
 }
 
+function isCsrfFailure(payload: any) {
+  const message = getErrorMessage(payload, '').toLowerCase();
+  return message.includes('csrf') || message.includes('invalid request') || message.includes('无效请求');
+}
+
 async function requestJson(path: string, options?: RequestOptions) {
-  let response: Response;
+  let ensuredCsrfToken: string | null = null;
 
   if ((options?.method ?? 'GET') !== 'GET') {
-    await ensureCsrfToken();
+    ensuredCsrfToken = await ensureCsrfToken();
   }
 
-  try {
-    response = await fetch(`${getApiBaseUrl()}${path}`, {
-      method: options?.method ?? 'GET',
-      headers: buildFrappeHeaders({
-        authToken: options?.authToken,
-        contentType: options?.contentType,
-      }),
-      credentials: 'include',
-      body: options?.body,
-    });
-  } catch {
-    if (Platform.OS === 'web') {
-      throw new Error('无法连接后端，请检查浏览器跨域、服务地址或登录状态。');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let response: Response;
+
+    try {
+      response = await fetch(`${getApiBaseUrl()}${path}`, {
+        method: options?.method ?? 'GET',
+        headers: buildFrappeHeaders({
+          authToken: options?.authToken,
+          contentType: options?.contentType,
+          csrfToken: ensuredCsrfToken,
+        }),
+        credentials: 'include',
+        body: options?.body,
+      });
+    } catch {
+      if (Platform.OS === 'web') {
+        throw new Error('无法连接后端，请检查浏览器跨域、服务地址或登录状态。');
+      }
+      throw new Error('无法连接后端，请检查服务地址或网络环境。');
     }
-    throw new Error('无法连接后端，请检查服务地址或网络环境。');
+
+    const payload = await parseJsonResponse(response);
+    const csrfToken = extractCsrfToken(payload, response);
+    if (csrfToken) {
+      saveStoredCsrfToken(csrfToken);
+      ensuredCsrfToken = csrfToken;
+    }
+
+    if (!response.ok) {
+      if ((options?.method ?? 'GET') !== 'GET' && attempt === 0 && isCsrfFailure(payload)) {
+        ensuredCsrfToken = await ensureCsrfToken({ forceRefresh: true });
+        continue;
+      }
+      throw new Error(getErrorMessage(payload, '请求失败，请稍后重试。'));
+    }
+
+    return payload;
   }
 
-  const payload = await parseJsonResponse(response);
-  const csrfToken = extractCsrfToken(payload, response);
-  if (csrfToken) {
-    saveStoredCsrfToken(csrfToken);
-  }
-
-  if (!response.ok) {
-    throw new Error(getErrorMessage(payload, '请求失败，请稍后重试。'));
-  }
-
-  return payload;
+  throw new Error('请求失败，请稍后重试。');
 }
 
 export async function callFrappeMethod<T = any>(

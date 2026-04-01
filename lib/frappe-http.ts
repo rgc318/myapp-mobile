@@ -34,6 +34,7 @@ export function getFrappeCsrfToken() {
 export function buildFrappeHeaders(options?: {
   authToken?: string | null;
   contentType?: string;
+  csrfToken?: string | null;
 }) {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -47,7 +48,7 @@ export function buildFrappeHeaders(options?: {
     headers.Authorization = `Bearer ${options.authToken}`;
   }
 
-  const csrfToken = getFrappeCsrfToken();
+  const csrfToken = options?.csrfToken?.trim() || getFrappeCsrfToken();
   if (csrfToken) {
     headers['X-Frappe-CSRF-Token'] = csrfToken;
   }

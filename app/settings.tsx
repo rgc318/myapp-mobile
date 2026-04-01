@@ -7,7 +7,6 @@ import { ThemedText } from '@/components/themed-text';
 import {
   getAppPreferences,
   getDefaultPreferences,
-  resetAppPreferences,
   setAppPreferences,
   type PurchaseFlowMode,
   type SalesFlowMode,
@@ -179,7 +178,7 @@ export default function SettingsScreen() {
             />
             <ModeChip
               active={purchaseFlowMode === 'immediate'}
-              label="收货并结算"
+              label="收货并开票"
               onPress={async () => {
                 setPurchaseFlowMode('immediate');
                 await handleSavePreferences({ purchaseFlowMode: 'immediate' });
