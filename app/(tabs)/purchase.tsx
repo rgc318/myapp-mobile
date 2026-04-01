@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { WORKBENCH_SIZE } from '@/constants/workbench-size';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
@@ -809,19 +810,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    gap: 16,
-    paddingHorizontal: 18,
-    paddingBottom: 40,
-    paddingTop: 8,
+    gap: WORKBENCH_SIZE.containerGap,
+    paddingHorizontal: WORKBENCH_SIZE.containerPaddingHorizontal,
+    paddingBottom: WORKBENCH_SIZE.containerPaddingBottom,
+    paddingTop: WORKBENCH_SIZE.containerPaddingTop,
   },
   heroStage: {
     backgroundColor: '#F7FBFF',
-    borderRadius: 28,
+    borderRadius: WORKBENCH_SIZE.heroRadius,
     borderWidth: 1,
     overflow: 'hidden',
-    padding: 18,
+    padding: WORKBENCH_SIZE.heroPadding,
     position: 'relative',
-    gap: 12,
+    gap: WORKBENCH_SIZE.heroGap,
   },
   heroGlowWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -867,25 +868,25 @@ const styles = StyleSheet.create({
   },
   heroEyebrow: {
     color: '#2563EB',
-    fontSize: 12,
-    letterSpacing: 1.3,
+    fontSize: WORKBENCH_SIZE.heroEyebrowFontSize,
+    letterSpacing: WORKBENCH_SIZE.heroEyebrowLetterSpacing,
   },
   heroTitle: {
-    fontSize: 30,
-    lineHeight: 36,
+    fontSize: WORKBENCH_SIZE.heroTitleFontSize,
+    lineHeight: WORKBENCH_SIZE.heroTitleLineHeight,
   },
   heroSubtitle: {
     color: '#475569',
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: WORKBENCH_SIZE.heroSubtitleFontSize,
+    lineHeight: WORKBENCH_SIZE.heroSubtitleLineHeight,
     maxWidth: 420,
   },
   heroCountPill: {
     alignSelf: 'flex-start',
     backgroundColor: '#FFFFFF',
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: WORKBENCH_SIZE.heroCountPillPaddingHorizontal,
+    paddingVertical: WORKBENCH_SIZE.heroCountPillPaddingVertical,
   },
   heroCountText: {
     color: '#2563EB',
@@ -893,14 +894,14 @@ const styles = StyleSheet.create({
   },
   metricRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: WORKBENCH_SIZE.metricRowGap,
   },
   metricCard: {
-    borderRadius: 18,
+    borderRadius: WORKBENCH_SIZE.metricCardRadius,
     flex: 1,
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: WORKBENCH_SIZE.metricCardGap,
+    paddingHorizontal: WORKBENCH_SIZE.metricCardPaddingHorizontal,
+    paddingVertical: WORKBENCH_SIZE.metricCardPaddingVertical,
     borderWidth: 1,
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 8 },
@@ -909,21 +910,21 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   metricPressable: {
-    minHeight: 74,
+    minHeight: WORKBENCH_SIZE.metricCardMinHeight,
   },
   metricLabel: {
     color: '#475569',
-    fontSize: 11,
+    fontSize: WORKBENCH_SIZE.metricLabelFontSize,
   },
   metricValue: {
-    fontSize: 19,
-    lineHeight: 22,
+    fontSize: WORKBENCH_SIZE.metricValueFontSize,
+    lineHeight: WORKBENCH_SIZE.metricValueLineHeight,
   },
   quickActionsCard: {
-    borderRadius: 24,
+    borderRadius: WORKBENCH_SIZE.sectionRadius,
     borderWidth: 1,
-    padding: 14,
-    gap: 10,
+    padding: WORKBENCH_SIZE.sectionPadding,
+    gap: WORKBENCH_SIZE.sectionGap,
   },
   sectionHeader: {
     alignItems: 'center',
@@ -936,43 +937,43 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: WORKBENCH_SIZE.sectionTitleFontSize,
   },
   sectionHint: {
     color: '#64748B',
     flex: 1,
-    fontSize: 13,
+    fontSize: WORKBENCH_SIZE.sectionHintFontSize,
     textAlign: 'right',
   },
   actionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: WORKBENCH_SIZE.actionGridGap,
     justifyContent: 'space-between',
   },
   actionCard: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: WORKBENCH_SIZE.actionCardRadius,
     borderWidth: 1,
     gap: 10,
     justifyContent: 'center',
-    minHeight: 88,
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    minHeight: WORKBENCH_SIZE.actionCardMinHeight,
+    paddingHorizontal: WORKBENCH_SIZE.actionCardPaddingHorizontal,
+    paddingVertical: WORKBENCH_SIZE.actionCardPaddingVertical,
     textDecorationLine: 'none',
     width: '31.5%',
   },
   actionLabel: {
-    fontSize: 13,
-    lineHeight: 18,
-    maxWidth: 74,
+    fontSize: WORKBENCH_SIZE.actionLabelFontSize,
+    lineHeight: WORKBENCH_SIZE.actionLabelLineHeight,
+    maxWidth: WORKBENCH_SIZE.actionLabelMaxWidth,
     textAlign: 'center',
   },
   panel: {
-    borderRadius: 24,
+    borderRadius: WORKBENCH_SIZE.sectionRadius,
     borderWidth: 1,
-    gap: 12,
-    padding: 16,
+    gap: WORKBENCH_SIZE.sectionGap,
+    padding: WORKBENCH_SIZE.sectionPadding,
   },
   refreshButton: {
     borderRadius: 999,
@@ -985,7 +986,7 @@ const styles = StyleSheet.create({
   searchComposer: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: WORKBENCH_SIZE.searchRowGap,
   },
   searchInputWrap: {
     flex: 1,
@@ -993,10 +994,10 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   searchInput: {
-    borderRadius: 16,
+    borderRadius: WORKBENCH_SIZE.searchInputRadius,
     borderWidth: 1,
-    fontSize: 15,
-    minHeight: 52,
+    fontSize: WORKBENCH_SIZE.searchInputFontSize,
+    minHeight: WORKBENCH_SIZE.searchInputMinHeight,
     paddingHorizontal: 15,
     paddingVertical: 12,
   },
@@ -1013,17 +1014,17 @@ const styles = StyleSheet.create({
   },
   searchButton: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: WORKBENCH_SIZE.searchButtonRadius,
     flexDirection: 'row',
     gap: 6,
     justifyContent: 'center',
-    minHeight: 52,
-    minWidth: 92,
-    paddingHorizontal: 14,
+    minHeight: WORKBENCH_SIZE.searchButtonMinHeight,
+    minWidth: WORKBENCH_SIZE.searchButtonMinWidth,
+    paddingHorizontal: WORKBENCH_SIZE.searchButtonPaddingHorizontal,
   },
   searchButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: WORKBENCH_SIZE.searchButtonTextFontSize,
   },
   activeChipRow: {
     flexDirection: 'row',
@@ -1066,7 +1067,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   selectCard: {
-    borderRadius: 16,
+    borderRadius: WORKBENCH_SIZE.searchInputRadius,
     borderWidth: 1,
     flex: 1,
     gap: 5,
@@ -1104,7 +1105,7 @@ const styles = StyleSheet.create({
   },
   resultSummaryStrip: {
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: WORKBENCH_SIZE.searchInputRadius,
     flex: 1,
     gap: 6,
     justifyContent: 'center',

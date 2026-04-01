@@ -390,7 +390,6 @@ export default function PurchaseInvoiceCreateScreen() {
       description="采购发票代表供应商向我们开具的应付票据。这里不是我们去开票，而是把到票事实登记进系统。"
       compactHeader
       contentCard={false}
-      showWorkflowQuickNav={false}
       footer={
         invoiceDetail ? (
           <View style={styles.footerWrap}>

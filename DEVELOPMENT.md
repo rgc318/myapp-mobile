@@ -5473,3 +5473,72 @@ After reviewing real field scenarios, return has been explicitly lowered in prio
   - source-document return
   - mixed / ad-hoc field return
 - until then, keep return available but secondary, and focus current development on the main order-to-settlement chains
+
+## Workbench Navigation And Search Follow-up (2026-04-02)
+
+This round cleaned up the mobile workbench structure after the sales desk was promoted from the old placeholder document tab into a first-class tab experience.
+
+### Navigation Changes
+
+- the legacy in-page workflow quick-nav strip (`首页 / 销售 / 采购 / 单据`) has been removed from active business pages
+- the bottom `单据` tab is now hidden from the main tab bar
+- the `销售` tab now points directly to the sales workbench instead of the older placeholder page
+- this keeps the primary tab structure focused on:
+  - home
+  - sales
+  - purchase
+  - profile
+
+### Shared Workbench Sizing
+
+- added shared size tokens in:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/constants/workbench-size.ts`
+- sales and purchase workbenches now consume the same base dimensions for:
+  - hero spacing
+  - metric cards
+  - action cards
+  - search controls
+  - filter panels
+- this reduces repeated one-off visual tuning and makes future workbench updates easier to keep aligned
+
+### Sales Workbench Alignment
+
+- the sales workbench visual structure was adjusted to match the purchase workbench more closely
+- aligned areas include:
+  - search bar and button sizing
+  - filter card proportions
+  - result-card display style
+  - workbench spacing rhythm
+- the result summary now uses the same compact count pattern as purchase:
+  - `current / total`
+  - instead of oversized wrapped count text
+
+### Search And Paging Notes
+
+- both sales and purchase workbench list pages currently use paged queries
+- the frontend passes:
+  - `limit`
+  - `start`
+- current page size remains `20`
+- initial load fetches the first page
+- later pages are appended with `start + limit`
+
+### Current Backend Performance Note
+
+- sales workbench currently uses `search_sales_orders_v2`
+- this is the correct API from a responsibility perspective, but its current backend implementation is still heavier than ideal
+- the current server logic does not only compute the visible `20` rows:
+  - it first fetches a larger candidate set
+  - then builds per-order status data before filtering / sorting / paging
+- because of that, a local response time around `1000ms` can happen even on a local machine and local service
+- this is acceptable as a temporary state, but it should be treated as an optimization target rather than the desired steady-state behavior
+
+### Files Most Affected In This Round
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/_layout.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/purchase.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/sales.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/app-shell.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/constants/workbench-size.ts`

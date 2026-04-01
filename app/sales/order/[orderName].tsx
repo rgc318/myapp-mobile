@@ -8,7 +8,6 @@ import { MobilePageHeader } from '@/components/mobile-page-header';
 import { SalesOrderItemEditor } from '@/components/sales-order-item-editor';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { isValidIsoDate } from '@/lib/date-value';
@@ -1684,13 +1683,6 @@ export default function SalesOrderDetailScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.quickNavWrap}>
-          <WorkflowQuickNav
-            compact
-            onBeforeNavigate={() => requestLeaveConfirmation()}
-          />
-        </View>
-
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.heroHeader}>
             <View style={styles.heroCopy}>
@@ -2341,9 +2333,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 20,
     textAlign: 'center',
-  },
-  quickNavWrap: {
-    marginBottom: 2,
   },
   heroCard: {
     borderRadius: 22,

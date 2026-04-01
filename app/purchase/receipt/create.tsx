@@ -473,7 +473,6 @@ export default function PurchaseReceiptCreateScreen() {
       description="先确认采购订单，再登记本次实际到货。采购收货记录的是库存入库事实，不等于供应商已经开票。"
       compactHeader
       contentCard={false}
-      showWorkflowQuickNav={false}
       footer={
         receiptDetail ? (
           <View style={styles.footerWrap}>

@@ -6,7 +6,6 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WorkflowQuickNav } from '@/components/workflow-quick-nav';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 type ActionLink = {
@@ -22,7 +21,6 @@ type AppShellProps = {
   actions?: ActionLink[];
   contentCard?: boolean;
   compactHeader?: boolean;
-  showWorkflowQuickNav?: boolean;
   headerRightAction?: ReactNode;
   headerSideWidth?: number;
   footer?: ReactNode;
@@ -34,7 +32,6 @@ export function AppShell({
   children,
   actions = [],
   contentCard = true,
-  showWorkflowQuickNav,
   headerRightAction,
   headerSideWidth,
   footer,
@@ -42,7 +39,6 @@ export function AppShell({
 }: AppShellProps) {
   const segments = useSegments();
   const isTabRoot = segments[0] === '(tabs)';
-  const shouldShowWorkflowQuickNav = showWorkflowQuickNav ?? !isTabRoot;
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
 
@@ -56,8 +52,6 @@ export function AppShell({
       />
 
       <ScrollView contentContainerStyle={styles.container}>
-        {shouldShowWorkflowQuickNav ? <WorkflowQuickNav /> : null}
-
         {actions.length ? (
           <View style={styles.actions}>
             {actions.map((action) => (

@@ -473,7 +473,6 @@ export default function PurchaseOrderItemSearchScreen() {
       compactHeader
       contentCard={false}
       description="搜索采购商品并加入当前采购单。"
-      showWorkflowQuickNav={false}
       footer={
         <View style={styles.footerBar}>
           <Pressable

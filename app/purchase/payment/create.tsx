@@ -333,7 +333,6 @@ export default function PurchasePaymentCreateScreen() {
       description="登记我们向供应商支付的款项，用于冲减采购发票应付金额。"
       compactHeader
       contentCard={false}
-      showWorkflowQuickNav={false}
       footer={
         <View style={styles.footerRow}>
           <Pressable onPress={returnToInvoicePage} style={[styles.footerButton, styles.footerGhostButton]}>

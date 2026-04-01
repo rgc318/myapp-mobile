@@ -747,7 +747,6 @@ export default function ProductSearchScreen() {
       compactHeader
       contentCard={false}
       description={isOrderMode ? '\u641c\u7d22\u5546\u54c1\u5e76\u52a0\u5165\u5f53\u524d\u8ba2\u5355\u3002' : '\u7528\u4e8e\u67e5\u8be2\u5546\u54c1\u5e93\u5b58\u3001\u4ef7\u683c\u548c\u57fa\u7840\u4fe1\u606f\u3002'}
-      showWorkflowQuickNav={false}
       footer={
         isOrderMode ? (
           <View style={styles.footerBar}>

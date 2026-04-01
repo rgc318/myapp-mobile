@@ -102,6 +102,16 @@ export type SalesOrderSummaryItem = {
   modified: string;
 };
 
+export type SalesDeskSearchSummary = {
+  totalCount: number;
+  visibleCount: number;
+  unfinishedCount: number;
+  deliveryCount: number;
+  paymentCount: number;
+  completedCount: number;
+  cancelledCount: number;
+};
+
 export type DeliveryNoteDetailV2 = {
   name: string;
   customer: string;
@@ -764,18 +774,42 @@ function toOptionalNumber(value: unknown) {
 }
 
 export async function listSalesOrderSummaries(query: string): Promise<SalesOrderSummaryItem[]> {
-  const trimmedQuery = query.trim();
-  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.search_sales_orders_v2', {
-    search_key: trimmedQuery || undefined,
-    status_filter: 'all',
-    exclude_cancelled: 1,
-    sort_by: 'unfinished_first',
+  const result = await searchSalesOrdersV2({
+    searchKey: query,
+    statusFilter: 'all',
+    excludeCancelled: true,
+    sortBy: 'unfinished_first',
     limit: 20,
     start: 0,
   });
+  return result.items;
+}
+
+export async function searchSalesOrdersV2(options?: {
+  searchKey?: string;
+  customer?: string;
+  company?: string;
+  statusFilter?: 'all' | 'unfinished' | 'delivering' | 'paying' | 'completed' | 'cancelled';
+  excludeCancelled?: boolean;
+  sortBy?: 'unfinished_first' | 'latest' | 'oldest' | 'amount_desc';
+  limit?: number;
+  start?: number;
+}): Promise<{ items: SalesOrderSummaryItem[]; summary: SalesDeskSearchSummary }> {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.search_sales_orders_v2', {
+    search_key: normalizeOptionalText(options?.searchKey),
+    customer: normalizeOptionalText(options?.customer),
+    company: normalizeOptionalText(options?.company),
+    status_filter: normalizeOptionalText(options?.statusFilter),
+    exclude_cancelled:
+      options?.excludeCancelled === undefined ? undefined : options.excludeCancelled ? 1 : 0,
+    sort_by: normalizeOptionalText(options?.sortBy),
+    limit: options?.limit,
+    start: options?.start,
+  });
 
   const rows = Array.isArray(data?.items) ? data.items : [];
-  const normalized = rows.map((row: Record<string, unknown>) => {
+  const summary = data?.summary && typeof data.summary === 'object' ? data.summary : {};
+  const items = rows.map((row: Record<string, unknown>) => {
     const fulfillment = (row.fulfillment ?? {}) as Record<string, unknown>;
     const payment = (row.payment ?? {}) as Record<string, unknown>;
     const completion = (row.completion ?? {}) as Record<string, unknown>;
@@ -795,5 +829,17 @@ export async function listSalesOrderSummaries(query: string): Promise<SalesOrder
       modified: String(row.modified ?? ''),
     } satisfies SalesOrderSummaryItem;
   });
-  return normalized;
+
+  return {
+    items,
+    summary: {
+      totalCount: Number(summary.total_count ?? 0),
+      visibleCount: Number(summary.visible_count ?? items.length),
+      unfinishedCount: Number(summary.unfinished_count ?? 0),
+      deliveryCount: Number(summary.delivery_count ?? 0),
+      paymentCount: Number(summary.payment_count ?? 0),
+      completedCount: Number(summary.completed_count ?? 0),
+      cancelledCount: Number(summary.cancelled_count ?? 0),
+    },
+  };
 }

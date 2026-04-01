@@ -1651,7 +1651,6 @@ export default function PurchaseOrderEditScreen() {
         )
       }
       headerSideWidth={96}
-      showWorkflowQuickNav={false}
       footerNoShadow
       footer={
         <View style={styles.footerWrap}>
