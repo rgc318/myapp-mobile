@@ -83,6 +83,16 @@ export type CreatePurchaseOrderPayload = {
   remarks?: string | null;
 };
 
+export type QuickCreatePurchaseOrderPayload = CreatePurchaseOrderPayload & {
+  immediateReceive?: boolean;
+  immediateInvoice?: boolean;
+  immediatePayment?: boolean;
+  paidAmount?: number | null;
+  modeOfPayment?: string | null;
+  referenceNo?: string | null;
+  referenceDate?: string | null;
+};
+
 export type UpdatePurchaseOrderPayload = {
   orderName: string;
   transactionDate?: string | null;
@@ -227,6 +237,15 @@ export type PurchaseOrderSummaryItem = {
   paymentStatus: string;
   completionStatus: string;
   modified: string;
+};
+
+export type QuickCancelPurchaseOrderResult = {
+  orderName: string;
+  cancelledPaymentEntries: string[];
+  cancelledPurchaseInvoice: string;
+  cancelledPurchaseReceipt: string;
+  completedSteps: string[];
+  detail: PurchaseOrderDetail | null;
 };
 
 function toOptionalNumber(value: unknown) {
@@ -658,6 +677,52 @@ export async function submitPurchaseOrder(payload: CreatePurchaseOrderPayload) {
   return typeof data?.purchase_order === 'string' ? data.purchase_order : '';
 }
 
+export async function submitQuickPurchaseOrder(payload: QuickCreatePurchaseOrderPayload) {
+  const items = payload.items
+    .map((item) => ({
+      item_code: item.itemCode.trim(),
+      qty: item.qty,
+      warehouse: normalizeOptionalText(item.warehouse),
+      uom: normalizeOptionalText(item.uom),
+      price: typeof item.price === 'number' ? item.price : undefined,
+    }))
+    .filter((item) => item.item_code && item.qty > 0);
+
+  const data = await callGatewayMethod<Record<string, unknown>>(
+    'myapp.api.gateway.quick_create_purchase_order_v2',
+    {
+      supplier: payload.supplier.trim(),
+      company: payload.company.trim(),
+      items,
+      transaction_date: normalizeOptionalText(payload.transactionDate),
+      schedule_date: normalizeOptionalText(payload.scheduleDate),
+      default_warehouse: normalizeOptionalText(payload.defaultWarehouse),
+      currency: normalizeOptionalText(payload.currency),
+      buying_price_list: normalizeOptionalText(payload.buyingPriceList),
+      supplier_ref: normalizeOptionalText(payload.supplierRef),
+      remarks: normalizeOptionalText(payload.remarks),
+      immediate_receive: payload.immediateReceive === false ? 0 : 1,
+      immediate_invoice: payload.immediateInvoice === false ? 0 : 1,
+      immediate_payment: payload.immediatePayment ? 1 : 0,
+      paid_amount: typeof payload.paidAmount === 'number' ? payload.paidAmount : undefined,
+      mode_of_payment: normalizeOptionalText(payload.modeOfPayment),
+      reference_no: normalizeOptionalText(payload.referenceNo),
+      reference_date: normalizeOptionalText(payload.referenceDate),
+      request_id: randomRequestId('mobile-purchase-order-quick'),
+    },
+  );
+
+  return {
+    orderName: typeof data?.purchase_order === 'string' ? data.purchase_order : '',
+    receiptName: typeof data?.purchase_receipt === 'string' ? data.purchase_receipt : '',
+    invoiceName: typeof data?.purchase_invoice === 'string' ? data.purchase_invoice : '',
+    paymentEntry: typeof data?.payment_entry === 'string' ? data.payment_entry : '',
+    completedSteps: Array.isArray(data?.completed_steps)
+      ? data.completed_steps.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+  };
+}
+
 export async function updatePurchaseOrder(payload: UpdatePurchaseOrderPayload) {
   const data = await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.update_purchase_order_v2', {
     order_name: payload.orderName.trim(),
@@ -800,6 +865,37 @@ export async function cancelSupplierPayment(paymentEntryName: string) {
       typeof data?.payment_entry === 'string' ? data.payment_entry : trimmedPaymentEntryName,
     status: typeof data?.document_status === 'string' ? data.document_status : '',
     message: typeof data?.message === 'string' ? data.message : '',
+  };
+}
+
+export async function quickCancelPurchaseOrderV2(
+  orderName: string,
+  options?: { rollbackPayment?: boolean },
+): Promise<QuickCancelPurchaseOrderResult> {
+  const trimmedOrderName = orderName.trim();
+  if (!trimmedOrderName) {
+    throw new Error('缺少采购订单号。');
+  }
+
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.quick_cancel_purchase_order_v2', {
+    order_name: trimmedOrderName,
+    rollback_payment: options?.rollbackPayment ?? true,
+    request_id: randomRequestId('mobile-purchase-order-quick-cancel'),
+  });
+
+  return {
+    orderName: typeof data?.purchase_order === 'string' ? data.purchase_order : trimmedOrderName,
+    cancelledPaymentEntries: Array.isArray(data?.cancelled_payment_entries)
+      ? data.cancelled_payment_entries.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+    cancelledPurchaseInvoice:
+      typeof data?.cancelled_purchase_invoice === 'string' ? data.cancelled_purchase_invoice : '',
+    cancelledPurchaseReceipt:
+      typeof data?.cancelled_purchase_receipt === 'string' ? data.cancelled_purchase_receipt : '',
+    completedSteps: Array.isArray(data?.completed_steps)
+      ? data.completed_steps.map((value: unknown) => String(value ?? '')).filter(Boolean)
+      : [],
+    detail: await fetchPurchaseOrderDetail(trimmedOrderName),
   };
 }
 

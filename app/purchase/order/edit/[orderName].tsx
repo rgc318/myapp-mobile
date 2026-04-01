@@ -30,6 +30,7 @@ import {
   fetchPurchaseCompanyContext,
   fetchPurchaseOrderDetail,
   getWarehouseCompany,
+  quickCancelPurchaseOrderV2,
   searchWarehouses,
   updatePurchaseOrder,
   updatePurchaseOrderItems,
@@ -295,6 +296,41 @@ function getPurchaseItemsLockAction(detail: PurchaseOrderDetail | null) {
   return null;
 }
 
+function getPurchaseQuickRollbackPlan(detail: PurchaseOrderDetail | null) {
+  if (!detail || detail.documentStatus === 'cancelled') {
+    return null;
+  }
+
+  const hasPayment = detail.paymentStatus === 'paid' || (detail.paidAmount ?? 0) > 0;
+  const hasInvoice = detail.purchaseInvoices.length > 0;
+  const hasReceipt = detail.purchaseReceipts.length > 0 || (detail.receivedQty ?? 0) > 0;
+
+  if (!hasPayment && !hasInvoice && !hasReceipt) {
+    return null;
+  }
+
+  const steps: string[] = [];
+  if (hasPayment) {
+    steps.push('先回退付款');
+  }
+  if (hasInvoice) {
+    steps.push(`再作废采购发票 ${detail.purchaseInvoices[0]}`);
+  }
+  if (hasReceipt) {
+    steps.push(`最后作废采购收货单 ${detail.purchaseReceipts[0] || '当前收货单'}`);
+  }
+
+  return {
+    title: '需先回退下游单据',
+    message: hasPayment
+      ? `当前采购订单已经进入付款阶段，不能直接修改。系统将按顺序${steps.join('、')}，完成后回到可编辑状态。`
+      : hasInvoice
+        ? `当前采购订单已开票，不能直接修改。系统将按顺序${steps.join('、')}，完成后回到可编辑状态。`
+        : `当前采购订单已收货，不能直接修改。系统将${steps.join('、')}，完成后回到可编辑状态。`,
+    confirmLabel: hasPayment ? '一键回退并修改' : '回退并修改',
+  };
+}
+
 function getAvailableUoms(item: EditablePurchaseOrderItem) {
   const values = new Set<string>();
   if (item.uom) {
@@ -383,6 +419,7 @@ export default function PurchaseOrderEditScreen() {
   const [detail, setDetail] = useState<PurchaseOrderDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isQuickRollingBack, setIsQuickRollingBack] = useState(false);
   const [transactionDate, setTransactionDate] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [supplierRef, setSupplierRef] = useState('');
@@ -399,6 +436,7 @@ export default function PurchaseOrderEditScreen() {
   const [pickerOptions, setPickerOptions] = useState<{ label: string; value: string; description?: string }[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showQuickRollbackConfirm, setShowQuickRollbackConfirm] = useState(false);
   const [isBusinessDocsExpanded, setIsBusinessDocsExpanded] = useState(true);
   const [showMoreBusinessActions, setShowMoreBusinessActions] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
@@ -843,6 +881,7 @@ export default function PurchaseOrderEditScreen() {
   }, [detail]);
   const summaryUom = useMemo(() => getOrderSummaryUom(detail), [detail]);
   const primaryInvoiceName = useMemo(() => getPrimaryPurchaseInvoice(detail), [detail]);
+  const quickRollbackPlan = useMemo(() => getPurchaseQuickRollbackPlan(detail), [detail]);
 
   const headerChanged = useMemo(
     () =>
@@ -1383,6 +1422,10 @@ export default function PurchaseOrderEditScreen() {
       return;
     }
     if (!canEditOrder) {
+      if (quickRollbackPlan) {
+        setShowQuickRollbackConfirm(true);
+        return;
+      }
       showError('当前采购订单已有收货或开票记录，订单已锁定，不可直接编辑。');
       return;
     }
@@ -1399,6 +1442,45 @@ export default function PurchaseOrderEditScreen() {
       return;
     }
     setEditMode(isEditingMeta ? 'all' : 'items');
+  };
+
+  const handleQuickRollbackAndEdit = async () => {
+    if (!orderName) {
+      return;
+    }
+
+    try {
+      setIsQuickRollingBack(true);
+      const rollbackResult = await quickCancelPurchaseOrderV2(orderName, { rollbackPayment: true });
+      if (rollbackResult.detail) {
+        setDetail(rollbackResult.detail);
+      }
+      setEditMode('all');
+
+      const rollbackSummary = [
+        rollbackResult.cancelledPaymentEntries.length
+          ? `已回退付款 ${rollbackResult.cancelledPaymentEntries.join('、')}`
+          : '',
+        rollbackResult.cancelledPurchaseInvoice
+          ? `已作废发票 ${rollbackResult.cancelledPurchaseInvoice}`
+          : '',
+        rollbackResult.cancelledPurchaseReceipt
+          ? `已作废收货单 ${rollbackResult.cancelledPurchaseReceipt}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('，');
+
+      showSuccess(
+        rollbackSummary
+          ? `${rollbackSummary}，现在可以继续修改采购订单。`
+          : '下游单据已回退，现在可以继续修改采购订单。',
+      );
+    } catch (error) {
+      showError(normalizeAppError(error, '快捷回退失败。').message);
+    } finally {
+      setIsQuickRollingBack(false);
+    }
   };
 
   const handleSave = async () => {
@@ -1693,22 +1775,36 @@ export default function PurchaseOrderEditScreen() {
               </Pressable>
             </View>
           ) : (
-            <Pressable
-              disabled={!canEditOrder}
-              onPress={() => {
-                if (!canEditOrder) {
-                  return;
-                }
-                enterEditMode('all');
-              }}
-              style={[
-                styles.footerButton,
-                { backgroundColor: canEditOrder ? tintColor : surfaceMuted },
-              ]}>
-              <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
-                {canEditOrder ? '编辑采购订单' : '订单已锁定'}
-              </ThemedText>
-            </Pressable>
+            quickRollbackPlan ? (
+              <Pressable
+                disabled={isQuickRollingBack}
+                onPress={() => setShowQuickRollbackConfirm(true)}
+                style={[
+                  styles.footerButton,
+                  { backgroundColor: isQuickRollingBack ? surfaceMuted : tintColor },
+                ]}>
+                <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
+                  {isQuickRollingBack ? '回退中...' : '回退并修改'}
+                </ThemedText>
+              </Pressable>
+            ) : (
+              <Pressable
+                disabled={!canEditOrder}
+                onPress={() => {
+                  if (!canEditOrder) {
+                    return;
+                  }
+                  enterEditMode('all');
+                }}
+                style={[
+                  styles.footerButton,
+                  { backgroundColor: canEditOrder ? tintColor : surfaceMuted },
+                ]}>
+                <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
+                  {canEditOrder ? '编辑采购订单' : '订单已锁定'}
+                </ThemedText>
+              </Pressable>
+            )
           )}
         </View>
       }
@@ -2071,6 +2167,42 @@ export default function PurchaseOrderEditScreen() {
                 style={[styles.dialogButton, styles.dialogDangerButton]}>
                 <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
                   放弃修改
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowQuickRollbackConfirm(false)}
+        transparent
+        visible={showQuickRollbackConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={[styles.dialogTitle, styles.dialogTitleWarning]} type="defaultSemiBold">
+              {quickRollbackPlan?.title || '确认回退'}
+            </ThemedText>
+            <ThemedText style={styles.dialogMessage}>
+              {quickRollbackPlan?.message || '系统将先回退下游单据，再回到可编辑状态。'}
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setShowQuickRollbackConfirm(false)}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  先不处理
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowQuickRollbackConfirm(false);
+                  void handleQuickRollbackAndEdit();
+                }}
+                style={[styles.dialogButton, styles.dialogDangerButton]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  {isQuickRollingBack ? '回退中...' : quickRollbackPlan?.confirmLabel || '确认回退'}
                 </ThemedText>
               </Pressable>
             </View>

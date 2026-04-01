@@ -36,6 +36,7 @@ import {
   getWarehouseCompany,
   searchCompanies,
   searchWarehouses,
+  submitQuickPurchaseOrder,
   searchSuppliers,
   submitPurchaseOrder,
   supplierExists,
@@ -43,6 +44,8 @@ import {
   type PurchaseOrderItemInput,
   type SupplierPurchaseContext,
 } from '@/services/purchases';
+
+type SubmitMode = 'save' | 'quick';
 
 function normalizeOptionalText(value: string) {
   const trimmed = value.trim();
@@ -144,6 +147,8 @@ export default function PurchaseOrderCreateScreen() {
   const [supplierContext, setSupplierContext] = useState<SupplierPurchaseContext | null>(null);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMode, setSubmitMode] = useState<SubmitMode>('save');
+  const [showQuickCreateConfirm, setShowQuickCreateConfirm] = useState(false);
   const [supplierError, setSupplierError] = useState('');
   const [companyError, setCompanyError] = useState('');
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -718,7 +723,7 @@ export default function PurchaseOrderCreateScreen() {
     setExpandedItemRows((current) => ({ ...current, [nextId]: true }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (mode: SubmitMode = 'save') => {
     const trimmedSupplier = supplier.trim();
     const trimmedCompany = company.trim();
     let firstInvalidSection: 'basic' | 'items' | null = null;
@@ -759,6 +764,7 @@ export default function PurchaseOrderCreateScreen() {
     }
 
     try {
+      setSubmitMode(mode);
       setIsSubmitting(true);
 
       const [supplierOk, companyOk] = await Promise.all([
@@ -790,34 +796,70 @@ export default function PurchaseOrderCreateScreen() {
         return;
       }
 
-      const orderName = await submitPurchaseOrder({
-        supplier: trimmedSupplier,
-        company: trimmedCompany,
-        items: validItems,
-        transactionDate,
-        scheduleDate,
-        defaultWarehouse: normalizeOptionalText(defaultWarehouse),
-        currency: supplierContext?.suggestions.currency ?? supplierContext?.supplier.defaultCurrency ?? null,
-        supplierRef,
-        remarks,
-      });
+      const result =
+        mode === 'quick'
+          ? await submitQuickPurchaseOrder({
+              supplier: trimmedSupplier,
+              company: trimmedCompany,
+              items: validItems,
+              transactionDate,
+              scheduleDate,
+              defaultWarehouse: normalizeOptionalText(defaultWarehouse),
+              currency: supplierContext?.suggestions.currency ?? supplierContext?.supplier.defaultCurrency ?? null,
+              supplierRef,
+              remarks,
+              immediateReceive: true,
+              immediateInvoice: true,
+            })
+          : { orderName: await submitPurchaseOrder({
+              supplier: trimmedSupplier,
+              company: trimmedCompany,
+              items: validItems,
+              transactionDate,
+              scheduleDate,
+              defaultWarehouse: normalizeOptionalText(defaultWarehouse),
+              currency: supplierContext?.suggestions.currency ?? supplierContext?.supplier.defaultCurrency ?? null,
+              supplierRef,
+              remarks,
+            }) };
+
+      const orderName = result.orderName?.trim() || '';
 
       if (!orderName) {
-        throw new Error('采购订单创建成功，但未返回订单号。');
+        throw new Error(mode === 'quick' ? '采购快捷开单成功，但未返回订单号。' : '采购订单创建成功，但未返回订单号。');
       }
 
-      showSuccess(`采购订单 ${orderName} 已创建。`);
+      showSuccess(
+        mode === 'quick'
+          ? result.invoiceName
+            ? `已快速开单，采购发票 ${result.invoiceName} 已生成。`
+            : `采购订单 ${orderName} 已完成收货与开票。`
+          : `采购订单 ${orderName} 已创建。`,
+      );
       clearPurchaseOrderDraft();
       allowLeaveRef.current = true;
       setDraftItems([]);
-      router.replace({
-        pathname: '/purchase/order/[orderName]',
-        params: { orderName },
-      });
+      if (mode === 'quick' && result.invoiceName) {
+        router.replace({
+          pathname: '/purchase/invoice/create',
+          params: { purchaseInvoice: result.invoiceName, notice: 'created' },
+        });
+      } else if (mode === 'quick' && result.receiptName) {
+        router.replace({
+          pathname: '/purchase/receipt/create',
+          params: { receiptName: result.receiptName, notice: 'created' },
+        });
+      } else {
+        router.replace({
+          pathname: '/purchase/order/[orderName]',
+          params: { orderName },
+        });
+      }
     } catch (error) {
       showError(normalizeAppError(error).message);
     } finally {
       setIsSubmitting(false);
+      setSubmitMode('save');
     }
   };
 
@@ -1142,13 +1184,25 @@ export default function PurchaseOrderCreateScreen() {
         </View>
         <Pressable
           disabled={isSubmitting}
-          onPress={handleSubmit}
+          onPress={() => {
+            if (preferences.purchaseFlowMode === 'immediate') {
+              setShowQuickCreateConfirm(true);
+              return;
+            }
+            void handleSubmit('save');
+          }}
           style={[
             styles.footerButton,
             { backgroundColor: isSubmitting ? surfaceMuted : tintColor },
           ]}>
           <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
-            {isSubmitting ? '正在提交采购订单...' : '提交采购订单'}
+            {isSubmitting
+              ? submitMode === 'quick'
+                ? '正在收货并结算...'
+                : '正在提交采购订单...'
+              : preferences.purchaseFlowMode === 'immediate'
+                ? '收货并结算'
+                : '提交采购订单'}
           </ThemedText>
         </Pressable>
       </View>
@@ -1217,6 +1271,42 @@ export default function PurchaseOrderCreateScreen() {
                 </View>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowQuickCreateConfirm(false)}
+        transparent
+        visible={showQuickCreateConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              确认收货并结算？
+            </ThemedText>
+            <ThemedText style={styles.dialogText}>
+              系统将自动创建采购订单、提交收货单，并基于收货结果直接生成采购发票。若单据还可能调整，建议先选择“收货后结算”模式。
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setShowQuickCreateConfirm(false)}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  先不处理
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowQuickCreateConfirm(false);
+                  void handleSubmit('quick');
+                }}
+                style={[styles.dialogButton, styles.dialogPrimaryButton, { backgroundColor: tintColor }]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  {isSubmitting && submitMode === 'quick' ? '处理中...' : '确认执行'}
+                </ThemedText>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
