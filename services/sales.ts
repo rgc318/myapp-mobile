@@ -727,14 +727,16 @@ function toOptionalNumber(value: unknown) {
 
 export async function listSalesOrderSummaries(query: string): Promise<SalesOrderSummaryItem[]> {
   const trimmedQuery = query.trim();
-  const data = await callGatewayMethod<Record<string, any>[]>(
-    'myapp.api.gateway.get_sales_order_status_summary',
-    {
-      limit: 20,
-    },
-  );
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.search_sales_orders_v2', {
+    search_key: trimmedQuery || undefined,
+    status_filter: 'all',
+    exclude_cancelled: 1,
+    sort_by: 'unfinished_first',
+    limit: 20,
+    start: 0,
+  });
 
-  const rows = Array.isArray(data) ? data : [];
+  const rows = Array.isArray(data?.items) ? data.items : [];
   const normalized = rows.map((row: Record<string, unknown>) => {
     const fulfillment = (row.fulfillment ?? {}) as Record<string, unknown>;
     const payment = (row.payment ?? {}) as Record<string, unknown>;
@@ -755,15 +757,5 @@ export async function listSalesOrderSummaries(query: string): Promise<SalesOrder
       modified: String(row.modified ?? ''),
     } satisfies SalesOrderSummaryItem;
   });
-
-  if (!trimmedQuery) {
-    return normalized.filter((item) => item.status !== 'cancelled');
-  }
-
-  const keyword = trimmedQuery.toLowerCase();
-  return normalized.filter(
-    (item) =>
-      item.status !== 'cancelled' &&
-      [item.name, item.customer, item.company].some((value) => value.toLowerCase().includes(keyword)),
-  );
+  return normalized;
 }

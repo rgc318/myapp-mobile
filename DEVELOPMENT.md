@@ -453,6 +453,47 @@ The backend and real HTTP regression now cover:
 - cancelled filter
 - default hidden-cancelled behavior
 
+## Sales Desk Search Notes (2026-04-01)
+
+This round aligned the sales list-search foundation with the same interface split we just applied to the purchase desk.
+
+### Interface Responsibility Split
+
+- `get_sales_order_status_summary`
+  - still useful for lightweight sales status aggregation
+  - not ideal as the actual sales workbench search interface
+- `search_sales_orders_v2`
+  - now the dedicated sales workbench query interface
+  - should be used for:
+    - keyword search
+    - customer / company scope changes
+    - status filter changes
+    - sort changes
+    - paging / result counts
+
+### Current Mobile Sales Search Behavior
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+
+- current behavior:
+  - `listSalesOrderSummaries(query)` now calls `search_sales_orders_v2`
+  - keyword search is no longer simulated by filtering a fixed local summary batch
+  - default search mode:
+    - `status_filter = all`
+    - `exclude_cancelled = true`
+    - `sort_by = unfinished_first`
+
+This matters because the previous implementation only fetched a fixed summary list and then filtered it locally, which was not suitable for a future sales workbench.
+
+### Confirmed Search Coverage
+
+The backend and real HTTP regression now cover:
+
+- exact order-name keyword search
+- explicit cancelled-order search
+- default hidden-cancelled behavior
+
 ## Purchase Quick Flow Notes (2026-04-01)
 
 This round aligned the mobile purchase quick-flow UI with the now-completed backend quick create / quick rollback behavior, and also fixed a web-session request-layer issue that surfaced during purchase-page work.
