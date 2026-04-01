@@ -239,6 +239,16 @@ export type PurchaseOrderSummaryItem = {
   modified: string;
 };
 
+export type PurchaseDeskSearchSummary = {
+  totalCount: number;
+  visibleCount: number;
+  unfinishedCount: number;
+  receivingCount: number;
+  paymentCount: number;
+  completedCount: number;
+  cancelledCount: number;
+};
+
 export type QuickCancelPurchaseOrderResult = {
   orderName: string;
   cancelledPaymentEntries: string[];
@@ -565,6 +575,85 @@ export async function fetchPurchaseOrderStatusSummary(options?: {
       } satisfies PurchaseOrderSummaryItem;
     })
     .filter((row): row is PurchaseOrderSummaryItem => Boolean(row?.name));
+}
+
+export async function searchPurchaseOrdersV2(options?: {
+  searchKey?: string;
+  supplier?: string;
+  company?: string;
+  statusFilter?: 'all' | 'unfinished' | 'receiving' | 'paying' | 'completed' | 'cancelled';
+  excludeCancelled?: boolean;
+  sortBy?: 'unfinished_first' | 'latest' | 'oldest' | 'amount_desc';
+  limit?: number;
+  start?: number;
+}): Promise<{ items: PurchaseOrderSummaryItem[]; summary: PurchaseDeskSearchSummary }> {
+  const data = await callGatewayMethod<any>('myapp.api.gateway.search_purchase_orders_v2', {
+    search_key: normalizeOptionalText(options?.searchKey),
+    supplier: normalizeOptionalText(options?.supplier),
+    company: normalizeOptionalText(options?.company),
+    status_filter: normalizeOptionalText(options?.statusFilter),
+    exclude_cancelled: options?.excludeCancelled ?? undefined,
+    sort_by: normalizeOptionalText(options?.sortBy),
+    limit: options?.limit ?? 20,
+    start: options?.start ?? 0,
+  });
+
+  const payload = data && typeof data === 'object' ? data : {};
+  const rows = Array.isArray(payload.items) ? payload.items : [];
+  const summary = payload.summary && typeof payload.summary === 'object' ? payload.summary : {};
+
+  return {
+    items: rows
+      .map((entry: unknown) => {
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+        const row = entry as Record<string, unknown>;
+        return {
+          name:
+            typeof row.purchase_order_name === 'string'
+              ? row.purchase_order_name
+              : typeof row.name === 'string'
+                ? row.name
+                : '',
+          supplierName:
+            typeof row.supplier_name === 'string'
+              ? row.supplier_name
+              : typeof row.supplier === 'string'
+                ? row.supplier
+                : '',
+          supplier: typeof row.supplier === 'string' ? row.supplier : '',
+          company: typeof row.company === 'string' ? row.company : '',
+          transactionDate: typeof row.transaction_date === 'string' ? row.transaction_date : '',
+          documentStatus: typeof row.document_status === 'string' ? row.document_status : '',
+          orderAmountEstimate: toOptionalNumber(row.order_amount_estimate),
+          outstandingAmount: toOptionalNumber(row.outstanding_amount),
+          receivingStatus:
+            row.receiving && typeof row.receiving === 'object' && typeof (row.receiving as Record<string, unknown>).status === 'string'
+              ? String((row.receiving as Record<string, unknown>).status)
+              : '',
+          paymentStatus:
+            row.payment && typeof row.payment === 'object' && typeof (row.payment as Record<string, unknown>).status === 'string'
+              ? String((row.payment as Record<string, unknown>).status)
+              : '',
+          completionStatus:
+            row.completion && typeof row.completion === 'object' && typeof (row.completion as Record<string, unknown>).status === 'string'
+              ? String((row.completion as Record<string, unknown>).status)
+              : '',
+          modified: typeof row.modified === 'string' ? row.modified : '',
+        } satisfies PurchaseOrderSummaryItem;
+      })
+      .filter((row): row is PurchaseOrderSummaryItem => Boolean(row?.name)),
+    summary: {
+      totalCount: toOptionalNumber(summary.total_count) ?? 0,
+      visibleCount: toOptionalNumber(summary.visible_count) ?? 0,
+      unfinishedCount: toOptionalNumber(summary.unfinished_count) ?? 0,
+      receivingCount: toOptionalNumber(summary.receiving_count) ?? 0,
+      paymentCount: toOptionalNumber(summary.payment_count) ?? 0,
+      completedCount: toOptionalNumber(summary.completed_count) ?? 0,
+      cancelledCount: toOptionalNumber(summary.cancelled_count) ?? 0,
+    },
+  };
 }
 
 export async function fetchPurchaseCompanyContext(company?: string): Promise<PurchaseCompanyContext | null> {

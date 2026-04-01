@@ -11,7 +11,12 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { useFeedback } from '@/providers/feedback-provider';
-import { fetchPurchaseOrderStatusSummary, searchCompanies, type PurchaseOrderSummaryItem } from '@/services/purchases';
+import {
+  searchCompanies,
+  searchPurchaseOrdersV2,
+  type PurchaseDeskSearchSummary,
+  type PurchaseOrderSummaryItem,
+} from '@/services/purchases';
 import type { LinkOption } from '@/services/master-data';
 
 type FilterMode = 'all' | 'unfinished' | 'receiving' | 'paying' | 'completed' | 'cancelled';
@@ -44,40 +49,6 @@ function formatMoney(value: number | null) {
     currency: 'CNY',
     maximumFractionDigits: 2,
   }).format(value);
-}
-
-function getModifiedTime(row: PurchaseOrderSummaryItem) {
-  const value = Date.parse(row.modified || row.transactionDate || '');
-  return Number.isNaN(value) ? 0 : value;
-}
-
-function getTransactionTime(row: PurchaseOrderSummaryItem) {
-  const value = Date.parse(row.transactionDate || '');
-  return Number.isNaN(value) ? 0 : value;
-}
-
-function isCancelled(row: PurchaseOrderSummaryItem) {
-  return row.documentStatus === 'cancelled';
-}
-
-function isCompleted(row: PurchaseOrderSummaryItem) {
-  return row.completionStatus === 'completed';
-}
-
-function isUnfinished(row: PurchaseOrderSummaryItem) {
-  return !isCancelled(row) && !isCompleted(row);
-}
-
-function isReceivingPending(row: PurchaseOrderSummaryItem) {
-  return row.documentStatus === 'submitted' && row.receivingStatus !== 'completed';
-}
-
-function isPaymentPending(row: PurchaseOrderSummaryItem) {
-  return row.documentStatus === 'submitted' && row.paymentStatus !== 'paid';
-}
-
-function summarizeCount(rows: PurchaseOrderSummaryItem[], predicate: (row: PurchaseOrderSummaryItem) => boolean) {
-  return rows.filter(predicate).length;
 }
 
 function getWorkflowStatusLabel(row: PurchaseOrderSummaryItem) {
@@ -139,80 +110,27 @@ function getPaymentStatusLabel(status: string) {
   }
 }
 
-function getSortWeight(row: PurchaseOrderSummaryItem) {
-  if (row.documentStatus === 'cancelled') {
-    return 4;
-  }
-  if (row.completionStatus === 'completed') {
-    return 3;
-  }
-  if (row.paymentStatus === 'paid') {
-    return 2;
-  }
-  if (row.receivingStatus === 'completed') {
-    return 1;
-  }
-  return 0;
-}
-
-function matchesFilter(row: PurchaseOrderSummaryItem, filterMode: FilterMode) {
-  switch (filterMode) {
-    case 'unfinished':
-      return isUnfinished(row);
-    case 'receiving':
-      return isReceivingPending(row);
-    case 'paying':
-      return isPaymentPending(row);
-    case 'completed':
-      return isCompleted(row);
-    case 'cancelled':
-      return isCancelled(row);
-    case 'all':
-    default:
-      return true;
-  }
-}
-
-function sortRows(rows: PurchaseOrderSummaryItem[], sortMode: SortMode) {
-  return [...rows].sort((left, right) => {
-    if (sortMode === 'amount_desc') {
-      const amountDiff = (right.orderAmountEstimate ?? 0) - (left.orderAmountEstimate ?? 0);
-      if (amountDiff !== 0) {
-        return amountDiff;
-      }
-      return getModifiedTime(right) - getModifiedTime(left);
-    }
-
-    if (sortMode === 'oldest') {
-      const oldest = getTransactionTime(left) - getTransactionTime(right);
-      if (oldest !== 0) {
-        return oldest;
-      }
-      return getModifiedTime(left) - getModifiedTime(right);
-    }
-
-    if (sortMode === 'latest') {
-      return getModifiedTime(right) - getModifiedTime(left);
-    }
-
-    const weightDiff = getSortWeight(left) - getSortWeight(right);
-    if (weightDiff !== 0) {
-      return weightDiff;
-    }
-
-    return getModifiedTime(right) - getModifiedTime(left);
-  });
-}
+const EMPTY_DESK_SUMMARY: PurchaseDeskSearchSummary = {
+  totalCount: 0,
+  visibleCount: 0,
+  unfinishedCount: 0,
+  receivingCount: 0,
+  paymentCount: 0,
+  completedCount: 0,
+  cancelledCount: 0,
+};
 
 export default function PurchaseTabScreen() {
   const router = useRouter();
   const preferences = getAppPreferences();
   const { showError } = useFeedback();
+  const [searchInput, setSearchInput] = useState('');
   const [searchKey, setSearchKey] = useState('');
   const [queryCompany, setQueryCompany] = useState<string | null>(preferences.defaultCompany);
-  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [filterMode, setFilterMode] = useState<FilterMode>('unfinished');
   const [sortMode, setSortMode] = useState<SortMode>('unfinished_first');
   const [summaries, setSummaries] = useState<PurchaseOrderSummaryItem[]>([]);
+  const [deskSummary, setDeskSummary] = useState<PurchaseDeskSearchSummary>(EMPTY_DESK_SUMMARY);
   const [isLoading, setIsLoading] = useState(true);
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
   const [companyQuery, setCompanyQuery] = useState('');
@@ -225,21 +143,27 @@ export default function PurchaseTabScreen() {
   const background = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const selectedCompany = queryCompany?.trim() || undefined;
+  const hideCancelledByDefault = filterMode !== 'all' && filterMode !== 'cancelled';
 
-  const loadSummaries = useCallback(async () => {
+  const loadSummaries = useCallback(async (nextSearchKey?: string) => {
     try {
       setIsLoading(true);
-      const rows = await fetchPurchaseOrderStatusSummary({
+      const result = await searchPurchaseOrdersV2({
+        searchKey: nextSearchKey ?? searchKey,
         company: selectedCompany,
+        statusFilter: filterMode,
+        excludeCancelled: hideCancelledByDefault,
+        sortBy: sortMode,
         limit: 120,
       });
-      setSummaries(rows);
+      setSummaries(result.items);
+      setDeskSummary(result.summary);
     } catch (error) {
       showError(normalizeAppError(error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCompany, showError]);
+  }, [filterMode, hideCancelledByDefault, searchKey, selectedCompany, showError, sortMode]);
 
   useFocusEffect(
     useCallback(() => {
@@ -276,41 +200,11 @@ export default function PurchaseTabScreen() {
     };
   }, [companyQuery, pickerMode]);
 
-  const filteredSummaries = useMemo(() => {
-    const normalized = searchKey.trim().toLowerCase();
-    const rows = summaries.filter((row) => {
-      if (!matchesFilter(row, filterMode)) {
-        return false;
-      }
-
-      if (!normalized) {
-        return true;
-      }
-
-      const searchPool = [
-        row.name,
-        row.supplierName,
-        row.supplier,
-        row.company,
-        row.transactionDate,
-        row.receivingStatus,
-        row.paymentStatus,
-        row.completionStatus,
-        getWorkflowStatusLabel(row),
-      ]
-        .filter(Boolean)
-        .map((value) => value.toLowerCase());
-
-      return searchPool.some((value) => value.includes(normalized));
-    });
-
-    return sortRows(rows, sortMode);
-  }, [filterMode, searchKey, sortMode, summaries]);
-
-  const unfinishedCount = summarizeCount(summaries, (row) => isUnfinished(row));
-  const receivingCount = summarizeCount(summaries, (row) => isReceivingPending(row));
-  const paymentCount = summarizeCount(summaries, (row) => isPaymentPending(row));
-  const completedCount = summarizeCount(summaries, (row) => isCompleted(row));
+  const filteredSummaries = summaries;
+  const unfinishedCount = deskSummary.unfinishedCount;
+  const receivingCount = deskSummary.receivingCount;
+  const paymentCount = deskSummary.paymentCount;
+  const completedCount = deskSummary.completedCount;
 
   const quickActions = [
     {
@@ -358,6 +252,8 @@ export default function PurchaseTabScreen() {
   const activeFilterLabel = FILTER_OPTIONS.find((option) => option.value === filterMode)?.label ?? '全部订单';
   const activeSortLabel = SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? '未完成优先';
   const activeCompanyLabel = queryCompany || '全部公司';
+  const hasActiveSearch = Boolean(searchKey.trim());
+  const isCancelledHiddenByDefault = hideCancelledByDefault;
 
   const companyPickerOptions = useMemo(() => {
     const allOptions: LinkOption[] = [{ label: '全部公司', value: '__all__', description: '跨公司查看全部采购订单' }];
@@ -370,10 +266,17 @@ export default function PurchaseTabScreen() {
   }, [companyOptions, queryCompany]);
 
   function handleResetQuery() {
+    setSearchInput('');
     setSearchKey('');
     setQueryCompany(preferences.defaultCompany);
-    setFilterMode('all');
+    setFilterMode('unfinished');
     setSortMode('unfinished_first');
+  }
+
+  function handleApplySearch() {
+    const nextSearchKey = searchInput.trim();
+    setSearchKey(nextSearchKey);
+    void loadSummaries(nextSearchKey);
   }
 
   return (
@@ -400,7 +303,7 @@ export default function PurchaseTabScreen() {
             </View>
             <View style={styles.heroCountPill}>
               <ThemedText style={styles.heroCountText} type="defaultSemiBold">
-                {filteredSummaries.length} 单
+                {deskSummary.visibleCount || filteredSummaries.length} 单
               </ThemedText>
             </View>
           </View>
@@ -481,13 +384,46 @@ export default function PurchaseTabScreen() {
             </View>
           </View>
 
-          <TextInput
-            autoCorrect={false}
-            onChangeText={setSearchKey}
-            placeholder="搜索订单号、供应商、公司、日期或状态"
-            style={[styles.searchInput, { backgroundColor: surfaceMuted, borderColor }]}
-            value={searchKey}
-          />
+          <View style={styles.searchComposer}>
+            <TextInput
+              autoCorrect={false}
+              onChangeText={setSearchInput}
+              onSubmitEditing={handleApplySearch}
+              placeholder="搜索订单号、供应商、公司、日期或状态"
+              returnKeyType="search"
+              style={[styles.searchInput, { backgroundColor: surfaceMuted, borderColor }]}
+              value={searchInput}
+            />
+            <Pressable
+              onPress={handleApplySearch}
+              style={[styles.searchButton, { backgroundColor: tintColor }]}>
+              <IconSymbol color="#FFFFFF" name="magnifyingglass" size={15} />
+              <ThemedText style={styles.searchButtonText} type="defaultSemiBold">
+                搜索
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          <View style={styles.searchStateRow}>
+            <View style={[styles.searchHintPill, { backgroundColor: surfaceMuted, borderColor }]}>
+              <ThemedText style={styles.searchHintText}>
+                {hasActiveSearch ? `当前关键词：${searchKey}` : '未输入关键词时，按筛选条件浏览采购订单'}
+              </ThemedText>
+            </View>
+            {hasActiveSearch ? (
+              <Pressable
+                onPress={() => {
+                  setSearchInput('');
+                  setSearchKey('');
+                  void loadSummaries('');
+                }}
+                style={[styles.inlineTextButton, { backgroundColor: surfaceMuted }]}>
+                <ThemedText style={[styles.inlineTextButtonText, { color: '#475569' }]} type="defaultSemiBold">
+                  清除关键词
+                </ThemedText>
+              </Pressable>
+            ) : null}
+          </View>
 
           <View style={styles.queryMetaRow}>
             <Pressable
@@ -520,14 +456,16 @@ export default function PurchaseTabScreen() {
             <View style={[styles.queryMetaCard, { backgroundColor: surfaceMuted }]}>
               <ThemedText style={styles.queryMetaLabel}>当前结果</ThemedText>
               <ThemedText style={styles.queryMetaValue} type="defaultSemiBold">
-                {filteredSummaries.length} / {summaries.length} 单
+                {deskSummary.visibleCount || filteredSummaries.length} / {deskSummary.totalCount || filteredSummaries.length} 单
               </ThemedText>
             </View>
           </View>
 
           <View style={[styles.resultBanner, { backgroundColor: surfaceMuted }]}>
             <ThemedText style={styles.resultBannerText}>
-              当前按 {activeCompanyLabel} 检索采购订单，支持搜索、公司范围、订单状态和排序方式联动查询。
+              {isCancelledHiddenByDefault
+                ? `当前默认聚焦有效采购订单，已作废订单不会混入结果；如需查看，可将订单状态切换为“已作废”或“全部订单”。`
+                : `当前按 ${activeCompanyLabel} 检索采购订单，支持关键词、公司范围、订单状态和排序方式联动查询。`}
             </ThemedText>
           </View>
         </View>
@@ -893,13 +831,58 @@ const styles = StyleSheet.create({
   refreshButtonText: {
     fontSize: 13,
   },
+  searchComposer: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
   searchInput: {
     borderRadius: 16,
     borderWidth: 1,
+    flex: 1,
     fontSize: 15,
     minHeight: 52,
     paddingHorizontal: 15,
     paddingVertical: 12,
+  },
+  searchButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 52,
+    minWidth: 92,
+    paddingHorizontal: 14,
+  },
+  searchButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  searchStateRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  searchHintPill: {
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  searchHintText: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  inlineTextButton: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  inlineTextButtonText: {
+    fontSize: 12,
   },
   queryMetaRow: {
     flexDirection: 'row',

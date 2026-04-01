@@ -409,6 +409,50 @@ In practice this means:
 
 - detail pages should consume purchase aggregation interfaces
 
+## Purchase Desk Search Notes (2026-04-01)
+
+This round corrected a design mismatch between the purchase workbench UI and the backend interfaces it relied on.
+
+### Interface Responsibility Split
+
+- `get_purchase_order_status_summary`
+  - still useful for lightweight status aggregation
+  - not ideal as the actual purchase workbench search interface
+- `search_purchase_orders_v2`
+  - now the dedicated purchase workbench query interface
+  - should be used for:
+    - keyword search
+    - company scope changes
+    - status filter changes
+    - sort changes
+    - paging / result counts
+
+### Current Mobile Purchase Desk Behavior
+
+- file:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/purchase.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+
+- current behavior:
+  - enter page -> auto query once
+  - change company / status / sort -> re-query backend
+  - press search button or keyboard search -> execute backend keyword search
+  - default mode:
+    - `status_filter = unfinished`
+    - `exclude_cancelled = true`
+
+This default matters because showing cancelled orders together with active orders was causing avoidable noise and confusion in the purchase workbench.
+
+### Confirmed Search Coverage
+
+The backend and real HTTP regression now cover:
+
+- exact order-name keyword search
+- receiving-pending filter
+- payment-pending filter
+- cancelled filter
+- default hidden-cancelled behavior
+
 ## Purchase Quick Flow Notes (2026-04-01)
 
 This round aligned the mobile purchase quick-flow UI with the now-completed backend quick create / quick rollback behavior, and also fixed a web-session request-layer issue that surfaced during purchase-page work.
