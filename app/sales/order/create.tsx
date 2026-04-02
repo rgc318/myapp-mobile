@@ -87,6 +87,14 @@ function formatMoney(value: number) {
   return MONEY.format(value);
 }
 
+function normalizeDeliveryDate(nextDeliveryDate: string | null | undefined, postingDate: string) {
+  const normalizedDeliveryDate = typeof nextDeliveryDate === 'string' ? nextDeliveryDate.trim() : '';
+  if (!isValidIsoDate(normalizedDeliveryDate)) {
+    return postingDate;
+  }
+  return normalizedDeliveryDate < postingDate ? postingDate : normalizedDeliveryDate;
+}
+
 function formatModeReference(
   label: string,
   rate: number | null | undefined,
@@ -274,7 +282,9 @@ export default function SalesOrderCreateScreen() {
     normalizeSalesMode(initialDraftForm.defaultSalesMode),
   );
   const postingDate = getTodayIsoDate();
-  const [deliveryDate, setDeliveryDate] = useState(initialDraftForm.deliveryDate || postingDate);
+  const [deliveryDate, setDeliveryDate] = useState(
+    normalizeDeliveryDate(initialDraftForm.deliveryDate, postingDate),
+  );
   const [remarks, setRemarks] = useState(initialDraftForm.remarks);
   const [shippingAddress, setShippingAddress] = useState(initialDraftForm.shippingAddress);
   const [shippingContact, setShippingContact] = useState(initialDraftForm.shippingContact);
@@ -359,7 +369,7 @@ export default function SalesOrderCreateScreen() {
     setCustomer(nextDraftForm.customer);
     setCompany(nextDraftForm.company || preferences.defaultCompany);
     setDefaultSalesMode(normalizeSalesMode(nextDraftForm.defaultSalesMode));
-    setDeliveryDate(nextDraftForm.deliveryDate || postingDate);
+    setDeliveryDate(normalizeDeliveryDate(nextDraftForm.deliveryDate, postingDate));
     setRemarks(nextDraftForm.remarks);
     setShippingAddress(nextDraftForm.shippingAddress);
     setShippingContact(nextDraftForm.shippingContact);
@@ -825,6 +835,14 @@ export default function SalesOrderCreateScreen() {
 
     const valid = await validateLinks();
     if (!valid) {
+      return;
+    }
+
+    if (!isValidIsoDate(deliveryDate) || deliveryDate < postingDate) {
+      const nextDeliveryDate = normalizeDeliveryDate(deliveryDate, postingDate);
+      setDeliveryDate(nextDeliveryDate);
+      setStatusMessage('交货日期不能早于下单日期，已为你调整为今天，请确认后再提交。', 'error');
+      showError('交货日期不能早于下单日期，已为你调整为今天，请确认后再提交。');
       return;
     }
 

@@ -256,6 +256,7 @@ export type QuickCancelPurchaseOrderResult = {
   cancelledPurchaseReceipt: string;
   completedSteps: string[];
   detail: PurchaseOrderDetail | null;
+  detailLoadedFromFetch: boolean;
 };
 
 function toOptionalNumber(value: unknown) {
@@ -972,6 +973,9 @@ export async function quickCancelPurchaseOrderV2(
     request_id: randomRequestId('mobile-purchase-order-quick-cancel'),
   });
 
+  // Keep the gateway call lightweight and always refresh the latest order detail explicitly.
+  const refreshedDetail = await fetchPurchaseOrderDetail(trimmedOrderName);
+
   return {
     orderName: typeof data?.purchase_order === 'string' ? data.purchase_order : trimmedOrderName,
     cancelledPaymentEntries: Array.isArray(data?.cancelled_payment_entries)
@@ -984,7 +988,8 @@ export async function quickCancelPurchaseOrderV2(
     completedSteps: Array.isArray(data?.completed_steps)
       ? data.completed_steps.map((value: unknown) => String(value ?? '')).filter(Boolean)
       : [],
-    detail: await fetchPurchaseOrderDetail(trimmedOrderName),
+    detail: refreshedDetail,
+    detailLoadedFromFetch: true,
   };
 }
 

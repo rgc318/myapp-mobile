@@ -112,6 +112,16 @@ export type SalesDeskSearchSummary = {
   cancelledCount: number;
 };
 
+export type QuickCancelSalesOrderResult = {
+  orderName: string;
+  cancelledPaymentEntries: string[];
+  cancelledSalesInvoice: string;
+  cancelledDeliveryNote: string;
+  completedSteps: string[];
+  detail: SalesOrderDetailV2 | null;
+  detailLoadedFromFetch: boolean;
+};
+
 export type DeliveryNoteDetailV2 = {
   name: string;
   customer: string;
@@ -218,11 +228,14 @@ export async function cancelSalesOrderV2(orderName: string) {
 export async function quickCancelSalesOrderV2(
   orderName: string,
   options?: { rollbackPayment?: boolean },
-) {
+): Promise<QuickCancelSalesOrderResult> {
   const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.quick_cancel_order_v2', {
     order_name: orderName,
     rollback_payment: options?.rollbackPayment ?? true,
   });
+
+  // Keep the gateway call lightweight and always refresh the latest order detail explicitly.
+  const refreshedDetail = await getSalesOrderDetailV2(orderName);
 
   return {
     orderName: typeof data?.order === 'string' ? data.order : orderName,
@@ -236,7 +249,8 @@ export async function quickCancelSalesOrderV2(
     completedSteps: Array.isArray(data?.completed_steps)
       ? data.completed_steps.map((value: unknown) => String(value ?? '')).filter(Boolean)
       : [],
-    detail: await getSalesOrderDetailV2(orderName),
+    detail: refreshedDetail,
+    detailLoadedFromFetch: true,
   };
 }
 
