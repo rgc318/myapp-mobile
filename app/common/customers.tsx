@@ -1,5 +1,4 @@
-import { Link } from 'expo-router';
-import type { Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
@@ -10,56 +9,40 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useFeedback } from '@/providers/feedback-provider';
 import { fetchCustomers, type CustomerDetail } from '@/services/customers';
 
-function QuickActionTile({
-  href,
-  icon,
-  label,
-  description,
-}: {
-  href: Href;
-  icon: string;
-  label: string;
-  description?: string;
-}) {
-  const surface = useThemeColor({}, 'surface');
-  const borderColor = useThemeColor({}, 'border');
-  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
-  const tintColor = useThemeColor({}, 'tint');
-
+function HeroStat({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
-    <Link href={href} style={[styles.quickActionTile, { backgroundColor: surface, borderColor }]}>
-      <View style={[styles.quickActionIconWrap, { backgroundColor: surfaceMuted }]}>
-        <IconSymbol color={tintColor} name={icon} size={18} />
-      </View>
-      <View style={styles.quickActionCopy}>
-        <ThemedText style={styles.quickActionLabel} type="defaultSemiBold">
-          {label}
-        </ThemedText>
-        {description ? <ThemedText style={styles.quickActionDescription}>{description}</ThemedText> : null}
-      </View>
-    </Link>
+    <View style={[styles.heroStatCard, { borderColor: `${accent}33`, backgroundColor: `${accent}12` }]}>
+      <ThemedText style={styles.heroStatLabel}>{label}</ThemedText>
+      <ThemedText style={[styles.heroStatValue, { color: accent }]} type="defaultSemiBold">
+        {value}
+      </ThemedText>
+    </View>
   );
 }
 
-function CustomerCard({ item }: { item: CustomerDetail }) {
+function CustomerCard({ item, onOpen }: { item: CustomerDetail; onOpen: (name: string) => void }) {
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const success = useThemeColor({}, 'success');
   const danger = useThemeColor({}, 'danger');
   const tintColor = useThemeColor({}, 'tint');
+  const muted = useThemeColor({}, 'surfaceMuted');
+
+  const customerLabel = item.displayName || item.customerName || item.name;
+  const shortCode = item.name.length > 22 ? `${item.name.slice(0, 22)}...` : item.name;
+  const contactLine = [item.defaultContact?.displayName, item.mobileNo || item.defaultContact?.phone]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <Link
-      href={{ pathname: '/common/customer/[customerName]', params: { customerName: item.name } } as Href}
-      style={[styles.card, { backgroundColor: surface, borderColor }]}>
-      <View style={styles.cardTopRow}>
-        <View style={styles.cardMainCopy}>
-          <ThemedText style={styles.cardTitle} type="defaultSemiBold">
-            {item.displayName || item.customerName || item.name}
+    <Pressable onPress={() => onOpen(item.name)} style={[styles.card, { backgroundColor: surface, borderColor }]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardTitleWrap}>
+          <ThemedText numberOfLines={2} style={styles.cardTitle} type="defaultSemiBold">
+            {customerLabel}
           </ThemedText>
-          <ThemedText style={styles.cardMeta}>编码 {item.name}</ThemedText>
-          <ThemedText numberOfLines={1} style={[styles.cardGroupMeta, { color: tintColor }]} type="defaultSemiBold">
-            {item.customerGroup || '未设置客户分组'}
+          <ThemedText numberOfLines={1} style={styles.cardMeta}>
+            客户编码: {shortCode}
           </ThemedText>
         </View>
         <View
@@ -74,11 +57,58 @@ function CustomerCard({ item }: { item: CustomerDetail }) {
           </ThemedText>
         </View>
       </View>
-    </Link>
+
+      <View style={styles.tagRow}>
+        <ThemedText style={styles.tagLabel}>分组</ThemedText>
+        <View style={[styles.tag, { backgroundColor: muted }]}>
+          <ThemedText style={[styles.tagText, { color: tintColor }]} type="defaultSemiBold">
+            {item.customerGroup || '未分组'}
+          </ThemedText>
+        </View>
+        {item.defaultPriceList ? (
+          <>
+            <ThemedText style={styles.tagLabel}>价格表</ThemedText>
+            <View style={[styles.tag, { backgroundColor: 'rgba(251,146,60,0.14)' }]}>
+              <ThemedText style={[styles.tagText, { color: '#C2410C' }]} type="defaultSemiBold">
+                {item.defaultPriceList}
+              </ThemedText>
+            </View>
+          </>
+        ) : null}
+      </View>
+
+      <View style={[styles.infoPanel, { backgroundColor: muted }]}>
+        <View style={styles.infoRow}>
+          <ThemedText style={styles.infoLabel}>默认联系人</ThemedText>
+          <ThemedText numberOfLines={1} style={styles.infoValue} type="defaultSemiBold">
+            {item.defaultContact?.displayName || '未设置'}
+          </ThemedText>
+        </View>
+        <View style={styles.infoRow}>
+          <ThemedText style={styles.infoLabel}>联系信息</ThemedText>
+          <ThemedText numberOfLines={1} style={styles.infoValue} type="defaultSemiBold">
+            {contactLine || item.emailId || '未设置'}
+          </ThemedText>
+        </View>
+        <View style={styles.infoRow}>
+          <ThemedText style={styles.infoLabel}>默认地址</ThemedText>
+          <ThemedText numberOfLines={1} style={styles.infoValue} type="defaultSemiBold">
+            {item.defaultAddress?.city || item.defaultAddress?.country || '未设置'}
+          </ThemedText>
+        </View>
+        <View style={styles.infoRow}>
+          <ThemedText style={styles.infoLabel}>最近更新</ThemedText>
+          <ThemedText numberOfLines={1} style={styles.infoValue} type="defaultSemiBold">
+            {item.modified ? item.modified.slice(0, 10) : '—'}
+          </ThemedText>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
 export default function CustomersScreen() {
+  const router = useRouter();
   const { showError } = useFeedback();
   const [query, setQuery] = useState('');
   const [disabledFilter, setDisabledFilter] = useState<number | null>(0);
@@ -116,6 +146,7 @@ export default function CustomersScreen() {
   const summary = useMemo(
     () => ({
       activeCount: items.filter((item) => !item.disabled).length,
+      pausedCount: items.filter((item) => item.disabled).length,
       contactCount: items.filter((item) => item.defaultContact?.displayName).length,
     }),
     [items],
@@ -127,21 +158,47 @@ export default function CustomersScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl onRefresh={() => void loadItems(true)} refreshing={isRefreshing} />}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.quickActionsRow}>
-          <QuickActionTile
-            description="补充默认联系人、地址和价格表"
-            href={'/common/customer/create'}
-            icon="person.fill"
-            label="新增客户"
-          />
+        <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroCopy}>
+              <ThemedText style={styles.heroEyebrow}>CUSTOMER HUB</ThemedText>
+              <ThemedText style={styles.heroTitle} type="title">
+                客户中心
+              </ThemedText>
+              <ThemedText style={styles.heroDescription}>
+                统一维护客户档案、联系人、地址与价格表，减少订单和收款链路里的重复录入。
+              </ThemedText>
+            </View>
+            <Pressable onPress={() => router.push('/common/customer/create')} style={[styles.primaryCta, { backgroundColor: tintColor }]}>
+              <IconSymbol color="#FFFFFF" name="person.fill" size={16} />
+              <ThemedText style={styles.primaryCtaText} type="defaultSemiBold">
+                新增客户
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          <View style={styles.heroStatsRow}>
+            <HeroStat accent="#2563EB" label="启用中" value={String(summary.activeCount)} />
+            <HeroStat accent="#16A34A" label="已设联系人" value={String(summary.contactCount)} />
+            <HeroStat accent="#EA580C" label="已停用" value={String(summary.pausedCount)} />
+          </View>
         </View>
 
-        <View style={[styles.searchPanel, { backgroundColor: surface, borderColor }]}>
-          <View style={styles.searchPanelHeader}>
-            <ThemedText style={styles.searchPanelTitle} type="defaultSemiBold">
-              客户总览
-            </ThemedText>
-            <ThemedText style={styles.searchPanelHint}>按名称、编码、手机号或邮箱检索客户，快速进入详情维护。</ThemedText>
+        <View style={[styles.filterCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.filterHeader}>
+            <View>
+              <ThemedText style={styles.filterTitle} type="defaultSemiBold">
+                检索与筛选
+              </ThemedText>
+              <ThemedText style={styles.filterHint}>支持按客户名称、编码、手机或邮箱快速定位。</ThemedText>
+            </View>
+            <Pressable onPress={() => setQuery('')} style={[styles.resetButton, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                清空
+              </ThemedText>
+            </Pressable>
           </View>
 
           <View style={[styles.searchBar, { backgroundColor: surfaceMuted, borderColor }]}>
@@ -155,10 +212,10 @@ export default function CustomersScreen() {
             />
           </View>
 
-          <View style={[styles.segmentedWrap, { backgroundColor: surfaceMuted }]}>
+          <View style={styles.segmentedWrap}>
             {[
               { label: '启用中', value: 0 as const },
-              { label: '全部状态', value: null },
+              { label: '全部', value: null },
               { label: '已停用', value: 1 as const },
             ].map((option) => {
               const active = disabledFilter === option.value;
@@ -166,40 +223,46 @@ export default function CustomersScreen() {
                 <Pressable
                   key={option.label}
                   onPress={() => setDisabledFilter(option.value)}
-                  style={[styles.segmentedOption, active ? { backgroundColor: surface, borderColor } : null]}>
-                  <ThemedText style={[styles.segmentedText, active ? { color: tintColor } : null]} type="defaultSemiBold">
+                  style={[
+                    styles.segmentedOption,
+                    active
+                      ? { backgroundColor: tintColor, borderColor: tintColor }
+                      : { backgroundColor: surfaceMuted, borderColor },
+                  ]}>
+                  <ThemedText style={[styles.segmentedText, active ? styles.segmentedTextActive : null]} type="defaultSemiBold">
                     {option.label}
                   </ThemedText>
                 </Pressable>
               );
             })}
           </View>
+        </View>
 
-          <View style={styles.summaryRowStats}>
-            <View style={[styles.summaryCard, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.summaryStatLabel}>启用客户</ThemedText>
-              <ThemedText style={styles.summaryStatValue} type="defaultSemiBold">
-                {summary.activeCount}
-              </ThemedText>
-            </View>
-            <View style={[styles.summaryCard, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.summaryStatLabel}>已设联系人</ThemedText>
-              <ThemedText style={styles.summaryStatValue} type="defaultSemiBold">
-                {summary.contactCount}
-              </ThemedText>
-            </View>
-          </View>
+        <View style={styles.listHeader}>
+          <ThemedText style={styles.listTitle} type="defaultSemiBold">
+            客户列表
+          </ThemedText>
+          <ThemedText style={styles.listMeta}>{items.length} 条结果</ThemedText>
         </View>
 
         <View style={styles.listWrap}>
           {items.length ? (
-            items.map((item) => <CustomerCard item={item} key={item.name} />)
+            items.map((item) => (
+              <CustomerCard
+                item={item}
+                key={item.name}
+                onOpen={(name) => router.push({ pathname: '/common/customer/[customerName]', params: { customerName: name } })}
+              />
+            ))
           ) : (
             <View style={[styles.emptyCard, { backgroundColor: surface, borderColor }]}>
+              <View style={styles.emptyIconWrap}>
+                <IconSymbol color={tintColor} name="person.fill" size={24} />
+              </View>
               <ThemedText style={styles.emptyTitle} type="defaultSemiBold">
                 没有匹配的客户
               </ThemedText>
-              <ThemedText style={styles.emptyHint}>换个关键词试试，或者直接新增客户主数据。</ThemedText>
+              <ThemedText style={styles.emptyHint}>换个关键词试试，或者直接新增一条客户主数据。</ThemedText>
             </View>
           )}
         </View>
@@ -213,159 +276,260 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingBottom: 24,
   },
-  quickActionsRow: {
-    gap: 12,
-  },
-  quickActionTile: {
-    alignItems: 'center',
-    borderRadius: 22,
-    borderWidth: 1,
-    flexDirection: 'row',
-    minHeight: 92,
-    padding: 18,
-    textDecorationLine: 'none',
-  },
-  quickActionIconWrap: {
-    alignItems: 'center',
-    borderRadius: 18,
-    height: 44,
-    justifyContent: 'center',
-    marginTop: 3,
-    width: 44,
-  },
-  quickActionCopy: {
-    flex: 1,
-    gap: 2,
-    justifyContent: 'center',
-    marginLeft: 10,
-  },
-  quickActionLabel: {
-    fontSize: 17,
-    lineHeight: 22,
-  },
-  quickActionDescription: {
-    lineHeight: 20,
-    opacity: 0.72,
-  },
-  searchPanel: {
+  heroCard: {
     borderRadius: 24,
     borderWidth: 1,
+    overflow: 'hidden',
+    padding: 16,
+    position: 'relative',
     gap: 14,
-    padding: 18,
   },
-  searchPanelHeader: {
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 200,
+    position: 'absolute',
+    right: -78,
+    top: -66,
+    width: 200,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    height: 128,
+    left: -36,
+    position: 'absolute',
+    top: 108,
+    width: 128,
+  },
+  heroTopRow: {
+    gap: 14,
+  },
+  heroCopy: {
     gap: 4,
   },
-  searchPanelTitle: {
-    fontSize: 19,
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.4,
   },
-  searchPanelHint: {
-    color: '#64748B',
-    fontSize: 13,
+  heroTitle: {
+    color: '#14213D',
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  heroDescription: {
+    color: '#5B6B81',
+    fontSize: 15,
+    lineHeight: 22,
+    maxWidth: '94%',
+  },
+  primaryCta: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 16,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
+  },
+  primaryCtaText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     lineHeight: 18,
+    includeFontPadding: false,
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  heroStatCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    minHeight: 74,
+    padding: 12,
+  },
+  heroStatLabel: {
+    color: '#6B7280',
+    fontSize: 12,
+  },
+  heroStatValue: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
+  filterCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 12,
+    padding: 16,
+  },
+  filterHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  filterTitle: {
+    fontSize: 17,
+  },
+  filterHint: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 20,
+    maxWidth: 240,
+  },
+  resetButton: {
+    borderRadius: 999,
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
   },
   searchBar: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 10,
-    minHeight: 54,
-    paddingHorizontal: 14,
+    gap: 8,
+    minHeight: 50,
+    paddingHorizontal: 12,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    minHeight: 44,
+    fontSize: 14,
+    paddingVertical: 10,
   },
   segmentedWrap: {
-    borderRadius: 18,
     flexDirection: 'row',
     gap: 8,
-    padding: 6,
   },
   segmentedOption: {
     alignItems: 'center',
-    borderColor: '#DEE4EA',
     borderRadius: 14,
     borderWidth: 1,
     flex: 1,
-    minHeight: 42,
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    minHeight: 42,
+    paddingHorizontal: 10,
   },
   segmentedText: {
-    fontSize: 14,
-  },
-  summaryRowStats: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  summaryCard: {
-    borderRadius: 18,
-    flex: 1,
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  summaryStatLabel: {
     color: '#64748B',
     fontSize: 13,
   },
-  summaryStatValue: {
-    fontSize: 24,
-    lineHeight: 30,
+  segmentedTextActive: {
+    color: '#FFFFFF',
+  },
+  listHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
+  listTitle: {
+    fontSize: 18,
+  },
+  listMeta: {
+    color: '#64748B',
+    fontSize: 13,
   },
   listWrap: {
-    gap: 12,
+    gap: 10,
   },
   card: {
     borderRadius: 22,
     borderWidth: 1,
     gap: 12,
-    padding: 18,
-    textDecorationLine: 'none',
+    padding: 14,
   },
-  cardTopRow: {
+  cardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     justifyContent: 'space-between',
   },
-  cardMainCopy: {
+  cardTitleWrap: {
     flex: 1,
-    gap: 5,
+    gap: 4,
+    minWidth: 0,
   },
   cardTitle: {
-    flexShrink: 1,
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 24,
+    lineHeight: 30,
   },
   cardMeta: {
     color: '#64748B',
-    fontSize: 14,
-  },
-  cardGroupMeta: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 17,
   },
   statusChip: {
-    alignSelf: 'flex-start',
     borderRadius: 999,
-    marginTop: 2,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
   },
   statusChipText: {
-    fontSize: 14,
+    fontSize: 11,
+  },
+  tagRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginTop: -2,
+  },
+  tagLabel: {
+    color: '#6B7280',
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  tag: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  tagText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  infoPanel: {
+    borderRadius: 14,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  infoRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  infoLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  infoValue: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 17,
+    textAlign: 'right',
   },
   emptyCard: {
     alignItems: 'center',
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1,
-    gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 24,
+    gap: 10,
+    padding: 24,
+  },
+  emptyIconWrap: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 18,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
   },
   emptyTitle: {
     fontSize: 18,

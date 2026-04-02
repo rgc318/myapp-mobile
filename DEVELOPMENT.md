@@ -5579,3 +5579,29 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/suppliers.ts`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/product-form-controls.tsx`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+
+## Customer Management UI Update (2026-04-02)
+
+### What Changed
+
+- Aligned customer management visual design with the new supplier management style.
+- Refactored customer list page into a clearer mobile hierarchy:
+  - hero summary section
+  - compact filter/search section
+  - high-density customer cards
+- Upgraded customer create page into grouped card sections with onboarding hints.
+
+### UX And Layout Adjustments
+
+- Customer list cards now use full-card click behavior and cleaner information grouping.
+- Card content now emphasizes:
+  - customer name
+  - status
+  - group/price list tags
+  - key-value summary rows (contact/address/update)
+- Search/filter spacing and typography now match supplier management rhythm for consistency.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customers.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customer/create.tsx`

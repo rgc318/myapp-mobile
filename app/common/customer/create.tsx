@@ -10,6 +10,17 @@ import { useFeedback } from '@/providers/feedback-provider';
 import { createCustomer } from '@/services/customers';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
 
+function SectionHeader({ title, hint }: { title: string; hint: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+        {title}
+      </ThemedText>
+      <ThemedText style={styles.sectionHint}>{hint}</ThemedText>
+    </View>
+  );
+}
+
 export default function CustomerCreateScreen() {
   const router = useRouter();
   const { showError, showSuccess } = useFeedback();
@@ -216,10 +227,33 @@ export default function CustomerCreateScreen() {
       }
       title="新增客户">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
+          <View style={styles.heroHeader}>
+            <View style={styles.heroCopy}>
+              <ThemedText style={styles.heroEyebrow}>NEW CUSTOMER</ThemedText>
+              <ThemedText style={styles.heroTitle} type="title">
+                新建客户档案
+              </ThemedText>
+              <ThemedText style={styles.heroDescription}>
+                提前维护客户主数据、默认联系人与价格表，后续订单、开票和收款会自动复用。
+              </ThemedText>
+            </View>
+          </View>
+          <View style={styles.heroTipsRow}>
+            {['客户资料', '联系人', '默认地址', '价格表'].map((label) => (
+              <View key={label} style={styles.tipChip}>
+                <ThemedText style={styles.tipChipText} type="defaultSemiBold">
+                  {label}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        </View>
+
         <View style={styles.sectionBlock}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            客户资料
-          </ThemedText>
+          <SectionHeader hint="定义客户主体、分组、销售区域和默认结算规则。" title="客户资料" />
           <ProductTextField label="客户名称" onChangeText={setCustomerName} placeholder="例如 Palmer Productions Ltd." required value={customerName} />
           <View style={styles.segmentedWrap}>
             {[
@@ -259,9 +293,7 @@ export default function CustomerCreateScreen() {
         </View>
 
         <View style={styles.sectionBlock}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            默认联系人
-          </ThemedText>
+          <SectionHeader hint="订单和对账优先使用这里的客户联系人信息。" title="默认联系人" />
           <ProductTextField label="联系人名称" onChangeText={setContactDisplayName} placeholder="例如 张三" value={contactDisplayName} />
           <View style={styles.rowFields}>
             <View style={styles.rowField}>
@@ -274,9 +306,7 @@ export default function CustomerCreateScreen() {
         </View>
 
         <View style={styles.sectionBlock}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            默认地址
-          </ThemedText>
+          <SectionHeader hint="默认地址会带入销售订单，用于发货和发票流程。" title="默认地址" />
           <ProductTextField label="地址行 1" onChangeText={setAddressLine1} placeholder="例如 北京市朝阳区测试客户路 100 号" value={addressLine1} />
           <ProductTextField label="地址行 2" onChangeText={setAddressLine2} placeholder="楼层、园区或补充说明，可留空" value={addressLine2} />
           <View style={styles.rowFields}>
@@ -354,17 +384,97 @@ export default function CustomerCreateScreen() {
 const styles = StyleSheet.create({
   content: {
     gap: 16,
-    paddingBottom: 20,
+    paddingBottom: 140,
+  },
+  heroCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#D8E1EE',
+    gap: 16,
+    overflow: 'hidden',
+    padding: 18,
+    position: 'relative',
+    backgroundColor: '#FFFFFF',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 200,
+    position: 'absolute',
+    right: -80,
+    top: -70,
+    width: 200,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(245,158,11,0.16)',
+    borderRadius: 999,
+    height: 120,
+    left: -30,
+    position: 'absolute',
+    top: 118,
+    width: 120,
+  },
+  heroHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.4,
+  },
+  heroTitle: {
+    color: '#14213D',
+    fontSize: 30,
+    lineHeight: 34,
+  },
+  heroDescription: {
+    color: '#5B6B81',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  heroTipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tipChip: {
+    backgroundColor: '#EEF4FF',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  tipChipText: {
+    color: '#355AA8',
+    fontSize: 12,
+    lineHeight: 15,
   },
   sectionBlock: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D8E1EE',
+    borderRadius: 24,
+    borderWidth: 1,
     gap: 12,
+    padding: 18,
+  },
+  sectionHeader: {
+    gap: 4,
   },
   sectionTitle: {
     fontSize: 18,
   },
+  sectionHint: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 20,
+  },
   rowFields: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   rowField: {
     flex: 1,
@@ -375,7 +485,6 @@ const styles = StyleSheet.create({
   },
   segmentedOption: {
     alignItems: 'center',
-    backgroundColor: '#EFF3F7',
     borderColor: '#DEE4EA',
     borderRadius: 16,
     borderWidth: 1,
@@ -393,7 +502,8 @@ const styles = StyleSheet.create({
   },
   footerSecondary: {
     alignItems: 'center',
-    borderColor: '#1677FF',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#C9D8EE',
     borderRadius: 18,
     borderWidth: 1,
     flex: 1,
