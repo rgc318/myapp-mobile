@@ -899,11 +899,14 @@ export default function PurchaseOrderCreateScreen() {
           onLayout={(event) => {
             basicSectionYRef.current = event.nativeEvent.layout.y;
           }}
-          style={[styles.card, styles.itemsCard, { backgroundColor: surface, borderColor }]}>
+          style={[styles.card, styles.itemsCard, styles.heroCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderCopy}>
+              <ThemedText style={styles.heroEyebrow}>PURCHASE CREATE</ThemedText>
               <ThemedText style={styles.cardTitle} type="defaultSemiBold">
-                主体信息
+                新建采购订单
               </ThemedText>
               <ThemedText style={styles.sectionBody}>
                 先确认供应商、公司和计划到货时间，再继续添加采购商品。
@@ -1469,6 +1472,33 @@ const styles = StyleSheet.create({
     gap: 14,
     overflow: 'visible',
     padding: 18,
+  },
+  heroCard: {
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 188,
+    position: 'absolute',
+    right: -74,
+    top: -66,
+    width: 188,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    height: 112,
+    left: -24,
+    position: 'absolute',
+    top: 130,
+    width: 112,
+  },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.2,
   },
   overlayCard: {
     zIndex: 120,

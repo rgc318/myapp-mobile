@@ -336,6 +336,41 @@ export default function SalesPaymentCreateScreen() {
         </View>
       }>
       <View style={styles.formCard}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
+          <ThemedText style={styles.heroEyebrow}>RECEIVABLE DESK</ThemedText>
+          <View style={styles.heroHeader}>
+            <View style={styles.heroCopy}>
+              <ThemedText style={styles.heroTitle} type="defaultSemiBold">
+                销售收款登记
+              </ThemedText>
+              <ThemedText style={styles.heroHint}>
+                按发票登记实收，支持部分收款、核销结清和多收留存未分配金额。
+              </ThemedText>
+            </View>
+            <View style={styles.heroBadge}>
+              <ThemedText style={styles.heroBadgeText} type="defaultSemiBold">
+                {paymentSourceName || '未选发票'}
+              </ThemedText>
+            </View>
+          </View>
+          <View style={styles.heroMetrics}>
+            <View style={styles.heroMetricCard}>
+              <ThemedText style={styles.heroMetricLabel}>建议金额</ThemedText>
+              <ThemedText style={styles.heroMetricValue} type="defaultSemiBold">
+                {formatCurrencyValue(suggestedAmount, currency)}
+              </ThemedText>
+            </View>
+            <View style={styles.heroMetricCard}>
+              <ThemedText style={styles.heroMetricLabel}>本次实收</ThemedText>
+              <ThemedText style={styles.heroMetricValue} type="defaultSemiBold">
+                {formatCurrencyValue(normalizedPaidAmount || null, currency)}
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
         {isLoadingInvoiceDetail ? (
           <View style={styles.confirmationLoadingCard}>
             <ActivityIndicator color="#2563EB" />
@@ -735,6 +770,96 @@ export default function SalesPaymentCreateScreen() {
 const styles = StyleSheet.create({
   formCard: {
     gap: 16,
+  },
+  heroCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D7DEE7',
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 10,
+    overflow: 'hidden',
+    padding: 16,
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 170,
+    position: 'absolute',
+    right: -70,
+    top: -60,
+    width: 170,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    height: 108,
+    left: -22,
+    position: 'absolute',
+    top: 102,
+    width: 108,
+  },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.2,
+  },
+  heroHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  heroTitle: {
+    color: '#14213D',
+    fontSize: 22,
+    lineHeight: 27,
+  },
+  heroHint: {
+    color: '#5B6B81',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  heroBadge: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderRadius: 999,
+    borderWidth: 1,
+    maxWidth: 170,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  heroBadgeText: {
+    color: '#1D4ED8',
+    fontSize: 12,
+  },
+  heroMetrics: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  heroMetricCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D8E1EE',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    minHeight: 64,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  heroMetricLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  heroMetricValue: {
+    color: '#0F172A',
+    fontSize: 14,
+    lineHeight: 18,
   },
   confirmationLoadingCard: {
     alignItems: 'center',

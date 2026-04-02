@@ -355,6 +355,41 @@ export default function PurchasePaymentCreateScreen() {
         </View>
       }>
       <ScrollView contentContainerStyle={styles.container}>
+        <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
+          <ThemedText style={styles.heroEyebrow}>PAYABLE DESK</ThemedText>
+          <View style={styles.heroHeader}>
+            <View style={styles.heroCopy}>
+              <ThemedText style={styles.heroTitle} type="defaultSemiBold">
+                供应商付款登记
+              </ThemedText>
+              <ThemedText style={styles.heroHint}>
+                基于采购发票登记付款，支持差额确认与回退最近付款。
+              </ThemedText>
+            </View>
+            <View style={[styles.heroBadge, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.heroBadgeText} type="defaultSemiBold">
+                {paymentSourceName || '未选发票'}
+              </ThemedText>
+            </View>
+          </View>
+          <View style={styles.heroMetrics}>
+            <View style={[styles.heroMetricCard, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.heroMetricLabel}>建议付款</ThemedText>
+              <ThemedText style={styles.heroMetricValue} type="defaultSemiBold">
+                {formatMoney(expectedAmount, invoiceDetail?.currency || 'CNY')}
+              </ThemedText>
+            </View>
+            <View style={[styles.heroMetricCard, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.heroMetricLabel}>本次付款</ThemedText>
+              <ThemedText style={styles.heroMetricValue} type="defaultSemiBold">
+                {formatMoney(normalizedAmount || null, invoiceDetail?.currency || 'CNY')}
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
         {isLoading ? (
           <View style={[styles.loadingCard, { backgroundColor: surface, borderColor }]}>
             <ActivityIndicator color={tintColor} />
@@ -704,6 +739,90 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 18,
     paddingBottom: 92,
+  },
+  heroCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 10,
+    overflow: 'hidden',
+    padding: 16,
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 170,
+    position: 'absolute',
+    right: -70,
+    top: -60,
+    width: 170,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    height: 108,
+    left: -22,
+    position: 'absolute',
+    top: 102,
+    width: 108,
+  },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.2,
+  },
+  heroHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  heroTitle: {
+    color: '#14213D',
+    fontSize: 22,
+    lineHeight: 27,
+  },
+  heroHint: {
+    color: '#5B6B81',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  heroBadge: {
+    borderColor: '#D8E1EE',
+    borderRadius: 999,
+    borderWidth: 1,
+    maxWidth: 170,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  heroBadgeText: {
+    color: '#1D4ED8',
+    fontSize: 12,
+  },
+  heroMetrics: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  heroMetricCard: {
+    borderRadius: 14,
+    flex: 1,
+    gap: 4,
+    minHeight: 64,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  heroMetricLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  heroMetricValue: {
+    color: '#0F172A',
+    fontSize: 14,
+    lineHeight: 18,
   },
   card: {
     borderRadius: 24,

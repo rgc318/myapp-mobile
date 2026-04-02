@@ -963,8 +963,14 @@ export default function SalesOrderCreateScreen() {
             customerSectionYRef.current = event.nativeEvent.layout.y;
           }}
           style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
           <View style={styles.heroHeader}>
             <View style={styles.heroHeaderCopy}>
+              <ThemedText style={styles.heroEyebrow}>SALES CREATE</ThemedText>
+              <ThemedText style={styles.heroTitle} type="defaultSemiBold">
+                新建销售订单
+              </ThemedText>
               <ThemedText style={styles.heroSubtitle}>录入客户、模式和商品后即可保存或快速开单。</ThemedText>
             </View>
             <View style={[styles.statusPill, { backgroundColor: accentSoft }]}>
@@ -1539,7 +1545,27 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     gap: 14,
+    overflow: 'hidden',
     padding: 16,
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 180,
+    position: 'absolute',
+    right: -72,
+    top: -64,
+    width: 180,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    height: 108,
+    left: -26,
+    position: 'absolute',
+    top: 120,
+    width: 108,
   },
   heroHeader: {
     alignItems: 'flex-start',
@@ -1548,12 +1574,23 @@ const styles = StyleSheet.create({
   },
   heroHeaderCopy: {
     flex: 1,
+    gap: 3,
     paddingRight: 12,
+  },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.2,
+  },
+  heroTitle: {
+    color: '#14213D',
+    fontSize: 22,
+    lineHeight: 27,
   },
   heroSubtitle: {
     color: '#5F6B7A',
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 2,
   },
   statusPill: {
     borderRadius: 999,
@@ -1627,8 +1664,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   summaryMetric: {
-    backgroundColor: '#F5F7FA',
+    backgroundColor: 'rgba(245,247,250,0.9)',
+    borderColor: '#D8E1EE',
     borderRadius: 18,
+    borderWidth: 1,
     flex: 1,
     gap: 6,
     paddingHorizontal: 14,

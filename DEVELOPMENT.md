@@ -5713,3 +5713,36 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 ### Files Updated
 
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+
+## Create And Payment Page Style Refresh (2026-04-02)
+
+### What Changed
+
+- Refreshed visual layout for create/payment pages in sales and purchase flows.
+- Kept all existing submission logic unchanged (UI-only update).
+
+### Pages Updated
+
+- Sales order create
+- Purchase order create
+- Sales payment create
+- Purchase payment create
+
+### Visual Alignment Goals
+
+- Unified top hero presentation:
+  - eyebrow label
+  - main title
+  - short contextual hint
+  - soft background accents
+- Unified metric card rhythm:
+  - border, radius, spacing, and typography
+  - improved scannability for amount/status snapshots
+- Reduced style fragmentation between old/new screens to match current master-data page language.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/payment/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/payment/create.tsx`
