@@ -5746,3 +5746,36 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/payment/create.tsx`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/payment/create.tsx`
+
+## Purchase Cancel UX Alignment With Backend Actions (2026-04-02)
+
+### What Changed
+
+- Purchase order detail now consumes backend cancel action flags directly instead of front-end guessing.
+- Updated mapped fields from order detail response:
+  - `actions.can_cancel_purchase_order` -> `detail.canCancel`
+  - `actions.cancel_purchase_order_hint` -> `detail.cancelHint`
+
+### UX Update
+
+- When user taps `作废订单` but order is not directly cancellable:
+  - replaced top toast-style error with a centered warning modal (sales-style)
+  - modal title: `当前订单不可直接作废`
+  - modal content prefers backend `cancelHint`
+  - modal provides quick entry to rollback flow (`回退并修改`) when available
+
+### Why
+
+- Keeps purchase cancel eligibility fully aligned with backend business rules.
+- Avoids drift between UI behavior and actual cancel API constraints.
+- Makes failure guidance explicit and actionable in-place.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+
+### Validation
+
+- `npm run lint -- services/purchases.ts app/purchase/order/edit/[orderName].tsx`
+- Result: passed

@@ -143,6 +143,7 @@ export type PurchaseOrderDetail = {
   canProcessReturn: boolean;
   canUpdate: boolean;
   canCancel: boolean;
+  cancelHint: string;
   latestPaymentEntry: string;
   latestPaymentInvoice: string;
   latestUnallocatedAmount: number | null;
@@ -993,6 +994,20 @@ export async function quickCancelPurchaseOrderV2(
   };
 }
 
+export async function cancelPurchaseOrderV2(orderName: string): Promise<PurchaseOrderDetail | null> {
+  const trimmedOrderName = orderName.trim();
+  if (!trimmedOrderName) {
+    throw new Error('缺少采购订单号。');
+  }
+
+  await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.cancel_purchase_order_v2', {
+    order_name: trimmedOrderName,
+    request_id: randomRequestId('mobile-purchase-order-cancel'),
+  });
+
+  return fetchPurchaseOrderDetail(trimmedOrderName);
+}
+
 export async function submitSupplierPayment(payload: {
   referenceName: string;
   paidAmount: number;
@@ -1103,14 +1118,8 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
     canProcessReturn: Boolean(actions.can_process_purchase_return),
     canUpdate:
       (typeof data.document_status === 'string' ? data.document_status : '') !== 'cancelled',
-    canCancel:
-      (typeof data.document_status === 'string' ? data.document_status : '') === 'submitted' &&
-      !(
-        Array.isArray(references.purchase_receipts) && references.purchase_receipts.length
-      ) &&
-      !(
-        Array.isArray(references.purchase_invoices) && references.purchase_invoices.length
-      ),
+    canCancel: Boolean(actions.can_cancel_purchase_order),
+    cancelHint: typeof actions.cancel_purchase_order_hint === 'string' ? actions.cancel_purchase_order_hint : '',
     latestPaymentEntry: typeof references.latest_payment_entry === 'string' ? references.latest_payment_entry : '',
     latestPaymentInvoice: typeof payment.latest_payment_invoice === 'string' ? payment.latest_payment_invoice : '',
     latestUnallocatedAmount: toOptionalNumber(payment.latest_unallocated_amount),

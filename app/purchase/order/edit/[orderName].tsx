@@ -27,6 +27,7 @@ import { formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
 import { useFeedback } from '@/providers/feedback-provider';
 import { fetchProductDetail } from '@/services/products';
 import {
+  cancelPurchaseOrderV2,
   fetchPurchaseCompanyContext,
   fetchPurchaseOrderDetail,
   getWarehouseCompany,
@@ -427,6 +428,7 @@ export default function PurchaseOrderEditScreen() {
   const [detail, setDetail] = useState<PurchaseOrderDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isQuickRollingBack, setIsQuickRollingBack] = useState(false);
   const [transactionDate, setTransactionDate] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
@@ -444,6 +446,9 @@ export default function PurchaseOrderEditScreen() {
   const [pickerOptions, setPickerOptions] = useState<{ label: string; value: string; description?: string }[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showCancelRestrictionDialog, setShowCancelRestrictionDialog] = useState(false);
+  const [cancelRestrictionMessage, setCancelRestrictionMessage] = useState('');
   const [showQuickRollbackConfirm, setShowQuickRollbackConfirm] = useState(false);
   const [isBusinessDocsExpanded, setIsBusinessDocsExpanded] = useState(true);
   const scrollRef = useRef<ScrollView | null>(null);
@@ -1405,6 +1410,46 @@ export default function PurchaseOrderEditScreen() {
     }
   };
 
+  const handleCancelOrder = async () => {
+    if (!orderName || !detail || detail.documentStatus === 'cancelled' || !detail.canCancel) {
+      return;
+    }
+
+    try {
+      setIsCancelling(true);
+      const nextDetail = await cancelPurchaseOrderV2(orderName);
+      if (nextDetail) {
+        setDetail(nextDetail);
+      }
+      clearPurchaseOrderDraft(draftScope);
+      setEditMode('view');
+      setShowCancelConfirm(false);
+      showSuccess('采购订单已作废。');
+    } catch (error) {
+      showError(normalizeAppError(error, '采购订单作废失败。').message);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handlePressCancelOrder = () => {
+    if (!detail || detail.documentStatus === 'cancelled') {
+      showError('当前订单已作废。');
+      return;
+    }
+    if (isCancelling || isQuickRollingBack) {
+      return;
+    }
+    if (!detail.canCancel) {
+      setCancelRestrictionMessage(
+        detail.cancelHint || '当前采购订单已有收货、发票或付款记录，不能直接作废。请使用“回退并修改”处理。',
+      );
+      setShowCancelRestrictionDialog(true);
+      return;
+    }
+    setShowCancelConfirm(true);
+  };
+
   const handleSave = async () => {
     if (!detail) {
       return;
@@ -1696,36 +1741,52 @@ export default function PurchaseOrderEditScreen() {
               </Pressable>
             </View>
           ) : (
-            quickRollbackPlan ? (
+            <View style={styles.footerActionsRow}>
               <Pressable
-                disabled={isQuickRollingBack}
-                onPress={() => setShowQuickRollbackConfirm(true)}
+                disabled={isCancelling || isQuickRollingBack}
+                onPress={handlePressCancelOrder}
                 style={[
-                  styles.footerButton,
-                  { backgroundColor: isQuickRollingBack ? surfaceMuted : tintColor },
+                  styles.footerGhostButton,
+                  styles.footerDangerButton,
+                  !detail?.canCancel ? styles.footerDangerButtonDisabled : null,
+                  { borderColor },
                 ]}>
-                <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
-                  {isQuickRollingBack ? '回退中...' : '回退并修改'}
+                <ThemedText style={styles.footerDangerButtonText} type="defaultSemiBold">
+                  {isCancelling ? '作废中...' : detail?.documentStatus === 'cancelled' ? '已作废' : '作废订单'}
                 </ThemedText>
               </Pressable>
-            ) : (
-              <Pressable
-                disabled={!canEditOrder}
-                onPress={() => {
-                  if (!canEditOrder) {
-                    return;
-                  }
-                  enterEditMode('all');
-                }}
-                style={[
-                  styles.footerButton,
-                  { backgroundColor: canEditOrder ? tintColor : surfaceMuted },
-                ]}>
-                <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
-                  {canEditOrder ? '编辑采购订单' : '订单已锁定'}
-                </ThemedText>
-              </Pressable>
-            )
+
+              {quickRollbackPlan ? (
+                <Pressable
+                  disabled={isQuickRollingBack}
+                  onPress={() => setShowQuickRollbackConfirm(true)}
+                  style={[
+                    styles.footerButton,
+                    { backgroundColor: isQuickRollingBack ? surfaceMuted : tintColor },
+                  ]}>
+                  <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
+                    {isQuickRollingBack ? '回退中...' : '回退并修改'}
+                  </ThemedText>
+                </Pressable>
+              ) : (
+                <Pressable
+                  disabled={!canEditOrder}
+                  onPress={() => {
+                    if (!canEditOrder) {
+                      return;
+                    }
+                    enterEditMode('all');
+                  }}
+                  style={[
+                    styles.footerButton,
+                    { backgroundColor: canEditOrder ? tintColor : surfaceMuted },
+                  ]}>
+                  <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
+                    {canEditOrder ? '编辑采购订单' : '订单已锁定'}
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
           )}
         </View>
       }
@@ -2105,6 +2166,78 @@ export default function PurchaseOrderEditScreen() {
                   放弃修改
                 </ThemedText>
               </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowCancelConfirm(false)}
+        transparent
+        visible={showCancelConfirm}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={[styles.dialogTitle, styles.dialogTitleWarning]} type="defaultSemiBold">
+              确认作废采购订单？
+            </ThemedText>
+            <ThemedText style={styles.dialogMessage}>
+              作废订单属于高风险操作。作废后订单将不能继续正常流转；如果已有收货单、发票或付款记录，请先使用“回退并修改”。
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setShowCancelConfirm(false)}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  先不作废
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                disabled={isCancelling}
+                onPress={() => void handleCancelOrder()}
+                style={[styles.dialogButton, styles.dialogDangerButton]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  {isCancelling ? '作废中...' : '确认作废'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setShowCancelRestrictionDialog(false)}
+        transparent
+        visible={showCancelRestrictionDialog}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={[styles.dialogTitle, styles.dialogTitleWarning]} type="defaultSemiBold">
+              当前订单不可直接作废
+            </ThemedText>
+            <ThemedText style={styles.dialogMessage}>
+              {cancelRestrictionMessage || '当前采购订单不能直接作废，请先回退下游单据。'}
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setShowCancelRestrictionDialog(false)}
+                style={[styles.dialogButton, styles.dialogGhostButton, { borderColor }]}>
+                <ThemedText style={styles.dialogGhostText} type="defaultSemiBold">
+                  我知道了
+                </ThemedText>
+              </Pressable>
+              {quickRollbackPlan ? (
+                <Pressable
+                  onPress={() => {
+                    setShowCancelRestrictionDialog(false);
+                    setShowQuickRollbackConfirm(true);
+                  }}
+                  style={[styles.dialogButton, styles.dialogDangerButton]}>
+                  <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                    {quickRollbackPlan.confirmLabel || '回退并修改'}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         </View>
@@ -2782,6 +2915,17 @@ const styles = StyleSheet.create({
   footerGhostButtonText: {
     color: '#475569',
     fontSize: 14,
+  },
+  footerDangerButton: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FCA5A5',
+  },
+  footerDangerButtonText: {
+    color: '#B91C1C',
+    fontSize: 14,
+  },
+  footerDangerButtonDisabled: {
+    opacity: 0.7,
   },
   footerSummaryCard: {
     borderRadius: 14,
