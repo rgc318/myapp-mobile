@@ -93,7 +93,7 @@ export default function HomeScreen() {
           { href: '/common/suppliers', label: '供应商', icon: 'building.2.fill' as const },
         ]
       : []),
-    { href: '/(tabs)/docs', label: '对账', icon: 'doc.text.fill' },
+    { href: '/(tabs)/docs', label: '报表', icon: 'doc.text.fill' },
     { href: '/(tabs)/me', label: '我的', icon: 'person.fill' },
   ];
 

@@ -18,6 +18,7 @@ const MAPPING = {
   'cart.fill': 'shopping-cart',
   'shippingbox.fill': 'inventory-2',
   'doc.text.fill': 'description',
+  'chart.bar.fill': 'bar-chart',
   'person.fill': 'person',
   'magnifyingglass': 'search',
   'building.2.fill': 'apartment',

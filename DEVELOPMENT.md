@@ -5779,3 +5779,55 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 
 - `npm run lint -- services/purchases.ts app/purchase/order/edit/[orderName].tsx`
 - Result: passed
+
+## Business Reports V1 (2026-04-02)
+
+### What Changed
+
+- The old hidden `docs` entry was repurposed into a real mobile business-report page.
+- Home shortcut label was updated from `对账` to `报表`.
+- Added a new report service backed by the gateway `get_business_report_v1`.
+
+### Current V1 Scope
+
+- top overview metrics:
+  - sales amount
+  - purchase amount
+  - received amount
+  - paid amount
+  - net cashflow
+  - receivable outstanding
+  - payable outstanding
+- core tables:
+  - `销售汇总表`
+  - `采购汇总表`
+  - `应收账款表`
+  - `应付账款表`
+  - `资金流水`
+
+### Filtering
+
+- quick date windows:
+  - `今天`
+  - `近 7 天`
+  - `近 30 天`
+- company picker:
+  - supports default company
+  - supports switching back to all companies
+
+### Why This Shape
+
+- We intentionally did not ship profit / cost tables in v1.
+- Revenue, purchase, receivable, payable, and cashflow are stable enough to form the first trustworthy operator-facing report layer.
+- Profit analysis depends on a clearer cost policy and should not be rushed into an unreliable first version.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/reports.ts`
+
+### Validation
+
+- `npm run lint -- app/(tabs)/docs.tsx app/(tabs)/index.tsx services/reports.ts`
+- Result: passed

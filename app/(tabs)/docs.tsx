@@ -1,5 +1,4 @@
-import type { Href } from 'expo-router';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,153 +6,205 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { SALES_WORKBENCH_SIZE, WORKBENCH_SIZE } from '@/constants/workbench-size';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { formatCurrencyValue } from '@/lib/display-currency';
 import { useFeedback } from '@/providers/feedback-provider';
 import { type LinkOption } from '@/services/master-data';
-import {
-  searchCompanies,
-  searchSalesOrdersV2,
-  type SalesDeskSearchSummary,
-  type SalesOrderSummaryItem,
-} from '@/services/sales';
+import { fetchBusinessReport, type BusinessCashflowRow, type BusinessPartySummaryRow, type BusinessReport } from '@/services/reports';
+import { searchCompanies } from '@/services/sales';
 
-type FilterMode = 'all' | 'unfinished' | 'delivering' | 'paying' | 'completed' | 'cancelled';
-type SortMode = 'unfinished_first' | 'latest' | 'oldest' | 'amount_desc';
-type PickerMode = 'company' | 'filter' | 'sort' | null;
+type RangeMode = 'today' | '7d' | '30d';
 
-const PAGE_SIZE = 20;
-
-const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
-  { value: 'all', label: '全部订单' },
-  { value: 'unfinished', label: '未完成' },
-  { value: 'delivering', label: '待出货' },
-  { value: 'paying', label: '待收款' },
-  { value: 'completed', label: '已完成' },
-  { value: 'cancelled', label: '已作废' },
+const RANGE_OPTIONS: { value: RangeMode; label: string; days: number }[] = [
+  { value: 'today', label: '今天', days: 1 },
+  { value: '7d', label: '近 7 天', days: 7 },
+  { value: '30d', label: '近 30 天', days: 30 },
 ];
 
-const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'unfinished_first', label: '未完成优先' },
-  { value: 'latest', label: '最近更新' },
-  { value: 'oldest', label: '最早下单' },
-  { value: 'amount_desc', label: '金额从高到低' },
-];
-
-const EMPTY_DESK_SUMMARY: SalesDeskSearchSummary = {
-  totalCount: 0,
-  visibleCount: 0,
-  unfinishedCount: 0,
-  deliveryCount: 0,
-  paymentCount: 0,
-  completedCount: 0,
-  cancelledCount: 0,
+const EMPTY_REPORT: BusinessReport = {
+  overview: {
+    salesAmountTotal: 0,
+    purchaseAmountTotal: 0,
+    receivedAmountTotal: 0,
+    paidAmountTotal: 0,
+    netCashflowTotal: 0,
+    receivableOutstandingTotal: 0,
+    payableOutstandingTotal: 0,
+  },
+  tables: {
+    salesSummary: [],
+    purchaseSummary: [],
+    receivableSummary: [],
+    payableSummary: [],
+    cashflowSummary: [],
+  },
+  meta: {
+    company: null,
+    dateFrom: '',
+    dateTo: '',
+    limit: 0,
+  },
 };
 
-function orderStatusText(item: SalesOrderSummaryItem) {
-  if (item.status === 'cancelled') {
-    return '已作废';
-  }
-  if (item.completionStatus === 'completed') {
-    return '已完成';
-  }
-  if (item.paymentStatus === 'paid') {
-    return '已结清';
-  }
-  if (item.fulfillmentStatus === 'shipped') {
-    return '待收款';
-  }
-  if (item.fulfillmentStatus === 'partial') {
-    return '部分出货';
-  }
-  if (item.status === 'submitted' && item.fulfillmentStatus === 'pending') {
-    return '待出货';
-  }
-  if (item.status === 'draft') {
-    return '草稿';
-  }
-  return item.status === 'submitted' ? '已提交' : item.status || '未确认';
+function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
-function getStatusTone(item: SalesOrderSummaryItem) {
-  if (item.status === 'cancelled') {
-    return { backgroundColor: '#FEE2E2', color: '#B91C1C' };
-  }
-  if (item.completionStatus === 'completed' || item.paymentStatus === 'paid') {
-    return { backgroundColor: '#DCFCE7', color: '#15803D' };
-  }
-  if (item.fulfillmentStatus === 'partial' || item.paymentStatus === 'partial') {
-    return { backgroundColor: '#FEF3C7', color: '#B45309' };
-  }
-  return { backgroundColor: '#DBEAFE', color: '#1D4ED8' };
+function resolveDateRange(mode: RangeMode) {
+  const end = new Date();
+  const start = new Date();
+  const option = RANGE_OPTIONS.find((item) => item.value === mode) ?? RANGE_OPTIONS[2];
+  start.setDate(end.getDate() - (option.days - 1));
+  return {
+    dateFrom: toIsoDate(start),
+    dateTo: toIsoDate(end),
+  };
 }
 
-function getSecondaryStatusLabel(item: SalesOrderSummaryItem) {
-  if (item.status === 'cancelled') {
-    return '已作废';
-  }
-  if (item.paymentStatus === 'partial') {
-    return '部分收款';
-  }
-  if (item.paymentStatus === 'paid') {
-    return '已收款';
-  }
-  if (item.fulfillmentStatus === 'partial') {
-    return '部分出货';
-  }
-  if (item.fulfillmentStatus === 'shipped') {
-    return '已出货';
-  }
-  return item.outstandingAmount && item.outstandingAmount > 0 ? '未收款' : '待处理';
+function formatMoney(value?: number) {
+  return formatCurrencyValue(value ?? 0, 'CNY');
 }
 
-function getSecondaryStatusTone(item: SalesOrderSummaryItem) {
-  if (item.status === 'cancelled') {
-    return { backgroundColor: '#FEE2E2', color: '#B91C1C' };
-  }
-  if (item.paymentStatus === 'paid' || item.fulfillmentStatus === 'shipped') {
-    return { backgroundColor: '#DCFCE7', color: '#15803D' };
-  }
-  if (item.paymentStatus === 'partial' || item.fulfillmentStatus === 'partial') {
-    return { backgroundColor: '#FEF3C7', color: '#B45309' };
-  }
-  return { backgroundColor: '#E2E8F0', color: '#475569' };
+function OverviewMetric({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <View style={[styles.metricCard, { borderColor: `${accent}33`, backgroundColor: `${accent}0F` }]}>
+      <ThemedText style={styles.metricLabel}>{label}</ThemedText>
+      <ThemedText style={[styles.metricValue, { color: accent }]} type="defaultSemiBold">
+        {value}
+      </ThemedText>
+    </View>
+  );
 }
 
-function getQuickActionLabel(item: SalesOrderSummaryItem) {
-  if (item.status === 'cancelled') {
-    return '查看订单';
-  }
-  if (item.completionStatus === 'completed') {
-    return '查看订单';
-  }
-  if (item.fulfillmentStatus === 'pending' || item.fulfillmentStatus === 'partial') {
-    return '去发货';
-  }
-  if (item.paymentStatus === 'unpaid' || item.paymentStatus === 'partial') {
-    return '去收款';
-  }
-  return '查看订单';
+function PartyTableSection({
+  title,
+  hint,
+  rows,
+  amountLabel,
+  surface,
+  borderColor,
+  amountTone,
+}: {
+  title: string;
+  hint: string;
+  rows: BusinessPartySummaryRow[];
+  amountLabel: string;
+  surface: string;
+  borderColor: string;
+  amountTone: string;
+}) {
+  return (
+    <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionHeaderText}>
+          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+            {title}
+          </ThemedText>
+          <ThemedText style={styles.sectionHint}>{hint}</ThemedText>
+        </View>
+      </View>
+
+      {rows.length ? (
+        rows.map((row) => (
+          <View key={`${title}-${row.name}`} style={[styles.tableRow, { borderTopColor: borderColor }]}>
+            <View style={styles.tableRowMain}>
+              <ThemedText style={styles.rowTitle} type="defaultSemiBold">
+                {row.name}
+              </ThemedText>
+              <ThemedText style={styles.rowMeta}>{row.count} 笔</ThemedText>
+            </View>
+            <View style={styles.tableRowSide}>
+              <ThemedText style={styles.rowMeta}>{amountLabel}</ThemedText>
+              <ThemedText style={[styles.rowAmount, { color: amountTone }]} type="defaultSemiBold">
+                {formatMoney(row.amount ?? row.totalAmount ?? 0)}
+              </ThemedText>
+              {row.outstandingAmount != null ? (
+                <ThemedText style={styles.rowSubAmount}>未结 {formatMoney(row.outstandingAmount)}</ThemedText>
+              ) : null}
+            </View>
+          </View>
+        ))
+      ) : (
+        <ThemedText style={styles.emptyText}>当前筛选范围内暂无数据。</ThemedText>
+      )}
+    </View>
+  );
 }
 
-export default function DocsTabScreen() {
-  const router = useRouter();
+function CashflowSection({
+  rows,
+  surface,
+  borderColor,
+}: {
+  rows: BusinessCashflowRow[];
+  surface: string;
+  borderColor: string;
+}) {
+  return (
+    <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionHeaderText}>
+          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+            资金流水
+          </ThemedText>
+          <ThemedText style={styles.sectionHint}>看最近实际收款 / 付款记录，先做真实资金视角。</ThemedText>
+        </View>
+      </View>
+
+      {rows.length ? (
+        rows.map((row) => {
+          const accent = row.direction === 'in' ? '#16A34A' : row.direction === 'out' ? '#DC2626' : '#475569';
+          const directionLabel = row.direction === 'in' ? '收入' : row.direction === 'out' ? '支出' : '划转';
+          return (
+            <View key={row.name ?? `${row.postingDate}-${row.party}`} style={[styles.tableRow, { borderTopColor: borderColor }]}>
+              <View style={styles.tableRowMain}>
+                <View style={[styles.flowChip, { backgroundColor: `${accent}18` }]}>
+                  <ThemedText style={[styles.flowChipText, { color: accent }]} type="defaultSemiBold">
+                    {directionLabel}
+                  </ThemedText>
+                </View>
+                <ThemedText style={styles.rowTitle} type="defaultSemiBold">
+                  {row.party || row.partyType || '未识别对象'}
+                </ThemedText>
+                <ThemedText style={styles.rowMeta}>
+                  {(row.postingDate || '无日期') + (row.modeOfPayment ? ` · ${row.modeOfPayment}` : '')}
+                </ThemedText>
+              </View>
+              <View style={styles.tableRowSide}>
+                <ThemedText style={[styles.rowAmount, { color: accent }]} type="defaultSemiBold">
+                  {formatMoney(row.amount)}
+                </ThemedText>
+                {row.referenceNo ? <ThemedText style={styles.rowSubAmount}>凭证 {row.referenceNo}</ThemedText> : null}
+              </View>
+            </View>
+          );
+        })
+      ) : (
+        <ThemedText style={styles.emptyText}>当前筛选范围内暂无资金流水。</ThemedText>
+      )}
+    </View>
+  );
+}
+
+export default function ReportsScreen() {
   const preferences = getAppPreferences();
   const { showError } = useFeedback();
 
-  const [searchInput, setSearchInput] = useState('');
-  const [searchKey, setSearchKey] = useState('');
-  const [orders, setOrders] = useState<SalesOrderSummaryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [rangeMode, setRangeMode] = useState<RangeMode>('30d');
   const [queryCompany, setQueryCompany] = useState<string | null>(preferences.defaultCompany);
-  const [filterMode, setFilterMode] = useState<FilterMode>('unfinished');
-  const [sortMode, setSortMode] = useState<SortMode>('unfinished_first');
-  const [deskSummary, setDeskSummary] = useState<SalesDeskSearchSummary>(EMPTY_DESK_SUMMARY);
-  const [pickerMode, setPickerMode] = useState<PickerMode>(null);
+  const [report, setReport] = useState<BusinessReport>(EMPTY_REPORT);
+  const [isLoading, setIsLoading] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [companyQuery, setCompanyQuery] = useState('');
   const [companyOptions, setCompanyOptions] = useState<LinkOption[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
@@ -164,70 +215,29 @@ export default function DocsTabScreen() {
   const borderColor = useThemeColor({}, 'border');
   const background = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
-  const selectedCompany = queryCompany?.trim() || undefined;
-  const hideCancelledByDefault = filterMode !== 'all' && filterMode !== 'cancelled';
 
-  const loadOrders = useCallback(
-    async (options?: {
-      nextSearchKey?: string;
-      nextCompany?: string | null;
-      nextFilterMode?: FilterMode;
-      nextSortMode?: SortMode;
-      start?: number;
-      append?: boolean;
-    }) => {
-      const resolvedSearchKey = options?.nextSearchKey ?? searchKey;
-      const resolvedCompany =
-        options?.nextCompany === undefined ? selectedCompany : options.nextCompany?.trim() || undefined;
-      const resolvedFilterMode = options?.nextFilterMode ?? filterMode;
-      const resolvedSortMode = options?.nextSortMode ?? sortMode;
-      const resolvedStart = options?.start ?? 0;
-      const append = options?.append ?? false;
-      const resolvedExcludeCancelled = resolvedFilterMode !== 'all' && resolvedFilterMode !== 'cancelled';
-
-      try {
-        if (append) {
-          setIsLoadingMore(true);
-        } else {
-          setIsLoading(true);
-        }
-
-        const result = await searchSalesOrdersV2({
-          searchKey: resolvedSearchKey,
-          company: resolvedCompany,
-          statusFilter: resolvedFilterMode,
-          excludeCancelled: resolvedExcludeCancelled,
-          sortBy: resolvedSortMode,
-          limit: PAGE_SIZE,
-          start: resolvedStart,
-        });
-
-        setOrders((current) => {
-          if (!append) {
-            return result.items;
-          }
-          const seen = new Set(current.map((row) => row.name));
-          const nextRows = result.items.filter((row) => !seen.has(row.name));
-          return [...current, ...nextRows];
-        });
-        setDeskSummary(result.summary);
-      } catch (error) {
-        showError(normalizeAppError(error).message);
-      } finally {
-        if (append) {
-          setIsLoadingMore(false);
-        } else {
-          setIsLoading(false);
-        }
-      }
-    },
-    [filterMode, searchKey, selectedCompany, showError, sortMode],
-  );
+  const loadReport = useCallback(async () => {
+    const { dateFrom, dateTo } = resolveDateRange(rangeMode);
+    try {
+      setIsLoading(true);
+      const next = await fetchBusinessReport({
+        company: queryCompany,
+        dateFrom,
+        dateTo,
+        limit: 8,
+      });
+      setReport(next);
+    } catch (error) {
+      showError(normalizeAppError(error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [queryCompany, rangeMode, showError]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadOrders();
-    }, [loadOrders]),
+      void loadReport();
+    }, [loadReport]),
   );
 
   useEffect(() => {
@@ -235,14 +245,13 @@ export default function DocsTabScreen() {
       hasMountedFiltersRef.current = true;
       return;
     }
-    void loadOrders();
-  }, [filterMode, loadOrders, queryCompany, sortMode]);
+    void loadReport();
+  }, [loadReport, queryCompany, rangeMode]);
 
   useEffect(() => {
-    if (pickerMode !== 'company') {
+    if (!pickerVisible) {
       return;
     }
-
     let cancelled = false;
     setIsLoadingCompanies(true);
     searchCompanies(companyQuery)
@@ -261,880 +270,461 @@ export default function DocsTabScreen() {
           setIsLoadingCompanies(false);
         }
       });
-
     return () => {
       cancelled = true;
     };
-  }, [companyQuery, pickerMode]);
-
-  const quickActions = [
-    {
-      href: '/sales/order/create' as Href,
-      label: '销售下单',
-      icon: 'cart.fill' as const,
-      toneBackground: '#EFF6FF',
-      toneBorder: '#BFDBFE',
-      toneText: '#1D4ED8',
-    },
-    {
-      href: '/sales/delivery/create' as Href,
-      label: '销售发货',
-      icon: 'shippingbox.fill' as const,
-      toneBackground: '#F0FDF4',
-      toneBorder: '#BBF7D0',
-      toneText: '#15803D',
-    },
-    {
-      href: '/sales/invoice/create' as Href,
-      label: '销售开票',
-      icon: 'doc.text.fill' as const,
-      toneBackground: '#FFF7ED',
-      toneBorder: '#FED7AA',
-      toneText: '#C2410C',
-    },
-    {
-      href: '/sales/payment/create' as Href,
-      label: '销售收款',
-      icon: 'creditcard.fill' as const,
-      toneBackground: '#F5F3FF',
-      toneBorder: '#DDD6FE',
-      toneText: '#6D28D9',
-    },
-  ];
-
-  const activeFilterLabel = FILTER_OPTIONS.find((option) => option.value === filterMode)?.label ?? '全部订单';
-  const activeSortLabel = SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? '未完成优先';
-  const activeCompanyLabel = queryCompany || '全部公司';
-  const hasActiveSearch = Boolean(searchKey.trim());
-  const activeFilterChips = [
-    activeFilterLabel,
-    activeCompanyLabel !== '全部公司' ? activeCompanyLabel : null,
-    activeSortLabel !== '未完成优先' ? activeSortLabel : null,
-    hasActiveSearch ? `关键词：${searchKey}` : null,
-  ].filter((value): value is string => Boolean(value));
-  const visibleOrderCount = deskSummary.visibleCount || orders.length;
-  const totalOrderCount = deskSummary.totalCount || visibleOrderCount;
-
-  const handleSearch = async () => {
-    const trimmedKeyword = searchInput.trim();
-    setSearchKey(trimmedKeyword);
-    await loadOrders({ nextSearchKey: trimmedKeyword });
-  };
-
-  const handleClearSearch = async () => {
-    setSearchInput('');
-    setSearchKey('');
-    await loadOrders({ nextSearchKey: '' });
-  };
-
-  const handleResetOrders = async () => {
-    setSearchInput('');
-    setSearchKey('');
-    setQueryCompany(preferences.defaultCompany);
-    setFilterMode('unfinished');
-    setSortMode('unfinished_first');
-    await loadOrders({
-      nextSearchKey: '',
-      nextCompany: preferences.defaultCompany,
-      nextFilterMode: 'unfinished',
-      nextSortMode: 'unfinished_first',
-    });
-  };
-
-  const handleLoadMoreOrders = async () => {
-    if (isLoadingMore || orders.length >= visibleOrderCount) {
-      return;
-    }
-    await loadOrders({ start: orders.length, append: true });
-  };
-
-  const openOrderPrimaryAction = (order: SalesOrderSummaryItem) => {
-    router.push(`/sales/order/${order.name}`);
-  };
+  }, [companyQuery, pickerVisible]);
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.screen, { backgroundColor: background }]}>
-      <MobilePageHeader showBack={false} title="销售工作台" />
+    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: background }]}>
+      <MobilePageHeader title="经营报表" />
       <ScrollView contentContainerStyle={styles.container}>
-        <>
-            <View style={[styles.heroCard, { backgroundColor: '#F8FBFF', borderColor }]}>
-              <View style={styles.heroGlowWrap} pointerEvents="none">
-                <View style={styles.heroGlowA} />
-                <View style={styles.heroGlowB} />
-                <View style={styles.heroGlowC} />
-              </View>
-              <ThemedText style={styles.eyebrow}>SALES DESK</ThemedText>
-              <View style={styles.heroHeader}>
-                <View style={styles.heroTextWrap}>
-                  <ThemedText style={styles.heroTitle} type="title">
-                    销售工作台
-                  </ThemedText>
-                  <ThemedText style={styles.heroDescription}>
-                    默认聚焦未完成销售订单，并优先把待出货与待收款单据排在前面。
-                  </ThemedText>
-                </View>
-                <View style={[styles.heroCountPill, { backgroundColor: '#FFFFFF' }]}>
-                  <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                    {totalOrderCount} 单
-                  </ThemedText>
-                </View>
-              </View>
-              <View style={styles.metricTiles}>
-                {[
-                  { key: 'unfinished', label: '未完成', count: deskSummary.unfinishedCount, color: '#B45309', bg: '#FEF3C7' },
-                  { key: 'delivering', label: '待出货', count: deskSummary.deliveryCount, color: '#1D4ED8', bg: '#DBEAFE' },
-                  { key: 'paying', label: '待收款', count: deskSummary.paymentCount, color: '#15803D', bg: '#DCFCE7' },
-                  { key: 'completed', label: '已完成', count: deskSummary.completedCount, color: '#475569', bg: '#E2E8F0' },
-                ].map((metric) => {
-                  const active = filterMode === metric.key;
-                  return (
-                    <Pressable
-                      key={metric.key}
-                      onPress={() => setFilterMode(metric.key as FilterMode)}
-                      style={[
-                        styles.metricTile,
-                        {
-                          backgroundColor: active ? metric.bg : surfaceMuted,
-                          borderColor: active ? metric.color : borderColor,
-                        },
-                      ]}>
-                      <ThemedText style={[styles.metricTileLabel, { color: active ? metric.color : '#64748B' }]}>
-                        {metric.label}
-                      </ThemedText>
-                      <ThemedText style={[styles.metricTileValue, { color: active ? metric.color : '#1F2A37' }]} type="defaultSemiBold">
-                        {metric.count}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
+        <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.heroGlowA} />
+          <View style={styles.heroGlowB} />
+          <ThemedText style={styles.heroEyebrow}>BUSINESS REPORTS</ThemedText>
+          <View style={styles.heroHeader}>
+            <View style={styles.heroCopy}>
+              <ThemedText style={styles.heroTitle} type="title">
+                统计中心
+              </ThemedText>
+              <ThemedText style={styles.heroText}>
+                先从最关键的销售、采购、应收应付和资金流水开始，把经营面先看清楚。
+              </ThemedText>
             </View>
-
-            <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                  常用动作
-                </ThemedText>
-                <ThemedText style={styles.sectionHint}>销售主流程入口</ThemedText>
-              </View>
-              <View style={styles.quickActionGrid}>
-                {quickActions.map((action) => (
-                  <Pressable
-                    key={action.label}
-                    onPress={() => router.push(action.href)}
-                    style={[
-                      styles.quickActionCard,
-                      { backgroundColor: action.toneBackground, borderColor: action.toneBorder },
-                    ]}>
-                    <IconSymbol color={action.toneText} name={action.icon} size={22} />
-                    <ThemedText style={[styles.quickActionText, { color: action.toneText }]} type="defaultSemiBold">
-                      {action.label}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
+            <View style={[styles.heroBadge, { borderColor }]}>
+              <ThemedText style={styles.heroBadgeValue} type="defaultSemiBold">
+                {report.meta.dateFrom && report.meta.dateTo ? `${report.meta.dateFrom} ~ ${report.meta.dateTo}` : '近 30 天'}
+              </ThemedText>
             </View>
+          </View>
 
-            <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                  销售检索
-                </ThemedText>
-                <View style={styles.headerActions}>
-                  <Pressable onPress={() => void handleResetOrders()} style={[styles.headerActionButton, { backgroundColor: surfaceMuted }]}>
-                    <ThemedText style={styles.headerActionText} type="defaultSemiBold">
-                      重置
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable onPress={() => void loadOrders()} style={[styles.headerActionButton, { backgroundColor: surfaceMuted }]}>
-                    <ThemedText style={[styles.headerActionText, { color: tintColor }]} type="defaultSemiBold">
-                      刷新
-                    </ThemedText>
-                  </Pressable>
-                </View>
-              </View>
-
-              <View style={styles.searchRow}>
-                <View style={[styles.searchInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <TextInput
-                    autoCorrect={false}
-                    onChangeText={setSearchInput}
-                    onSubmitEditing={() => void handleSearch()}
-                    placeholder="搜索订单号、客户、公司、日期"
-                    placeholderTextColor="rgba(31,42,55,0.45)"
-                    style={styles.searchInput}
-                    value={searchInput}
-                  />
-                  {searchInput.trim() ? (
-                    <Pressable onPress={() => void handleClearSearch()} style={styles.clearButton}>
-                      <IconSymbol color="#94A3B8" name="xmark.circle.fill" size={18} />
-                    </Pressable>
-                  ) : null}
-                </View>
-                <Pressable onPress={() => void handleSearch()} style={[styles.searchButton, { backgroundColor: tintColor }]}>
-                  <IconSymbol color="#FFFFFF" name="magnifyingglass" size={15} />
-                  <ThemedText style={styles.searchButtonText} type="defaultSemiBold">
-                    搜索
+          <View style={styles.filterRow}>
+            {RANGE_OPTIONS.map((option) => {
+              const active = option.value === rangeMode;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setRangeMode(option.value)}
+                  style={[
+                    styles.filterChip,
+                    { borderColor },
+                    active ? { backgroundColor: tintColor, borderColor: tintColor } : { backgroundColor: surfaceMuted },
+                  ]}>
+                  <ThemedText style={[styles.filterChipText, active ? styles.filterChipTextActive : null]} type="defaultSemiBold">
+                    {option.label}
                   </ThemedText>
                 </Pressable>
-              </View>
+              );
+            })}
+          </View>
 
-              {activeFilterChips.length ? (
-                <View style={styles.filterChipsWrap}>
-                  {activeFilterChips.map((chip) => (
-                    <View key={chip} style={[styles.filterChip, { backgroundColor: surfaceMuted, borderColor }]}>
-                      <ThemedText style={styles.filterChipText} type="defaultSemiBold">
-                        {chip}
-                      </ThemedText>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
+          <View style={styles.toolbarRow}>
+            <Pressable onPress={() => setPickerVisible(true)} style={[styles.toolbarButton, { backgroundColor: surfaceMuted, borderColor }]}>
+              <ThemedText style={styles.toolbarLabel}>查询公司</ThemedText>
+              <ThemedText style={styles.toolbarValue} type="defaultSemiBold">
+                {queryCompany || '全部公司'}
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={() => void loadReport()} style={[styles.refreshButton, { backgroundColor: tintColor }]}>
+              {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <IconSymbol name="arrow.clockwise" size={18} color="#FFFFFF" />}
+              <ThemedText style={styles.refreshButtonText} type="defaultSemiBold">
+                刷新
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
 
-              <View style={styles.filterCardGrid}>
-                <Pressable onPress={() => setPickerMode('company')} style={[styles.filterCard, styles.infoCardInteractive, { backgroundColor: '#EEF6FF', borderColor: '#BFDBFE' }]}>
-                  <View style={styles.filterCardHeader}>
-                    <ThemedText style={styles.filterLabel}>查询公司</ThemedText>
-                    <IconSymbol color="#2563EB" name="chevron.right" size={14} />
-                  </View>
-                  <ThemedText style={styles.filterValue} numberOfLines={2} type="defaultSemiBold">
-                    {activeCompanyLabel}
-                  </ThemedText>
-                </Pressable>
+        <View style={styles.metricsGrid}>
+          <OverviewMetric accent="#2563EB" label="销售额" value={formatMoney(report.overview.salesAmountTotal)} />
+          <OverviewMetric accent="#EA580C" label="采购额" value={formatMoney(report.overview.purchaseAmountTotal)} />
+          <OverviewMetric accent="#16A34A" label="收入" value={formatMoney(report.overview.receivedAmountTotal)} />
+          <OverviewMetric accent="#DC2626" label="支出" value={formatMoney(report.overview.paidAmountTotal)} />
+          <OverviewMetric accent="#0F766E" label="净现金流" value={formatMoney(report.overview.netCashflowTotal)} />
+          <OverviewMetric accent="#B45309" label="应收未结" value={formatMoney(report.overview.receivableOutstandingTotal)} />
+          <OverviewMetric accent="#7C3AED" label="应付未结" value={formatMoney(report.overview.payableOutstandingTotal)} />
+        </View>
 
-                <Pressable onPress={() => setPickerMode('filter')} style={[styles.filterCard, styles.infoCardInteractive, { backgroundColor: '#F7FCEB', borderColor: '#D9F99D' }]}>
-                  <View style={styles.filterCardHeader}>
-                    <ThemedText style={styles.filterLabel}>订单状态</ThemedText>
-                    <IconSymbol color="#65A30D" name="chevron.right" size={14} />
-                  </View>
-                  <ThemedText style={styles.filterValue} type="defaultSemiBold">
-                    {activeFilterLabel}
-                  </ThemedText>
-                </Pressable>
+        <PartyTableSection
+          amountLabel="销售额"
+          amountTone="#2563EB"
+          borderColor={borderColor}
+          hint="按客户聚合，看谁贡献最多销售额。"
+          rows={report.tables.salesSummary}
+          surface={surface}
+          title="销售汇总表"
+        />
 
-                <Pressable onPress={() => setPickerMode('sort')} style={[styles.filterCard, styles.infoCardInteractive, { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }]}>
-                  <View style={styles.filterCardHeader}>
-                    <ThemedText style={styles.filterLabel}>排序方式</ThemedText>
-                    <IconSymbol color="#EA580C" name="chevron.right" size={14} />
-                  </View>
-                  <ThemedText style={styles.filterValue} type="defaultSemiBold">
-                    {activeSortLabel}
-                  </ThemedText>
-                </Pressable>
+        <PartyTableSection
+          amountLabel="采购额"
+          amountTone="#EA580C"
+          borderColor={borderColor}
+          hint="按供应商聚合，看采购金额集中在哪些供应商。"
+          rows={report.tables.purchaseSummary}
+          surface={surface}
+          title="采购汇总表"
+        />
 
-                <View style={[styles.filterCard, styles.infoCardNeutral, { backgroundColor: '#F8FAFC', borderColor }]}>
-                  <ThemedText style={styles.filterLabel}>当前结果</ThemedText>
-                  <View style={styles.resultMainRow}>
-                    <ThemedText style={styles.resultFraction} type="defaultSemiBold">
-                      {visibleOrderCount} / {hideCancelledByDefault ? totalOrderCount + deskSummary.cancelledCount : totalOrderCount}
-                    </ThemedText>
-                    <ThemedText style={styles.resultUnit} type="defaultSemiBold">
-                      单
-                    </ThemedText>
-                  </View>
-                  <ThemedText numberOfLines={1} style={styles.resultHint}>
-                    {hideCancelledByDefault ? '当前结果 / 含已作废总数' : '当前结果 / 当前范围总数'}
-                  </ThemedText>
-                </View>
-              </View>
-            </View>
+        <PartyTableSection
+          amountLabel="应收总额"
+          amountTone="#B45309"
+          borderColor={borderColor}
+          hint="按客户聚合，看未结应收压力。"
+          rows={report.tables.receivableSummary}
+          surface={surface}
+          title="应收账款表"
+        />
 
-            <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-              <View style={styles.sectionHeaderRow}>
-                <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                  销售订单列表
-                </ThemedText>
-                <ThemedText style={styles.sectionHint}>默认按未完成优先排序</ThemedText>
-              </View>
+        <PartyTableSection
+          amountLabel="应付总额"
+          amountTone="#7C3AED"
+          borderColor={borderColor}
+          hint="按供应商聚合，看待付款结构。"
+          rows={report.tables.payableSummary}
+          surface={surface}
+          title="应付账款表"
+        />
 
-              {isLoading ? (
-                <View style={styles.loadingWrap}>
-                  <ActivityIndicator color={tintColor} />
-                </View>
-              ) : orders.length ? (
-                <View style={styles.resultList}>
-                  {orders.map((order) => {
-                    const primaryTone = getStatusTone(order);
-                    const secondaryTone = getSecondaryStatusTone(order);
-                    return (
-                      <Pressable
-                        key={order.name}
-                        onPress={() => router.push(`/sales/order/${order.name}`)}
-                        style={[styles.docCard, { backgroundColor: surfaceMuted, borderColor }]}>
-                        <View style={styles.docTopRow}>
-                          <View style={styles.docMainInfo}>
-                            <ThemedText style={styles.docTitle} numberOfLines={1} type="defaultSemiBold">
-                              {order.customer || '未填写客户'}
-                            </ThemedText>
-                            <View style={styles.docSubRow}>
-                              <ThemedText style={styles.docMeta} numberOfLines={1}>
-                                {order.name}
-                              </ThemedText>
-                              <ThemedText style={styles.docMeta}>·</ThemedText>
-                              <ThemedText style={styles.docMeta}>{order.transactionDate || '—'}</ThemedText>
-                            </View>
-                          </View>
-                          <View style={[styles.statusPill, { backgroundColor: primaryTone.backgroundColor }]}>
-                            <ThemedText style={[styles.statusText, { color: primaryTone.color }]} type="defaultSemiBold">
-                              {orderStatusText(order)}
-                            </ThemedText>
-                          </View>
-                        </View>
+        <CashflowSection borderColor={borderColor} rows={report.tables.cashflowSummary} surface={surface} />
 
-                        <View style={styles.docMiddleRow}>
-                          <View style={styles.docCompanyPill}>
-                            <ThemedText style={styles.docCompanyText} numberOfLines={1}>
-                              {order.company || '未配置公司'}
-                            </ThemedText>
-                          </View>
-                          <View style={[styles.statusPill, { backgroundColor: secondaryTone.backgroundColor }]}>
-                            <ThemedText style={[styles.statusText, { color: secondaryTone.color }]} type="defaultSemiBold">
-                              {getSecondaryStatusLabel(order)}
-                            </ThemedText>
-                          </View>
-                        </View>
-
-                        <View style={styles.moneyActionRow}>
-                          <View style={styles.moneyColumns}>
-                            <View style={styles.moneyBlock}>
-                              <ThemedText style={styles.moneyLabel}>订单金额</ThemedText>
-                              <ThemedText style={styles.moneyValue} type="defaultSemiBold">
-                                {formatCurrencyValue(order.grandTotal, 'CNY')}
-                              </ThemedText>
-                            </View>
-                            <View style={styles.moneyBlock}>
-                              <ThemedText style={styles.moneyLabel}>未收金额</ThemedText>
-                              <ThemedText
-                                style={[
-                                  styles.moneyValue,
-                                  { color: (order.outstandingAmount ?? 0) > 0 ? '#C2410C' : '#1F2A37' },
-                                ]}
-                                type="defaultSemiBold">
-                                {formatCurrencyValue(order.outstandingAmount, 'CNY')}
-                              </ThemedText>
-                            </View>
-                          </View>
-
-                          <Pressable onPress={() => openOrderPrimaryAction(order)} style={[styles.primaryActionButton, { backgroundColor: '#DBEAFE' }]}>
-                            <ThemedText style={[styles.primaryActionText, { color: tintColor }]} type="defaultSemiBold">
-                              {getQuickActionLabel(order)}
-                            </ThemedText>
-                          </Pressable>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-
-                  {orders.length < visibleOrderCount ? (
-                    <Pressable
-                      disabled={isLoadingMore}
-                      onPress={() => void handleLoadMoreOrders()}
-                      style={[styles.loadMoreButton, { borderColor, backgroundColor: surfaceMuted }]}>
-                      <ThemedText style={styles.loadMoreText} type="defaultSemiBold">
-                        {isLoadingMore ? '正在加载...' : `加载更多 (${orders.length}/${visibleOrderCount})`}
-                      </ThemedText>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : (
-                <View style={[styles.emptyCard, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <ThemedText type="defaultSemiBold">暂无查询结果</ThemedText>
-                  <ThemedText>你可以输入订单号、客户或切换状态筛选查看销售订单。</ThemedText>
-                </View>
-              )}
-            </View>
-        </>
+        <View style={[styles.noteCard, { backgroundColor: surfaceMuted }]}>
+          <ThemedText style={styles.noteTitle} type="defaultSemiBold">
+            下一阶段
+          </ThemedText>
+          <ThemedText style={styles.noteText}>
+            当前先保证销售、采购、应收应付、资金流水这 5 张表稳定可用。库存收发存、成本、毛利分析会在成本口径统一后继续补。
+          </ThemedText>
+        </View>
       </ScrollView>
 
-      <Modal animationType="fade" onRequestClose={() => setPickerMode(null)} transparent visible={pickerMode !== null}>
-        <Pressable onPress={() => setPickerMode(null)} style={styles.modalOverlay}>
-          <Pressable onPress={() => {}} style={[styles.modalCard, { backgroundColor: surface, borderColor }]}>
-            {pickerMode === 'company' ? (
-              <>
-                <ThemedText style={styles.modalTitle} type="defaultSemiBold">
-                  选择查询公司
-                </ThemedText>
-                <View style={[styles.modalSearchInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
-                  <TextInput
-                    autoCorrect={false}
-                    onChangeText={setCompanyQuery}
-                    placeholder="搜索公司"
-                    placeholderTextColor="rgba(31,42,55,0.45)"
-                    style={styles.modalSearchInput}
-                    value={companyQuery}
-                  />
-                </View>
+      <Modal animationType="fade" onRequestClose={() => setPickerVisible(false)} transparent visible={pickerVisible}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              选择公司
+            </ThemedText>
+            <TextInput
+              onChangeText={setCompanyQuery}
+              placeholder="搜索公司"
+              placeholderTextColor="rgba(15,23,42,0.4)"
+              style={[styles.dialogInput, { backgroundColor: surfaceMuted, borderColor }]}
+              value={companyQuery}
+            />
+            <Pressable
+              onPress={() => {
+                setQueryCompany(null);
+                setPickerVisible(false);
+              }}
+              style={[styles.dialogOption, { borderColor }]}>
+              <ThemedText style={styles.dialogOptionText} type="defaultSemiBold">
+                全部公司
+              </ThemedText>
+            </Pressable>
+            <ScrollView style={styles.dialogList}>
+              {isLoadingCompanies ? <ActivityIndicator style={styles.dialogLoading} /> : null}
+              {companyOptions.map((option) => (
                 <Pressable
+                  key={option.value}
                   onPress={() => {
-                    setQueryCompany(null);
-                    setPickerMode(null);
+                    setQueryCompany(option.value);
+                    setPickerVisible(false);
                   }}
-                  style={styles.modalOption}>
-                  <ThemedText type="defaultSemiBold">全部公司</ThemedText>
+                  style={[styles.dialogOption, { borderColor }]}>
+                  <ThemedText style={styles.dialogOptionText} type="defaultSemiBold">
+                    {option.label}
+                  </ThemedText>
+                  {option.description ? <ThemedText style={styles.dialogOptionHint}>{option.description}</ThemedText> : null}
                 </Pressable>
-                {isLoadingCompanies ? (
-                  <View style={styles.loadingWrap}>
-                    <ActivityIndicator color={tintColor} />
-                  </View>
-                ) : (
-                  companyOptions.map((option) => (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => {
-                        setQueryCompany(option.value);
-                        setPickerMode(null);
-                      }}
-                      style={styles.modalOption}>
-                      <ThemedText type="defaultSemiBold">{option.label}</ThemedText>
-                      {option.description ? <ThemedText style={styles.modalOptionMeta}>{option.description}</ThemedText> : null}
-                    </Pressable>
-                  ))
-                )}
-              </>
-            ) : null}
-
-            {pickerMode === 'filter'
-              ? FILTER_OPTIONS.map((option) => (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => {
-                      setFilterMode(option.value);
-                      setPickerMode(null);
-                    }}
-                    style={styles.modalOption}>
-                    <ThemedText type="defaultSemiBold">{option.label}</ThemedText>
-                  </Pressable>
-                ))
-              : null}
-
-            {pickerMode === 'sort'
-              ? SORT_OPTIONS.map((option) => (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => {
-                      setSortMode(option.value);
-                      setPickerMode(null);
-                    }}
-                    style={styles.modalOption}>
-                    <ThemedText type="defaultSemiBold">{option.label}</ThemedText>
-                  </Pressable>
-                ))
-              : null}
-          </Pressable>
-        </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setPickerVisible(false)} style={[styles.dialogClose, { backgroundColor: tintColor }]}>
+              <ThemedText style={styles.dialogCloseText} type="defaultSemiBold">
+                完成
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  safeArea: {
     flex: 1,
   },
   container: {
-    gap: WORKBENCH_SIZE.containerGap,
-    padding: WORKBENCH_SIZE.containerPaddingHorizontal,
-    paddingTop: WORKBENCH_SIZE.containerPaddingTop,
-    paddingBottom: WORKBENCH_SIZE.containerPaddingBottom,
+    gap: 14,
+    padding: 14,
+    paddingBottom: 36,
   },
   heroCard: {
-    borderRadius: WORKBENCH_SIZE.heroRadius,
+    borderRadius: 24,
     borderWidth: 1,
-    gap: WORKBENCH_SIZE.heroGap,
     overflow: 'hidden',
-    padding: WORKBENCH_SIZE.heroPadding,
+    padding: 18,
     position: 'relative',
   },
-  heroGlowWrap: {
-    ...StyleSheet.absoluteFillObject,
-  },
   heroGlowA: {
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderRadius: 999,
+    height: 160,
     position: 'absolute',
-    right: SALES_WORKBENCH_SIZE.heroGlowA.right,
-    top: SALES_WORKBENCH_SIZE.heroGlowA.top,
-    width: SALES_WORKBENCH_SIZE.heroGlowA.width,
-    height: SALES_WORKBENCH_SIZE.heroGlowA.height,
-    borderRadius: SALES_WORKBENCH_SIZE.heroGlowA.radius,
-    backgroundColor: '#DBEAFE',
+    right: -36,
+    top: -30,
+    width: 160,
   },
   heroGlowB: {
+    backgroundColor: 'rgba(234,88,12,0.10)',
+    borderRadius: 999,
+    bottom: -52,
+    height: 130,
+    left: -24,
     position: 'absolute',
-    left: SALES_WORKBENCH_SIZE.heroGlowB.left,
-    bottom: SALES_WORKBENCH_SIZE.heroGlowB.bottom,
-    width: SALES_WORKBENCH_SIZE.heroGlowB.width,
-    height: SALES_WORKBENCH_SIZE.heroGlowB.height,
-    borderRadius: SALES_WORKBENCH_SIZE.heroGlowB.radius,
-    backgroundColor: '#FED7AA',
-    opacity: SALES_WORKBENCH_SIZE.heroGlowB.opacity,
+    width: 130,
   },
-  heroGlowC: {
-    position: 'absolute',
-    right: SALES_WORKBENCH_SIZE.heroGlowC.right,
-    bottom: SALES_WORKBENCH_SIZE.heroGlowC.bottom,
-    width: SALES_WORKBENCH_SIZE.heroGlowC.width,
-    height: SALES_WORKBENCH_SIZE.heroGlowC.height,
-    borderRadius: SALES_WORKBENCH_SIZE.heroGlowC.radius,
-    backgroundColor: '#CFFAFE',
-    opacity: SALES_WORKBENCH_SIZE.heroGlowC.opacity,
-    transform: [{ rotate: '-12deg' }],
-  },
-  eyebrow: {
-    color: '#1D4ED8',
-    fontSize: WORKBENCH_SIZE.heroEyebrowFontSize,
-    letterSpacing: WORKBENCH_SIZE.heroEyebrowLetterSpacing,
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 13,
+    letterSpacing: 1.4,
+    marginBottom: 10,
   },
   heroHeader: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: SALES_WORKBENCH_SIZE.heroHeaderGap,
+    gap: 12,
     justifyContent: 'space-between',
   },
-  heroTextWrap: {
+  heroCopy: {
     flex: 1,
-    gap: SALES_WORKBENCH_SIZE.heroTextGap,
+    gap: 8,
   },
   heroTitle: {
-    fontSize: WORKBENCH_SIZE.heroTitleFontSize,
-    lineHeight: WORKBENCH_SIZE.heroTitleLineHeight,
+    fontSize: 22,
   },
-  heroDescription: {
-    color: '#475569',
-    fontSize: WORKBENCH_SIZE.heroSubtitleFontSize,
-    lineHeight: WORKBENCH_SIZE.heroSubtitleLineHeight,
-  },
-  heroCountPill: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    minWidth: WORKBENCH_SIZE.heroCountPillMinWidth,
-    paddingHorizontal: WORKBENCH_SIZE.heroCountPillPaddingHorizontal,
-    paddingVertical: WORKBENCH_SIZE.heroCountPillPaddingVertical,
-  },
-  metricTiles: {
-    flexDirection: 'row',
-    gap: WORKBENCH_SIZE.metricRowGap,
-  },
-  metricTile: {
-    borderRadius: WORKBENCH_SIZE.metricCardRadius,
-    borderWidth: 1,
-    flex: 1,
-    gap: WORKBENCH_SIZE.metricCardGap,
-    minHeight: WORKBENCH_SIZE.metricCardMinHeight,
-    paddingHorizontal: WORKBENCH_SIZE.metricCardPaddingHorizontal,
-    paddingVertical: WORKBENCH_SIZE.metricCardPaddingVertical,
-  },
-  metricTileLabel: {
-    fontSize: WORKBENCH_SIZE.metricLabelFontSize,
-  },
-  metricTileValue: {
-    fontSize: WORKBENCH_SIZE.metricValueFontSize,
-    lineHeight: WORKBENCH_SIZE.metricValueLineHeight,
-  },
-  sectionCard: {
-    borderRadius: WORKBENCH_SIZE.sectionRadius,
-    borderWidth: 1,
-    gap: WORKBENCH_SIZE.sectionGap,
-    padding: WORKBENCH_SIZE.sectionPadding,
-  },
-  sectionHeaderRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    fontSize: WORKBENCH_SIZE.sectionTitleFontSize,
-  },
-  sectionHint: {
+  heroText: {
     color: '#64748B',
-    fontSize: WORKBENCH_SIZE.sectionHintFontSize,
+    fontSize: 14,
+    lineHeight: 21,
   },
-  quickActionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: WORKBENCH_SIZE.actionGridGap,
-    justifyContent: 'space-between',
-  },
-  quickActionCard: {
-    alignItems: 'center',
-    borderRadius: WORKBENCH_SIZE.actionCardRadius,
+  heroBadge: {
+    backgroundColor: 'rgba(255,255,255,0.86)',
+    borderRadius: 999,
     borderWidth: 1,
-    gap: SALES_WORKBENCH_SIZE.quickActionGap,
-    justifyContent: 'center',
-    minHeight: WORKBENCH_SIZE.actionCardMinHeight,
-    paddingHorizontal: WORKBENCH_SIZE.actionCardPaddingHorizontal,
-    paddingVertical: WORKBENCH_SIZE.actionCardPaddingVertical,
-    width: '31.5%',
+    maxWidth: 140,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  quickActionText: {
-    fontSize: WORKBENCH_SIZE.actionLabelFontSize,
-    lineHeight: WORKBENCH_SIZE.actionLabelLineHeight,
-    maxWidth: WORKBENCH_SIZE.actionLabelMaxWidth,
+  heroBadgeValue: {
+    color: '#0F172A',
+    fontSize: 12,
     textAlign: 'center',
   },
-  headerActions: {
-    flexDirection: 'row',
-    gap: SALES_WORKBENCH_SIZE.headerActionGap,
-  },
-  headerActionButton: {
-    alignItems: 'center',
-    borderRadius: 999,
-    justifyContent: 'center',
-    minHeight: SALES_WORKBENCH_SIZE.headerActionMinHeight,
-    minWidth: SALES_WORKBENCH_SIZE.headerActionMinWidth,
-    paddingHorizontal: SALES_WORKBENCH_SIZE.headerActionPaddingHorizontal,
-  },
-  headerActionText: {
-    color: '#475569',
-    fontSize: SALES_WORKBENCH_SIZE.headerActionTextFontSize,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    gap: WORKBENCH_SIZE.searchRowGap,
-  },
-  searchInputWrap: {
-    alignItems: 'center',
-    borderRadius: WORKBENCH_SIZE.searchInputRadius,
-    borderWidth: 1,
-    flex: 1,
-    flexDirection: 'row',
-    minHeight: WORKBENCH_SIZE.searchInputMinHeight,
-    paddingHorizontal: SALES_WORKBENCH_SIZE.searchInputPaddingHorizontal,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: WORKBENCH_SIZE.searchInputFontSize,
-    minHeight: SALES_WORKBENCH_SIZE.searchInputInnerMinHeight,
-    paddingVertical: 0,
-  },
-  clearButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 24,
-  },
-  searchButton: {
-    alignItems: 'center',
-    borderRadius: WORKBENCH_SIZE.searchButtonRadius,
-    flexDirection: 'row',
-    gap: 4,
-    justifyContent: 'center',
-    minHeight: WORKBENCH_SIZE.searchButtonMinHeight,
-    minWidth: WORKBENCH_SIZE.searchButtonMinWidth,
-    paddingHorizontal: WORKBENCH_SIZE.searchButtonPaddingHorizontal,
-  },
-  searchButtonText: {
-    color: '#FFF',
-    fontSize: WORKBENCH_SIZE.searchButtonTextFontSize,
-  },
-  filterChipsWrap: {
+  filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SALES_WORKBENCH_SIZE.filterChipGap,
+    gap: 10,
+    marginTop: 16,
   },
   filterChip: {
-    borderRadius: SALES_WORKBENCH_SIZE.filterChipRadius,
+    borderRadius: 999,
     borderWidth: 1,
-    minHeight: SALES_WORKBENCH_SIZE.filterChipMinHeight,
-    justifyContent: 'center',
-    paddingHorizontal: SALES_WORKBENCH_SIZE.filterChipPaddingHorizontal,
+    minWidth: 74,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   filterChipText: {
     color: '#475569',
-    fontSize: SALES_WORKBENCH_SIZE.filterChipFontSize,
+    textAlign: 'center',
   },
-  filterCardGrid: {
+  filterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  toolbarRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SALES_WORKBENCH_SIZE.filterCardGridGap,
+    gap: 12,
+    marginTop: 16,
   },
-  filterCard: {
-    borderRadius: WORKBENCH_SIZE.filterCardRadius,
+  toolbarButton: {
+    borderRadius: 18,
     borderWidth: 1,
-    gap: WORKBENCH_SIZE.filterCardGap,
-    minHeight: WORKBENCH_SIZE.filterCardMinHeight,
-    paddingHorizontal: WORKBENCH_SIZE.filterCardPaddingHorizontal,
-    paddingVertical: WORKBENCH_SIZE.filterCardPaddingVertical,
-    width: '47%',
-  },
-  infoCardInteractive: {
-    justifyContent: 'space-between',
-  },
-  infoCardNeutral: {
-    justifyContent: 'flex-start',
-  },
-  filterCardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  filterLabel: {
-    color: '#64748B',
-    fontSize: WORKBENCH_SIZE.filterLabelFontSize,
-  },
-  filterValue: {
-    color: '#0F172A',
-    fontSize: WORKBENCH_SIZE.filterValueFontSize,
-  },
-  resultFraction: {
-    color: '#0F172A',
-    fontSize: WORKBENCH_SIZE.resultFractionFontSize,
-  },
-  resultMainRow: {
-    alignItems: 'baseline',
-    flexDirection: 'row',
+    flex: 1,
     gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  resultUnit: {
+  toolbarLabel: {
     color: '#64748B',
     fontSize: 12,
   },
-  resultHint: {
-    color: '#64748B',
-    fontSize: WORKBENCH_SIZE.resultHintFontSize,
-  },
-  resultList: {
-    gap: 12,
-  },
-  docCard: {
-    borderRadius: WORKBENCH_SIZE.docCardRadius,
-    borderWidth: 1,
-    gap: WORKBENCH_SIZE.docCardGap,
-    padding: WORKBENCH_SIZE.docCardPadding,
-  },
-  docTopRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: SALES_WORKBENCH_SIZE.docTopRowGap,
-    justifyContent: 'space-between',
-  },
-  docMainInfo: {
-    flex: 1,
-    gap: SALES_WORKBENCH_SIZE.docMainInfoGap,
-  },
-  docTitle: {
-    fontSize: WORKBENCH_SIZE.docTitleFontSize,
-  },
-  docSubRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: SALES_WORKBENCH_SIZE.docSubRowGap,
-  },
-  docMeta: {
-    color: '#64748B',
-    fontSize: WORKBENCH_SIZE.docMetaFontSize,
-  },
-  statusPill: {
-    borderRadius: SALES_WORKBENCH_SIZE.statusPillRadius,
-    paddingHorizontal: SALES_WORKBENCH_SIZE.statusPillPaddingHorizontal,
-    paddingVertical: SALES_WORKBENCH_SIZE.statusPillPaddingVertical,
-  },
-  statusText: {
-    fontSize: SALES_WORKBENCH_SIZE.statusTextFontSize,
-  },
-  docMiddleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  docCompanyPill: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: SALES_WORKBENCH_SIZE.docCompanyPillRadius,
-    paddingHorizontal: SALES_WORKBENCH_SIZE.docCompanyPillPaddingHorizontal,
-    paddingVertical: SALES_WORKBENCH_SIZE.docCompanyPillPaddingVertical,
-  },
-  docCompanyText: {
-    color: '#475569',
-    fontSize: WORKBENCH_SIZE.docCompanyFontSize,
-  },
-  moneyActionRow: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    gap: SALES_WORKBENCH_SIZE.moneyActionRowGap,
-    justifyContent: 'space-between',
-  },
-  moneyColumns: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: SALES_WORKBENCH_SIZE.moneyColumnsGap,
-  },
-  moneyBlock: {
-    flex: 1,
-    gap: SALES_WORKBENCH_SIZE.moneyBlockGap,
-  },
-  moneyLabel: {
-    color: '#64748B',
-    fontSize: WORKBENCH_SIZE.moneyLabelFontSize,
-  },
-  moneyValue: {
+  toolbarValue: {
     color: '#0F172A',
-    fontSize: WORKBENCH_SIZE.moneyValueFontSize,
+    fontSize: 16,
   },
-  primaryActionButton: {
+  refreshButton: {
     alignItems: 'center',
-    borderRadius: SALES_WORKBENCH_SIZE.primaryActionRadius,
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 8,
     justifyContent: 'center',
-    minHeight: SALES_WORKBENCH_SIZE.primaryActionMinHeight,
-    minWidth: SALES_WORKBENCH_SIZE.primaryActionMinWidth,
-    paddingHorizontal: SALES_WORKBENCH_SIZE.primaryActionPaddingHorizontal,
+    minWidth: 110,
+    paddingHorizontal: 16,
   },
-  primaryActionText: {
-    fontSize: SALES_WORKBENCH_SIZE.primaryActionFontSize,
+  refreshButtonText: {
+    color: '#FFFFFF',
   },
-  loadMoreButton: {
-    alignItems: 'center',
-    borderRadius: SALES_WORKBENCH_SIZE.loadMoreRadius,
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  metricCard: {
+    borderRadius: 18,
     borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: SALES_WORKBENCH_SIZE.loadMoreMinHeight,
-    paddingHorizontal: SALES_WORKBENCH_SIZE.loadMorePaddingHorizontal,
+    flexGrow: 1,
+    minWidth: '47%',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
-  loadMoreText: {
-    color: '#475569',
-  },
-  emptyCard: {
-    borderRadius: SALES_WORKBENCH_SIZE.emptyCardRadius,
-    borderWidth: 1,
-    gap: SALES_WORKBENCH_SIZE.emptyCardGap,
-    padding: SALES_WORKBENCH_SIZE.emptyCardPadding,
-  },
-  loadingWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: SALES_WORKBENCH_SIZE.loadingMinHeight,
-  },
-  modalOverlay: {
-    backgroundColor: 'rgba(15, 23, 42, 0.24)',
-    flex: 1,
-    justifyContent: 'flex-end',
-    padding: SALES_WORKBENCH_SIZE.modalPadding,
-  },
-  modalCard: {
-    borderRadius: SALES_WORKBENCH_SIZE.modalCardRadius,
-    borderWidth: 1,
-    gap: SALES_WORKBENCH_SIZE.modalCardGap,
-    maxHeight: '70%',
-    padding: SALES_WORKBENCH_SIZE.modalPadding,
-  },
-  modalTitle: {
-    fontSize: SALES_WORKBENCH_SIZE.modalTitleFontSize,
-  },
-  modalSearchInputWrap: {
-    borderRadius: SALES_WORKBENCH_SIZE.modalSearchRadius,
-    borderWidth: 1,
-    minHeight: SALES_WORKBENCH_SIZE.modalSearchMinHeight,
-    justifyContent: 'center',
-    paddingHorizontal: SALES_WORKBENCH_SIZE.modalSearchPaddingHorizontal,
-  },
-  modalSearchInput: {
-    fontSize: SALES_WORKBENCH_SIZE.modalSearchFontSize,
-    minHeight: SALES_WORKBENCH_SIZE.modalSearchInnerMinHeight,
-  },
-  modalOption: {
-    gap: SALES_WORKBENCH_SIZE.modalOptionGap,
-    minHeight: SALES_WORKBENCH_SIZE.modalOptionMinHeight,
-    justifyContent: 'center',
-    paddingVertical: SALES_WORKBENCH_SIZE.modalOptionPaddingVertical,
-  },
-  modalOptionMeta: {
+  metricLabel: {
     color: '#64748B',
-    fontSize: SALES_WORKBENCH_SIZE.modalMetaFontSize,
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  metricValue: {
+    fontSize: 19,
+  },
+  sectionCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  sectionHeader: {
+    marginBottom: 6,
+  },
+  sectionHeaderText: {
+    gap: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
+  },
+  sectionHint: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  tableRow: {
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+  },
+  tableRowMain: {
+    flex: 1,
+    gap: 6,
+  },
+  tableRowSide: {
+    alignItems: 'flex-end',
+    gap: 4,
+    maxWidth: 140,
+  },
+  rowTitle: {
+    fontSize: 16,
+  },
+  rowMeta: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  rowAmount: {
+    fontSize: 16,
+  },
+  rowSubAmount: {
+    color: '#94A3B8',
+    fontSize: 12,
+  },
+  emptyText: {
+    color: '#94A3B8',
+    paddingVertical: 14,
+  },
+  flowChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  flowChipText: {
+    fontSize: 12,
+  },
+  noteCard: {
+    borderRadius: 20,
+    gap: 8,
+    padding: 16,
+  },
+  noteTitle: {
+    fontSize: 16,
+  },
+  noteText: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15,23,42,0.35)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  dialogCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    maxHeight: '80%',
+    padding: 18,
+    width: '100%',
+  },
+  dialogTitle: {
+    fontSize: 20,
+    marginBottom: 12,
+  },
+  dialogInput: {
+    borderRadius: 16,
+    borderWidth: 1,
+    fontSize: 16,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dialogList: {
+    maxHeight: 280,
+  },
+  dialogLoading: {
+    paddingVertical: 12,
+  },
+  dialogOption: {
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 4,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dialogOptionText: {
+    fontSize: 16,
+  },
+  dialogOptionHint: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  dialogClose: {
+    alignItems: 'center',
+    borderRadius: 16,
+    marginTop: 12,
+    paddingVertical: 14,
+  },
+  dialogCloseText: {
+    color: '#FFFFFF',
   },
 });
