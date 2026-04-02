@@ -18,6 +18,7 @@ type Shortcut = {
     | 'shippingbox.fill'
     | 'doc.text.fill'
     | 'person.fill'
+    | 'building.2.fill'
     | 'gearshape.fill'
     | 'magnifyingglass'
     | 'ruler.fill';
@@ -89,6 +90,7 @@ export default function HomeScreen() {
             label: '进货',
             icon: 'shippingbox.fill' as const,
           },
+          { href: '/common/suppliers', label: '供应商', icon: 'building.2.fill' as const },
         ]
       : []),
     { href: '/(tabs)/docs', label: '对账', icon: 'doc.text.fill' },

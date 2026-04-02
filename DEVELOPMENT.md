@@ -5542,3 +5542,40 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/app-shell.tsx`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/constants/workbench-size.ts`
+
+## Supplier Management UI Update (2026-04-02)
+
+### What Changed
+
+- Added a full supplier management flow in mobile frontend:
+  - supplier list
+  - supplier create
+  - supplier detail edit
+- Added a home shortcut entry to open supplier management quickly.
+- Added a dedicated supplier service layer to align with backend supplier APIs.
+
+### UX And Layout Adjustments
+
+- Reworked supplier list hierarchy to improve readability on small screens:
+  - larger supplier title
+  - compact status chip
+  - grouped tags for supplier group and currency
+  - key-value info panel for contact/address/update date
+- Removed redundant bottom `详情` row in list cards because the whole card is already clickable.
+- Fixed top CTA visual alignment by using `Pressable` click containers for better cross-platform centering.
+
+### Form Controls Update
+
+- Extended shared form controls with explicit read-only support:
+  - `ProductTextField` now supports `editable`
+  - `ProductSelectorField` now supports `disabled`
+- Supplier detail page now has clearer read mode vs edit mode behavior.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/suppliers.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/supplier/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/supplier/[supplierName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/suppliers.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/product-form-controls.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`

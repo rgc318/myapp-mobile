@@ -11,6 +11,7 @@ export function ProductTextField({
   multiline = false,
   labelColor,
   required = false,
+  editable = true,
 }: {
   label: string;
   value: string;
@@ -19,12 +20,14 @@ export function ProductTextField({
   multiline?: boolean;
   labelColor?: string;
   required?: boolean;
+  editable?: boolean;
 }) {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
+  const textColor = useThemeColor({}, 'text');
 
   return (
-    <View style={styles.fieldBlock}>
+    <View style={[styles.fieldBlock, !editable ? styles.fieldBlockDisabled : null]}>
       {label ? (
         <View style={styles.labelRow}>
           <ThemedText style={[styles.fieldLabel, labelColor ? { color: labelColor } : null]} type="defaultSemiBold">
@@ -38,12 +41,17 @@ export function ProductTextField({
         </View>
       ) : null}
       <TextInput
+        editable={editable}
         multiline={multiline}
         numberOfLines={multiline ? 4 : 1}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor="rgba(31,42,55,0.38)"
-        style={[multiline ? styles.textarea : styles.textInput, { backgroundColor: surfaceMuted, borderColor }]}
+        style={[
+          multiline ? styles.textarea : styles.textInput,
+          { backgroundColor: surfaceMuted, borderColor, color: textColor },
+          !editable ? styles.inputDisabled : null,
+        ]}
         textAlignVertical={multiline ? 'top' : 'center'}
         value={value}
       />
@@ -58,6 +66,7 @@ export function ProductSelectorField({
   actionLabel = '选择',
   onPress,
   required = false,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -65,13 +74,14 @@ export function ProductSelectorField({
   actionLabel?: string;
   onPress: () => void;
   required?: boolean;
+  disabled?: boolean;
 }) {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
 
   return (
-    <View style={styles.fieldBlock}>
+    <View style={[styles.fieldBlock, disabled ? styles.fieldBlockDisabled : null]}>
       <View style={styles.labelRow}>
         <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
           {label}
@@ -82,12 +92,15 @@ export function ProductSelectorField({
           </ThemedText>
         ) : null}
       </View>
-      <Pressable onPress={onPress} style={[styles.selectorField, { backgroundColor: surfaceMuted, borderColor }]}>
+      <Pressable
+        disabled={disabled}
+        onPress={onPress}
+        style={[styles.selectorField, { backgroundColor: surfaceMuted, borderColor }, disabled ? styles.inputDisabled : null]}>
         <ThemedText numberOfLines={1} style={styles.selectorFieldValue} type="defaultSemiBold">
           {value || placeholder}
         </ThemedText>
-        <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-          {actionLabel}
+        <ThemedText style={{ color: tintColor, opacity: disabled ? 0.5 : 1 }} type="defaultSemiBold">
+          {disabled ? '只读' : actionLabel}
         </ThemedText>
       </Pressable>
     </View>
@@ -126,7 +139,7 @@ export function ProductPickerSheet({
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.modalBackdrop}>
         <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
-        <View style={[styles.modalSheet, { backgroundColor: surface }]}>
+        <View style={[styles.modalSheet, { backgroundColor: surface }]}> 
           <View style={styles.modalHandle} />
           <View style={styles.modalHeader}>
             <ThemedText style={styles.modalTitle} type="title">
@@ -134,7 +147,7 @@ export function ProductPickerSheet({
             </ThemedText>
             <ThemedText style={styles.modalHint}>{hint}</ThemedText>
           </View>
-          <View style={[styles.modalSearchWrap, { backgroundColor: surfaceMuted, borderColor }]}>
+          <View style={[styles.modalSearchWrap, { backgroundColor: surfaceMuted, borderColor }]}> 
             <TextInput
               onChangeText={onChangeQuery}
               placeholder={placeholder}
@@ -181,6 +194,9 @@ const styles = StyleSheet.create({
   fieldBlock: {
     gap: 8,
   },
+  fieldBlockDisabled: {
+    opacity: 0.9,
+  },
   labelRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -208,6 +224,9 @@ const styles = StyleSheet.create({
     minHeight: 108,
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  inputDisabled: {
+    opacity: 0.64,
   },
   selectorField: {
     alignItems: 'center',
