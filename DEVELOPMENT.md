@@ -5635,3 +5635,24 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/products.tsx`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+
+## Product Detail UI Polish (2026-04-02)
+
+### What Changed
+
+- Refined product detail header card to match customer/supplier visual hierarchy.
+- Replaced dense metadata stack with compact tags plus key metric cards.
+
+### UX And Layout Adjustments
+
+- Added hero background accents and compact top row (image + name + status).
+- Added key metric cards in header:
+  - standard selling price
+  - total stock
+  - warehouse record count
+- Moved category/unit/brand into compact chip row for higher information density.
+- Unified section hint typography and spacing rhythm with other master-data pages.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`

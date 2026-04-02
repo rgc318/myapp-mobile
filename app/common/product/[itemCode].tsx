@@ -30,6 +30,13 @@ function formatFactor(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
 }
 
+function formatQty(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '0';
+  }
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
+}
+
 function isSelectableWarehouse(value: string) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) {
@@ -205,6 +212,7 @@ export default function ProductDetailScreen() {
     }
     return detail.warehouseStockDetails.some((item) => item.warehouse === trimmedWarehouse);
   }, [detail, selectedWarehouse]);
+  const warehouseCount = detail?.warehouseStockDetails.length ?? 0;
 
   const stockUomDisplay = draftStockUom.trim() || detail?.stockUom || '';
   const wholesaleUomDisplay = draftWholesaleDefaultUom.trim();
@@ -763,31 +771,71 @@ export default function ProductDetailScreen() {
       title="商品详情">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
-          <View style={[styles.imageWrap, { backgroundColor: surfaceMuted }]}>
-            {detail?.imageUrl ? <Image contentFit="cover" source={detail.imageUrl} style={styles.image} /> : null}
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
+          <View style={styles.heroTopRow}>
+            <View style={[styles.imageWrap, { backgroundColor: surfaceMuted }]}>
+              {detail?.imageUrl ? <Image contentFit="cover" source={detail.imageUrl} style={styles.image} /> : null}
+            </View>
+            <View style={styles.heroCopy}>
+              <ThemedText style={styles.heroEyebrow}>PRODUCT DETAIL</ThemedText>
+              <View style={styles.heroTitleRow}>
+                <ThemedText numberOfLines={1} style={styles.heroTitle} type="title">
+                  {detail?.itemName || productCode}
+                </ThemedText>
+                <View
+                  style={[
+                    styles.statusChip,
+                    { backgroundColor: detail?.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)' },
+                  ]}>
+                  <ThemedText
+                    style={[styles.statusChipText, { color: detail?.disabled ? danger : success }]}
+                    type="defaultSemiBold">
+                    {detail?.disabled ? '已停用' : '启用中'}
+                  </ThemedText>
+                </View>
+              </View>
+              <ThemedText style={styles.metaText}>编码 {detail?.itemCode || productCode}</ThemedText>
+            </View>
           </View>
-          <View style={styles.heroCopy}>
-            <View style={styles.heroTitleRow}>
-              <ThemedText numberOfLines={1} style={styles.heroTitle} type="title">
-                {detail?.itemName || productCode}
+          <View style={styles.tagRow}>
+            <View style={[styles.tag, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={[styles.tagText, { color: tintColor }]} type="defaultSemiBold">
+                分类 {detail?.itemGroup || '未分类'}
               </ThemedText>
-              <View
-                style={[
-                  styles.statusChip,
-                  { backgroundColor: detail?.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)' },
-                ]}>
-                <ThemedText
-                  style={[styles.statusChipText, { color: detail?.disabled ? danger : success }]}
-                  type="defaultSemiBold">
-                  {detail?.disabled ? '已停用' : '启用中'}
+            </View>
+            <View style={[styles.tag, { backgroundColor: 'rgba(251,146,60,0.14)' }]}>
+              <ThemedText style={[styles.tagText, { color: '#C2410C' }]} type="defaultSemiBold">
+                单位 {formatDisplayUom(currentDisplayStockUom)}
+              </ThemedText>
+            </View>
+            {detail?.brand ? (
+              <View style={[styles.tag, { backgroundColor: surfaceMuted }]}>
+                <ThemedText style={[styles.tagText, { color: '#334155' }]} type="defaultSemiBold">
+                  品牌 {detail.brand}
                 </ThemedText>
               </View>
+            ) : null}
+          </View>
+          <View style={styles.heroStatsRow}>
+            <View style={[styles.heroStatCard, { borderColor: 'rgba(59,130,246,0.2)', backgroundColor: 'rgba(59,130,246,0.08)' }]}>
+              <ThemedText style={styles.heroStatLabel}>标准售价</ThemedText>
+              <ThemedText style={styles.heroStatValue} type="defaultSemiBold">
+                {formatMoney(detail?.priceSummary?.standardSellingRate)}
+              </ThemedText>
             </View>
-            <ThemedText style={styles.metaText}>编码 {detail?.itemCode || productCode}</ThemedText>
-            {detail?.nickname ? <ThemedText style={styles.metaText}>昵称 {detail.nickname}</ThemedText> : null}
-            <ThemedText style={styles.metaText}>分类 {detail?.itemGroup || '未分类'}</ThemedText>
-            {detail?.brand ? <ThemedText style={styles.metaText}>品牌 {detail.brand}</ThemedText> : null}
-            {detail?.barcode ? <ThemedText style={styles.metaText}>条码 {detail.barcode}</ThemedText> : null}
+            <View style={[styles.heroStatCard, { borderColor: 'rgba(16,185,129,0.24)', backgroundColor: 'rgba(16,185,129,0.08)' }]}>
+              <ThemedText style={styles.heroStatLabel}>总库存</ThemedText>
+              <ThemedText style={styles.heroStatValue} type="defaultSemiBold">
+                {formatQty(detail?.totalQty)} {formatDisplayUom(currentDisplayStockUom)}
+              </ThemedText>
+            </View>
+            <View style={[styles.heroStatCard, { borderColor: 'rgba(234,88,12,0.24)', backgroundColor: 'rgba(234,88,12,0.08)' }]}>
+              <ThemedText style={styles.heroStatLabel}>仓库记录</ThemedText>
+              <ThemedText style={styles.heroStatValue} type="defaultSemiBold">
+                {warehouseCount} 个
+              </ThemedText>
+            </View>
           </View>
         </View>
 
@@ -1689,20 +1737,43 @@ export default function ProductDetailScreen() {
 const styles = StyleSheet.create({
   content: {
     gap: 14,
-    paddingBottom: 20,
+    paddingBottom: 140,
   },
   heroCard: {
     borderRadius: 24,
     borderWidth: 1,
+    overflow: 'hidden',
+    gap: 12,
+    padding: 16,
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 180,
+    position: 'absolute',
+    right: -78,
+    top: -66,
+    width: 180,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    height: 112,
+    left: -32,
+    position: 'absolute',
+    top: 116,
+    width: 112,
+  },
+  heroTopRow: {
     flexDirection: 'row',
-    gap: 16,
-    padding: 18,
+    gap: 12,
   },
   imageWrap: {
-    borderRadius: 22,
-    height: 88,
+    borderRadius: 18,
+    height: 76,
     overflow: 'hidden',
-    width: 88,
+    width: 76,
   },
   image: {
     height: '100%',
@@ -1710,17 +1781,24 @@ const styles = StyleSheet.create({
   },
   heroCopy: {
     flex: 1,
-    gap: 6,
+    gap: 4,
+    minWidth: 0,
+  },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.2,
   },
   heroTitleRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     justifyContent: 'space-between',
   },
   heroTitle: {
     flex: 1,
-    fontSize: 24,
+    fontSize: 22,
+    lineHeight: 28,
   },
   statusChip: {
     borderRadius: 999,
@@ -1728,10 +1806,48 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   statusChipText: {
-    fontSize: 12,
+    fontSize: 11,
   },
   metaText: {
-    opacity: 0.72,
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  tagRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  tag: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  tagText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  heroStatCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    gap: 3,
+    minHeight: 68,
+    padding: 10,
+  },
+  heroStatLabel: {
+    color: '#6B7280',
+    fontSize: 11,
+  },
+  heroStatValue: {
+    color: '#0F172A',
+    fontSize: 13,
+    lineHeight: 17,
   },
   sectionCard: {
     borderRadius: 24,
@@ -1753,7 +1869,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   sectionHint: {
-    opacity: 0.72,
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 20,
   },
   dangerSection: {
     gap: 12,
