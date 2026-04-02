@@ -1194,31 +1194,32 @@ export default function PurchaseOrderCreateScreen() {
               : '完成主体信息后，从商品页继续添加采购明细。'}
           </ThemedText>
         </View>
-        <Pressable
-          disabled={isSubmitting}
-          onPress={() => {
-            if (preferences.purchaseFlowMode === 'immediate') {
-              setShowQuickCreateConfirm(true);
-              return;
-            }
-            void handleSubmit('save');
-          }}
-          style={[
-            styles.footerButton,
-            { backgroundColor: isSubmitting ? surfaceMuted : tintColor },
-          ]}>
-          <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
-            {isSubmitting
-              ? submitMode === 'quick'
+        <View style={styles.footerActionsRow}>
+          <Pressable
+            disabled={isSubmitting}
+            onPress={() => void handleSubmit('save')}
+            style={[styles.footerGhostButton, { borderColor }]}>
+            <ThemedText style={styles.footerGhostButtonText} type="defaultSemiBold">
+              {isSubmitting && submitMode === 'save' ? '保存中...' : '仅保存'}
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            disabled={isSubmitting}
+            onPress={() => setShowQuickCreateConfirm(true)}
+            style={[
+              styles.footerButton,
+              styles.footerPrimaryButton,
+              { backgroundColor: isSubmitting ? surfaceMuted : tintColor },
+            ]}>
+            <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
+              {isSubmitting && submitMode === 'quick'
                 ? quickCreateMode === 'payment'
                   ? '正在收货、开票并付款...'
                   : '正在收货并开票...'
-                : '正在提交采购订单...'
-              : preferences.purchaseFlowMode === 'immediate'
-                ? '收货并开票'
-                : '提交采购订单'}
-          </ThemedText>
-        </Pressable>
+                : '一键开单'}
+            </ThemedText>
+          </Pressable>
+        </View>
       </View>
 
       <Modal animationType="slide" onRequestClose={closePicker} transparent visible={pickerVisible}>
@@ -2021,8 +2022,29 @@ const styles = StyleSheet.create({
   footerButton: {
     alignItems: 'center',
     borderRadius: 16,
+    flex: 1,
     justifyContent: 'center',
     minHeight: 52,
+  },
+  footerPrimaryButton: {
+    borderColor: '#2563EB',
+    borderWidth: 1,
+  },
+  footerActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  footerGhostButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  footerGhostButtonText: {
+    color: '#475569',
+    fontSize: 15,
   },
   footerButtonText: {
     color: '#FFFFFF',

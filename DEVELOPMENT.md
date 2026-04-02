@@ -5692,3 +5692,24 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+
+## Purchase Create: Save + Quick Action Alignment (2026-04-02)
+
+### What Changed
+
+- Aligned purchase order create footer actions with sales create behavior.
+- Purchase create now always shows two explicit actions:
+  - `仅保存`
+  - `一键开单`
+
+### UX Behavior
+
+- `仅保存` creates purchase order only.
+- `一键开单` opens quick-confirm modal and keeps existing quick chain options:
+  - receive + invoice
+  - receive + invoice + immediate payment
+- This removes hidden behavior tied to flow-mode preference and improves discoverability.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
