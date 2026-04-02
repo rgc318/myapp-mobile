@@ -20,10 +20,24 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function SectionHeader({ title, hint }: { title: string; hint: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+        {title}
+      </ThemedText>
+      <ThemedText style={styles.sectionHint}>{hint}</ThemedText>
+    </View>
+  );
+}
+
 export default function ProductCreateScreen() {
   const router = useRouter();
   const { showError, showSuccess } = useFeedback();
   const tintColor = useThemeColor({}, 'tint');
+  const surface = useThemeColor({}, 'surface');
+  const borderColor = useThemeColor({}, 'border');
+  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
 
   const [itemName, setItemName] = useState('');
   const [itemCode, setItemCode] = useState('');
@@ -322,6 +336,12 @@ export default function ProductCreateScreen() {
           ? `1 ${formatDisplayUom(retailDefaultUom)} = 1 ${formatDisplayUom(stockUom)}`
           : `1 ${formatDisplayUom(retailDefaultUom)} = ${retailConversionFactor || '？'} ${formatDisplayUom(stockUom)}`
       : '';
+  const completion = [
+    itemName.trim(),
+    stockUom.trim(),
+    wholesaleRate.trim() || retailRate.trim() || standardRate.trim(),
+    wholesaleDefaultUom.trim() || retailDefaultUom.trim(),
+  ].filter(Boolean).length;
 
   return (
     <AppShell
@@ -346,10 +366,28 @@ export default function ProductCreateScreen() {
       }
       title="新增商品">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.sectionBlock}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            基础资料
-          </ThemedText>
+        <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowGreen} />
+          <View style={styles.heroHeader}>
+            <View style={styles.heroCopy}>
+              <ThemedText style={styles.heroEyebrow}>NEW PRODUCT</ThemedText>
+              <ThemedText style={styles.heroTitle} type="title">
+                新建商品档案
+              </ThemedText>
+              <ThemedText style={styles.heroDescription}>补齐基础资料、单位换算与价格配置后，可直接用于销售、采购和库存流程。</ThemedText>
+            </View>
+            <View style={[styles.heroBadge, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.heroBadgeLabel}>完成度</ThemedText>
+              <ThemedText style={[styles.heroBadgeValue, { color: tintColor }]} type="defaultSemiBold">
+                {completion}/4
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.sectionBlock, { backgroundColor: surface, borderColor }]}>
+          <SectionHeader hint="录入商品主数据，作为销售、采购和库存链路的共用基础信息。" title="基础资料" />
           <ProductTextField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" required value={itemName} />
           <ProductTextField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />
           <View style={styles.rowFields}>
@@ -366,13 +404,8 @@ export default function ProductCreateScreen() {
           <ProductTextField label="描述" multiline onChangeText={setDescription} placeholder="补充规格、备注或说明" value={description} />
         </View>
 
-        <View style={styles.sectionBlock}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            价格与成交单位
-          </ThemedText>
-          <ThemedText style={styles.sectionHint}>
-            先确定库存基准单位，再配置批发、零售默认成交单位以及到库存基准单位的换算关系。
-          </ThemedText>
+        <View style={[styles.sectionBlock, { backgroundColor: surface, borderColor }]}>
+          <SectionHeader hint="先确定库存基准单位，再配置批发、零售默认成交单位及换算关系。" title="价格与成交单位" />
           <View style={styles.inlineInfoCard}>
             <ThemedText style={styles.inlineInfoLabel}>库存基准单位</ThemedText>
             <ThemedText style={styles.inlineInfoValue} type="defaultSemiBold">
@@ -605,18 +638,88 @@ export default function ProductCreateScreen() {
 const styles = StyleSheet.create({
   content: {
     gap: 16,
-    paddingBottom: 20,
+    paddingBottom: 140,
+  },
+  heroCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    gap: 16,
+    overflow: 'hidden',
+    padding: 18,
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 200,
+    position: 'absolute',
+    right: -80,
+    top: -70,
+    width: 200,
+  },
+  heroGlowGreen: {
+    backgroundColor: 'rgba(34,197,94,0.10)',
+    borderRadius: 999,
+    height: 120,
+    left: -30,
+    position: 'absolute',
+    top: 120,
+    width: 120,
+  },
+  heroHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 13,
+    letterSpacing: 1.4,
+  },
+  heroTitle: {
+    color: '#14213D',
+    fontSize: 30,
+    lineHeight: 34,
+  },
+  heroDescription: {
+    color: '#5B6B81',
+  },
+  heroBadge: {
+    borderRadius: 18,
+    gap: 4,
+    minWidth: 88,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  heroBadgeLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  heroBadgeValue: {
+    fontSize: 22,
+    lineHeight: 26,
   },
   sectionBlock: {
-    gap: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    padding: 18,
+  },
+  sectionHeader: {
+    gap: 4,
   },
   sectionTitle: {
     fontSize: 18,
   },
   sectionHint: {
     color: '#64748B',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
   },
   rowFields: {
     flexDirection: 'row',

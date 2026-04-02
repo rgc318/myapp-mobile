@@ -5605,3 +5605,33 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customers.tsx`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/customer/create.tsx`
+
+## Product Management UI Update (2026-04-02)
+
+### What Changed
+
+- Aligned product management list page with customer/supplier visual system.
+- Upgraded product create page to use grouped card sections and onboarding hero.
+
+### UX And Layout Adjustments
+
+- Product list now supports consistent filter options:
+  - `启用中`
+  - `全部`
+  - `已停用`
+- Reset action now clears both keyword and status filter.
+- Product cards now include `最近更新` to improve traceability in list view.
+- List summary copy now shows active/disabled counts in one line.
+
+### Product Create Page Adjustments
+
+- Added a top hero card (`NEW PRODUCT`) with lightweight completion indicator.
+- Converted create form blocks into bordered section cards to improve hierarchy:
+  - `基础资料`
+  - `价格与成交单位`
+- Unified section hint typography with supplier/customer create pages.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/products.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
