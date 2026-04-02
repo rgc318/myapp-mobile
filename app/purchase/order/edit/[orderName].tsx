@@ -1743,8 +1743,11 @@ export default function PurchaseOrderEditScreen() {
                 metaSectionYRef.current = event.nativeEvent.layout.y;
               }}
               style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+              <View style={styles.heroGlowBlue} />
+              <View style={styles.heroGlowAmber} />
               <View style={styles.heroHeader}>
                 <View style={styles.heroCopy}>
+                  <ThemedText style={styles.heroEyebrow}>PURCHASE ORDER</ThemedText>
                   <ThemedText style={styles.heroTitle} type="defaultSemiBold">
                     {detail.supplierName || detail.supplier}
                   </ThemedText>
@@ -1906,6 +1909,31 @@ export default function PurchaseOrderEditScreen() {
               <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
                 订单与付款
               </ThemedText>
+              <View style={styles.orderPaymentSummaryRow}>
+                <View style={styles.orderPaymentSummaryCard}>
+                  <ThemedText style={styles.orderPaymentSummaryLabel}>已开票应付</ThemedText>
+                  <ThemedText style={styles.orderPaymentSummaryValue} type="defaultSemiBold">
+                    {formatMoney(detail.receivableAmount, detail.currency || 'CNY')}
+                  </ThemedText>
+                </View>
+                <View style={styles.orderPaymentSummaryCard}>
+                  <ThemedText style={styles.orderPaymentSummaryLabel}>已付款</ThemedText>
+                  <ThemedText style={styles.orderPaymentSummaryValue} type="defaultSemiBold">
+                    {formatMoney(detail.paidAmount, detail.currency || 'CNY')}
+                  </ThemedText>
+                </View>
+                <View style={styles.orderPaymentSummaryCard}>
+                  <ThemedText style={styles.orderPaymentSummaryLabel}>待付款</ThemedText>
+                  <ThemedText
+                    style={[
+                      styles.orderPaymentSummaryValue,
+                      detail.outstandingAmount && detail.outstandingAmount > 0 ? styles.orderPaymentSummaryOutstanding : null,
+                    ]}
+                    type="defaultSemiBold">
+                    {formatMoney(detail.outstandingAmount, detail.currency || 'CNY')}
+                  </ThemedText>
+                </View>
+              </View>
               <View style={styles.compactInfoGrid}>
                 <InfoRow label="我方公司" value={detail.company || '—'} />
                 <InfoRow label="下单日期" value={detail.transactionDate || '—'} />
@@ -1932,19 +1960,6 @@ export default function PurchaseOrderEditScreen() {
               </View>
               <View style={[styles.compactDivider, { borderColor }]} />
               <View style={styles.compactInfoGrid}>
-                <InfoRow
-                  label="已开票应付"
-                  value={formatMoney(detail.receivableAmount, detail.currency || 'CNY')}
-                />
-                <InfoRow
-                  label="已付款"
-                  value={formatMoney(detail.paidAmount, detail.currency || 'CNY')}
-                />
-                <InfoRow
-                  label="待付款"
-                  value={formatMoney(detail.outstandingAmount, detail.currency || 'CNY')}
-                  valueColor={detail.outstandingAmount && detail.outstandingAmount > 0 ? '#C2410C' : undefined}
-                />
                 <InfoRow label="最近付款单" value={detail.latestPaymentEntry || '暂无'} />
               </View>
             </View>
@@ -2187,7 +2202,27 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     gap: 14,
+    overflow: 'hidden',
     padding: 18,
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 188,
+    position: 'absolute',
+    right: -74,
+    top: -66,
+    width: 188,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    height: 112,
+    left: -24,
+    position: 'absolute',
+    top: 130,
+    width: 112,
   },
   heroHeader: {
     alignItems: 'flex-start',
@@ -2199,8 +2234,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.2,
+  },
   heroTitle: {
+    color: '#14213D',
     fontSize: 22,
+    lineHeight: 27,
   },
   heroSubline: {
     color: '#64748B',
@@ -2213,14 +2255,17 @@ const styles = StyleSheet.create({
   metaGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   metaBlock: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'rgba(248,250,252,0.9)',
+    borderColor: '#D8E1EE',
+    borderWidth: 1,
     borderRadius: 16,
     flexBasis: '48%',
     gap: 4,
-    padding: 12,
+    minHeight: 76,
+    padding: 10,
   },
   paymentProgressCard: {
     backgroundColor: '#FFFFFF',
@@ -2333,11 +2378,38 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   compactCard: {
-    gap: 10,
+    gap: 12,
     paddingVertical: 16,
   },
   compactInfoGrid: {
+    gap: 6,
+  },
+  orderPaymentSummaryRow: {
+    flexDirection: 'row',
     gap: 8,
+  },
+  orderPaymentSummaryCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D8E1EE',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    minHeight: 68,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  orderPaymentSummaryLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  orderPaymentSummaryValue: {
+    color: '#0F172A',
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  orderPaymentSummaryOutstanding: {
+    color: '#C2410C',
   },
   compactDivider: {
     borderTopWidth: 1,
@@ -2385,7 +2457,9 @@ const styles = StyleSheet.create({
   },
   businessMetricCard: {
     backgroundColor: '#F8FAFC',
+    borderColor: '#D8E1EE',
     borderRadius: 14,
+    borderWidth: 1,
     flex: 1,
     gap: 4,
     minHeight: 70,
@@ -2398,20 +2472,21 @@ const styles = StyleSheet.create({
   },
   businessMetricValue: {
     color: '#0F172A',
-    fontSize: 16,
+    fontSize: 15,
   },
   businessPrimaryActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
+    justifyContent: 'flex-start',
   },
   businessPrimaryButton: {
     alignItems: 'center',
     borderRadius: 14,
-    flex: 1,
+    flexGrow: 0,
     justifyContent: 'center',
-    minHeight: 44,
-    minWidth: 110,
+    minHeight: 42,
+    minWidth: 132,
     paddingHorizontal: 14,
   },
   businessPrimaryButtonText: {
@@ -2421,7 +2496,7 @@ const styles = StyleSheet.create({
   businessSecondaryActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   businessLinkButton: {
     alignItems: 'center',
@@ -2429,7 +2504,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 34,
+    minHeight: 32,
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
@@ -2524,9 +2599,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     fontSize: 15,
-    minHeight: 52,
+    minHeight: 50,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   textarea: {
     minHeight: 94,
@@ -2690,7 +2765,7 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   footerWrap: {
-    gap: 10,
+    gap: 8,
   },
   footerActionsRow: {
     flexDirection: 'row',
@@ -2698,20 +2773,20 @@ const styles = StyleSheet.create({
   },
   footerGhostButton: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: 50,
   },
   footerGhostButtonText: {
     color: '#475569',
-    fontSize: 15,
+    fontSize: 14,
   },
   footerSummaryCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   footerSummaryTopRow: {
     alignItems: 'center',
@@ -2725,8 +2800,8 @@ const styles = StyleSheet.create({
   },
   footerSummaryCount: {
     color: '#0F172A',
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 18,
+    lineHeight: 22,
   },
   footerSummaryAmountWrap: {
     alignItems: 'flex-end',
@@ -2741,29 +2816,29 @@ const styles = StyleSheet.create({
   },
   footerSummaryAmount: {
     color: '#C2410C',
-    fontSize: 24,
-    lineHeight: 28,
+    fontSize: 22,
+    lineHeight: 26,
     textAlign: 'right',
   },
   footerSummaryTitle: {
     color: '#0F172A',
-    fontSize: 14,
+    fontSize: 13,
   },
   footerSummaryHint: {
     color: '#475569',
-    fontSize: 13,
+    fontSize: 12,
     lineHeight: 18,
   },
   footerButton: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 14,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: 50,
   },
   footerButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
   },
   modalBackdrop: {
     backgroundColor: 'rgba(15,23,42,0.22)',

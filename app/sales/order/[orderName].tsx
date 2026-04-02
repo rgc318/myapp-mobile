@@ -1684,8 +1684,11 @@ export default function SalesOrderDetailScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
           <View style={styles.heroHeader}>
             <View style={styles.heroCopy}>
+              <ThemedText style={styles.heroEyebrow}>SALES ORDER</ThemedText>
               <ThemedText style={styles.heroTitle} type="defaultSemiBold">
                 {detail?.customer || '销售客户'}
               </ThemedText>
@@ -1724,28 +1727,56 @@ export default function SalesOrderDetailScreen() {
           <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
             订单概览
           </ThemedText>
-          <InfoRow label="公司" value={detail?.company || '—'} />
-          <InfoRow
-            label="单据状态"
-            value={getDocumentStatusLabel(detail?.documentStatus || '')}
-            valueColor={getStatusValueColor(detail?.documentStatus || '', 'document')}
-          />
-          <InfoRow
-            label="履约状态"
-            value={getFulfillmentStatusLabel(detail?.fulfillmentStatus || '')}
-            valueColor={getStatusValueColor(detail?.fulfillmentStatus || '', 'fulfillment')}
-          />
-          <InfoRow
-            label="发货状态"
-            value={getDeliveryStatusLabel(detail?.deliveryStatus || '')}
-            valueColor={getStatusValueColor(detail?.deliveryStatus || '', 'delivery')}
-          />
-          <InfoRow
-            label="收款状态"
-            value={getPaymentStatusLabel(detail?.paymentStatus || '')}
-            valueColor={getStatusValueColor(detail?.paymentStatus || '', 'payment')}
-          />
-          <InfoRow label="交货日期" value={detail?.deliveryDate || '未设置'} />
+          <View style={styles.overviewGrid}>
+            <View style={styles.overviewCard}>
+              <ThemedText style={styles.overviewLabel}>公司</ThemedText>
+              <ThemedText numberOfLines={1} style={styles.overviewValue} type="defaultSemiBold">
+                {detail?.company || '—'}
+              </ThemedText>
+            </View>
+            <View style={styles.overviewCard}>
+              <ThemedText style={styles.overviewLabel}>交货日期</ThemedText>
+              <ThemedText numberOfLines={1} style={styles.overviewValue} type="defaultSemiBold">
+                {detail?.deliveryDate || '未设置'}
+              </ThemedText>
+            </View>
+            <View style={styles.overviewCard}>
+              <ThemedText style={styles.overviewLabel}>单据状态</ThemedText>
+              <ThemedText
+                numberOfLines={1}
+                style={[styles.overviewValue, { color: getStatusValueColor(detail?.documentStatus || '', 'document') }]}
+                type="defaultSemiBold">
+                {getDocumentStatusLabel(detail?.documentStatus || '')}
+              </ThemedText>
+            </View>
+            <View style={styles.overviewCard}>
+              <ThemedText style={styles.overviewLabel}>履约状态</ThemedText>
+              <ThemedText
+                numberOfLines={1}
+                style={[styles.overviewValue, { color: getStatusValueColor(detail?.fulfillmentStatus || '', 'fulfillment') }]}
+                type="defaultSemiBold">
+                {getFulfillmentStatusLabel(detail?.fulfillmentStatus || '')}
+              </ThemedText>
+            </View>
+            <View style={styles.overviewCard}>
+              <ThemedText style={styles.overviewLabel}>发货状态</ThemedText>
+              <ThemedText
+                numberOfLines={1}
+                style={[styles.overviewValue, { color: getStatusValueColor(detail?.deliveryStatus || '', 'delivery') }]}
+                type="defaultSemiBold">
+                {getDeliveryStatusLabel(detail?.deliveryStatus || '')}
+              </ThemedText>
+            </View>
+            <View style={styles.overviewCard}>
+              <ThemedText style={styles.overviewLabel}>收款状态</ThemedText>
+              <ThemedText
+                numberOfLines={1}
+                style={[styles.overviewValue, { color: getStatusValueColor(detail?.paymentStatus || '', 'payment') }]}
+                type="defaultSemiBold">
+                {getPaymentStatusLabel(detail?.paymentStatus || '')}
+              </ThemedText>
+            </View>
+          </View>
         </View>
 
         {detail?.latestDeliveryNote || detail?.latestSalesInvoice ? (
@@ -1755,7 +1786,7 @@ export default function SalesOrderDetailScreen() {
             </ThemedText>
 
             {detail.latestDeliveryNote ? (
-              <View style={styles.referenceRow}>
+              <View style={[styles.referenceRow, { borderColor }]}>
                 <View style={styles.referenceCopy}>
                   <ThemedText style={styles.referenceLabel}>发货单</ThemedText>
                   <ThemedText style={styles.referenceValue} type="defaultSemiBold">
@@ -1771,7 +1802,7 @@ export default function SalesOrderDetailScreen() {
             ) : null}
 
             {detail.latestSalesInvoice ? (
-              <View style={styles.referenceRow}>
+              <View style={[styles.referenceRow, { borderColor }]}>
                 <View style={styles.referenceCopy}>
                   <ThemedText style={styles.referenceLabel}>销售发票</ThemedText>
                   <ThemedText style={styles.referenceValue} type="defaultSemiBold">
@@ -1791,7 +1822,7 @@ export default function SalesOrderDetailScreen() {
         {(recentPaymentNotice && ((recentPaymentNotice.unallocatedAmount ?? 0) > 0 || (recentPaymentNotice.writeoffAmount ?? 0) > 0)) ||
         ((detail?.latestUnallocatedAmount ?? 0) > 0 || (detail?.latestWriteoffAmount ?? 0) > 0) ? (
           <View style={[styles.card, styles.paymentNoticeCard, { backgroundColor: surface, borderColor }]}>
-            <ThemedText style={styles.cardTitle} type="defaultSemiBold">
+            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
               最新收款结果
             </ThemedText>
             {((recentPaymentNotice?.unallocatedAmount ?? 0) > 0 || (detail?.latestUnallocatedAmount ?? 0) > 0) ? (
@@ -1834,7 +1865,7 @@ export default function SalesOrderDetailScreen() {
 
           {isEditingContact ? (
             <View style={styles.formBlock}>
-              <View style={[styles.editField, { backgroundColor: surfaceMuted }]}>
+              <View style={[styles.editField, { backgroundColor: surfaceMuted, borderColor }]}>
                 <ThemedText style={styles.editFieldLabel}>收货人 / 联系展示名</ThemedText>
                 <TextInput
                   onChangeText={setContactDisplayInput}
@@ -1845,7 +1876,7 @@ export default function SalesOrderDetailScreen() {
                 />
               </View>
 
-              <View style={[styles.editField, { backgroundColor: surfaceMuted }]}>
+              <View style={[styles.editField, { backgroundColor: surfaceMuted, borderColor }]}>
                 <ThemedText style={styles.editFieldLabel}>联系电话</ThemedText>
                 <TextInput
                   onChangeText={setContactPhoneInput}
@@ -1856,7 +1887,7 @@ export default function SalesOrderDetailScreen() {
                 />
               </View>
 
-              <View style={[styles.editField, { backgroundColor: surfaceMuted }]}>
+              <View style={[styles.editField, { backgroundColor: surfaceMuted, borderColor }]}>
                 <DateFieldInput
                   errorText={!isValidIsoDate(deliveryDateInput) ? '请选择有效交货日期。' : undefined}
                   helperText="交货日期会同步写回销售订单头部。"
@@ -1866,7 +1897,7 @@ export default function SalesOrderDetailScreen() {
                 />
               </View>
 
-              <View style={[styles.editField, styles.textareaField, { backgroundColor: surfaceMuted }]}>
+              <View style={[styles.editField, styles.textareaField, { backgroundColor: surfaceMuted, borderColor }]}>
                 <ThemedText style={styles.editFieldLabel}>收货地址快照</ThemedText>
                 <TextInput
                   multiline
@@ -2099,7 +2130,7 @@ export default function SalesOrderDetailScreen() {
           </View>
           {isEditingRemarks ? (
             <View>
-              <View style={[styles.editField, styles.textareaField, { backgroundColor: surfaceMuted }]}>
+              <View style={[styles.editField, styles.textareaField, { backgroundColor: surfaceMuted, borderColor }]}>
                 <ThemedText style={styles.editFieldLabel}>本单备注</ThemedText>
                 <TextInput
                   multiline
@@ -2338,7 +2369,27 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     gap: 16,
+    overflow: 'hidden',
     padding: 16,
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderRadius: 999,
+    height: 180,
+    position: 'absolute',
+    right: -72,
+    top: -64,
+    width: 180,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    height: 108,
+    left: -26,
+    position: 'absolute',
+    top: 112,
+    width: 108,
   },
   heroHeader: {
     alignItems: 'flex-start',
@@ -2347,10 +2398,17 @@ const styles = StyleSheet.create({
   },
   heroCopy: {
     flex: 1,
-    gap: 6,
+    gap: 4,
+  },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1.2,
   },
   heroTitle: {
-    fontSize: 20,
+    color: '#14213D',
+    fontSize: 22,
+    lineHeight: 27,
   },
   heroSubline: {
     color: '#64748B',
@@ -2366,14 +2424,17 @@ const styles = StyleSheet.create({
   },
   heroMetrics: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   metricCard: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'rgba(248,250,252,0.9)',
+    borderColor: '#D8E1EE',
+    borderWidth: 1,
     borderRadius: 16,
     flex: 1,
-    gap: 6,
-    padding: 12,
+    gap: 4,
+    minHeight: 72,
+    padding: 10,
   },
   metricLabel: {
     color: '#64748B',
@@ -2392,6 +2453,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
     padding: 16,
+  },
+  overviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  overviewCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#D8E1EE',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexBasis: '48%',
+    gap: 4,
+    minHeight: 68,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  overviewLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  overviewValue: {
+    color: '#0F172A',
+    fontSize: 14,
+    lineHeight: 18,
   },
   sectionHeader: {
     alignItems: 'center',
@@ -2429,9 +2515,15 @@ const styles = StyleSheet.create({
   },
   referenceRow: {
     alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 12,
+    justifyContent: 'space-between',
+    minHeight: 62,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   referenceCopy: {
     flex: 1,
@@ -2818,6 +2910,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   editField: {
+    borderColor: '#D8E1EE',
+    borderWidth: 1,
     borderRadius: 14,
     gap: 8,
     paddingHorizontal: 12,
@@ -2918,46 +3012,46 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     bottom: 0,
     left: 0,
-    paddingBottom: 20,
+    paddingBottom: 16,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 10,
     position: 'absolute',
     right: 0,
   },
   bottomSummaryStrip: {
-    marginBottom: 10,
+    marginBottom: 8,
   },
   bottomAmountRow: {
     alignItems: 'baseline',
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   bottomSummaryPrimary: {
     color: '#0F172A',
-    fontSize: 15,
+    fontSize: 14,
     marginTop: 2,
   },
   bottomSummaryAmountLabel: {
     color: '#9A3412',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   bottomSummaryAmount: {
     color: '#C97A1E',
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
   },
   bottomActionsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   bottomButton: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: 50,
   },
   bottomSingleButton: {
     flex: 1,
@@ -2975,17 +3069,17 @@ const styles = StyleSheet.create({
   },
   bottomGhostText: {
     color: '#0F172A',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   bottomPrimaryText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   bottomDangerText: {
     color: '#B91C1C',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
 });

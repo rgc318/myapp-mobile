@@ -5656,3 +5656,39 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 ### Files Updated
 
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+
+## Sales And Purchase Order Detail UI Alignment (2026-04-02)
+
+### What Changed
+
+- Started unified visual alignment for sales/purchase order detail pages.
+- Applied the same card hierarchy and spacing rhythm used in customer/supplier/product pages.
+
+### Round 1: Hero Alignment
+
+- Refined top hero blocks on both pages:
+  - added soft background accents
+  - added eyebrow labels (`SALES ORDER`, `PURCHASE ORDER`)
+  - normalized hero metric card spacing and typography
+
+### Round 2: Mid-section Density
+
+- Sales order detail:
+  - converted `订单概览` into a compact two-column status grid
+  - upgraded `业务单据` rows into bordered compact cards
+  - fixed missing style reference for payment notice title
+- Purchase order detail:
+  - added three summary amount cards in `订单与付款` (`已开票应付 / 已付款 / 待付款`)
+  - reduced duplicate amount rows to improve readability
+  - tightened business-doc action area sizing
+
+### Round 3: Footer And Edit-State Consistency
+
+- Unified bottom action bar dimensions and typography on both pages.
+- Reduced oversized footer text and button visual weight.
+- Added clearer bordered style for sales edit fields to better distinguish editable areas.
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
