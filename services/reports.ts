@@ -30,14 +30,47 @@ export type BusinessCashflowRow = {
   referenceNo: string | null;
 };
 
+export type BusinessCashflowTrendRow = {
+  trendDate: string;
+  count: number;
+  inAmount: number;
+  outAmount: number;
+};
+
+export type BusinessTrendRow = {
+  trendDate: string;
+  count: number;
+  amount: number;
+};
+
+export type BusinessProductSummaryRow = {
+  itemKey: string;
+  itemName: string;
+  qty: number;
+  amount: number;
+};
+
+export type BusinessTrendHourlyRow = {
+  trendHour: number;
+  count: number;
+  amount: number;
+};
+
 export type BusinessReport = {
   overview: BusinessReportOverview;
   tables: {
     salesSummary: BusinessPartySummaryRow[];
+    salesTrend: BusinessTrendRow[];
+    salesTrendHourly: BusinessTrendHourlyRow[];
+    salesProductSummary: BusinessProductSummaryRow[];
     purchaseSummary: BusinessPartySummaryRow[];
+    purchaseTrend: BusinessTrendRow[];
+    purchaseTrendHourly: BusinessTrendHourlyRow[];
+    purchaseProductSummary: BusinessProductSummaryRow[];
     receivableSummary: BusinessPartySummaryRow[];
     payableSummary: BusinessPartySummaryRow[];
     cashflowSummary: BusinessCashflowRow[];
+    cashflowTrend: BusinessCashflowTrendRow[];
   };
   meta: {
     company: string | null;
@@ -87,6 +120,72 @@ function mapCashflowRow(entry: unknown): BusinessCashflowRow | null {
   };
 }
 
+function mapTrendRow(entry: unknown): BusinessTrendRow | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const row = entry as Record<string, unknown>;
+  const trendDate = typeof row.trend_date === 'string' ? row.trend_date : '';
+  if (!trendDate) {
+    return null;
+  }
+  return {
+    trendDate,
+    count: toNumber(row.count),
+    amount: toNumber(row.amount),
+  };
+}
+
+function mapProductSummaryRow(entry: unknown): BusinessProductSummaryRow | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const row = entry as Record<string, unknown>;
+  const itemKey = typeof row.item_key === 'string' ? row.item_key : '';
+  if (!itemKey) {
+    return null;
+  }
+  return {
+    itemKey,
+    itemName: typeof row.item_name === 'string' && row.item_name ? row.item_name : itemKey,
+    qty: toNumber(row.qty),
+    amount: toNumber(row.amount),
+  };
+}
+
+function mapTrendHourlyRow(entry: unknown): BusinessTrendHourlyRow | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const row = entry as Record<string, unknown>;
+  const trendHour = toNumber(row.trend_hour);
+  if (Number.isNaN(trendHour)) {
+    return null;
+  }
+  return {
+    trendHour,
+    count: toNumber(row.count),
+    amount: toNumber(row.amount),
+  };
+}
+
+function mapCashflowTrendRow(entry: unknown): BusinessCashflowTrendRow | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const row = entry as Record<string, unknown>;
+  const trendDate = typeof row.trend_date === 'string' ? row.trend_date : '';
+  if (!trendDate) {
+    return null;
+  }
+  return {
+    trendDate,
+    count: toNumber(row.count),
+    inAmount: toNumber(row.in_amount),
+    outAmount: toNumber(row.out_amount),
+  };
+}
+
 export async function fetchBusinessReport(options?: {
   company?: string | null;
   dateFrom?: string | null;
@@ -118,9 +217,27 @@ export async function fetchBusinessReport(options?: {
       salesSummary: (Array.isArray(tables.sales_summary) ? tables.sales_summary : [])
         .map(mapPartyRow)
         .filter((row): row is BusinessPartySummaryRow => Boolean(row)),
+      salesTrend: (Array.isArray(tables.sales_trend) ? tables.sales_trend : [])
+        .map(mapTrendRow)
+        .filter((row): row is BusinessTrendRow => Boolean(row)),
+      salesTrendHourly: (Array.isArray(tables.sales_trend_hourly) ? tables.sales_trend_hourly : [])
+        .map(mapTrendHourlyRow)
+        .filter((row): row is BusinessTrendHourlyRow => Boolean(row)),
+      salesProductSummary: (Array.isArray(tables.sales_product_summary) ? tables.sales_product_summary : [])
+        .map(mapProductSummaryRow)
+        .filter((row): row is BusinessProductSummaryRow => Boolean(row)),
       purchaseSummary: (Array.isArray(tables.purchase_summary) ? tables.purchase_summary : [])
         .map(mapPartyRow)
         .filter((row): row is BusinessPartySummaryRow => Boolean(row)),
+      purchaseTrend: (Array.isArray(tables.purchase_trend) ? tables.purchase_trend : [])
+        .map(mapTrendRow)
+        .filter((row): row is BusinessTrendRow => Boolean(row)),
+      purchaseTrendHourly: (Array.isArray(tables.purchase_trend_hourly) ? tables.purchase_trend_hourly : [])
+        .map(mapTrendHourlyRow)
+        .filter((row): row is BusinessTrendHourlyRow => Boolean(row)),
+      purchaseProductSummary: (Array.isArray(tables.purchase_product_summary) ? tables.purchase_product_summary : [])
+        .map(mapProductSummaryRow)
+        .filter((row): row is BusinessProductSummaryRow => Boolean(row)),
       receivableSummary: (Array.isArray(tables.receivable_summary) ? tables.receivable_summary : [])
         .map(mapPartyRow)
         .filter((row): row is BusinessPartySummaryRow => Boolean(row)),
@@ -130,6 +247,9 @@ export async function fetchBusinessReport(options?: {
       cashflowSummary: (Array.isArray(tables.cashflow_summary) ? tables.cashflow_summary : [])
         .map(mapCashflowRow)
         .filter((row): row is BusinessCashflowRow => Boolean(row)),
+      cashflowTrend: (Array.isArray(tables.cashflow_trend) ? tables.cashflow_trend : [])
+        .map(mapCashflowTrendRow)
+        .filter((row): row is BusinessCashflowTrendRow => Boolean(row)),
     },
     meta: {
       company: typeof meta.company === 'string' ? meta.company : null,

@@ -218,6 +218,78 @@ This round turned the mobile product flow from "search-only helper pages" into a
     - `fetchProducts()`
     - `fetchProductDetail()`
     - `createProduct()`
+
+## Reports Module Update (2026-04-04)
+
+This round focused on turning the reports page into a more practical mobile business dashboard and fixing time-range edge cases that were affecting month-based analysis.
+
+### Completed
+
+- reports tab was upgraded from a simple table page into a structured business dashboard
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx`
+  - current modules include:
+    - overview KPIs
+    - sales analysis
+    - purchase analysis
+    - cashflow trend
+    - foldable detailed summary tables
+
+- reports service contract was expanded to consume the richer backend report payload
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/reports.ts`
+  - now supports:
+    - sales trend rows
+    - purchase trend rows
+    - hourly trend rows
+    - product summary rows
+    - cashflow trend rows
+
+- custom range interaction was redesigned for mobile
+  - range presets are now business-oriented:
+    - `本月`
+    - `本季`
+    - `本年`
+    - `自定义`
+  - custom mode supports:
+    - `按日期`
+    - `按月份`
+    - `按年份`
+  - month/year selection no longer relies on manual text entry
+  - month/year/date values are selected through a modal picker style interaction
+
+- picker interaction was tightened
+  - opening the picker auto-locates the current selected value
+  - confirming a value now applies the selected range immediately
+  - users no longer need to confirm inside the picker and then press a second "apply range" button outside
+
+- month-end and leap-year handling was corrected
+  - month-based custom ranges now use real calendar boundaries
+  - February respects normal and leap years
+  - 31-day months correctly include the 31st
+
+- timezone-related date truncation bug was fixed
+  - earlier code used `toISOString().slice(0, 10)` in frontend date formatting
+  - in `Asia/Shanghai`, this could shift local midnight into the previous UTC day
+  - practical symptom:
+    - selecting `2026-03` could incorrectly produce `2026-03-01 ~ 2026-03-30`
+  - current fix:
+    - all report-facing date formatting now uses local date composition instead of UTC truncation
+
+### Notes
+
+- report custom range logic currently lives in the reports page itself
+  - if this picker pattern is later reused in inventory, finance, or customer reports, it should be extracted into a shared component
+
+- the current picker is a custom mobile modal, not a native OS wheel picker
+  - interaction is already much safer than free text input
+  - if stronger platform-native feel is required later, the picker can be migrated into a dedicated reusable wheel-style component
+
+### Recommended Next Steps
+
+1. extract the custom report period picker into a reusable shared component
+2. add preset shortcuts such as `上月` / `上季度` / `去年`
+3. let backend reports support explicit aggregation granularity if trend analysis becomes more formal
     - `saveProductBasicInfo()`
     - `toggleProductDisabled()`
     - `setProductDisabled()` alias
