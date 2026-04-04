@@ -27,13 +27,14 @@ import {
 } from '@/services/sales';
 
 type FilterMode = 'all' | 'unfinished' | 'delivering' | 'paying' | 'completed' | 'cancelled';
-type SortMode = 'unfinished_first' | 'latest' | 'oldest' | 'amount_desc';
+type SortMode = 'time' | 'unfinished_first' | 'amount_desc';
+type SortDirection = 'asc' | 'desc';
 type PickerMode = 'company' | 'filter' | 'sort' | null;
 
 const PAGE_SIZE = 20;
 
 const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
-  { value: 'all', label: '全部订单' },
+  { value: 'all', label: '有效订单' },
   { value: 'unfinished', label: '未完成' },
   { value: 'delivering', label: '待出货' },
   { value: 'paying', label: '待收款' },
@@ -42,9 +43,8 @@ const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
 ];
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'time', label: '时间' },
   { value: 'unfinished_first', label: '未完成优先' },
-  { value: 'latest', label: '最近更新' },
-  { value: 'oldest', label: '最早下单' },
   { value: 'amount_desc', label: '金额从高到低' },
 ];
 
@@ -155,8 +155,9 @@ export default function SalesTabScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [queryCompany, setQueryCompany] = useState<string | null>(preferences.defaultCompany);
-  const [filterMode, setFilterMode] = useState<FilterMode>('unfinished');
-  const [sortMode, setSortMode] = useState<SortMode>('unfinished_first');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('time');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [deskSummary, setDeskSummary] = useState<SalesDeskSearchSummary>(EMPTY_DESK_SUMMARY);
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
   const [companyQuery, setCompanyQuery] = useState('');
@@ -170,7 +171,7 @@ export default function SalesTabScreen() {
   const background = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const selectedCompany = queryCompany?.trim() || undefined;
-  const hideCancelledByDefault = filterMode !== 'all' && filterMode !== 'cancelled';
+  const hideCancelledByDefault = filterMode !== 'cancelled';
 
   const loadOrders = useCallback(
     async (options?: {
@@ -186,9 +187,16 @@ export default function SalesTabScreen() {
         options?.nextCompany === undefined ? selectedCompany : options.nextCompany?.trim() || undefined;
       const resolvedFilterMode = options?.nextFilterMode ?? filterMode;
       const resolvedSortMode = options?.nextSortMode ?? sortMode;
+      const resolvedSortDirection = options?.nextSortMode === undefined ? sortDirection : sortDirection;
       const resolvedStart = options?.start ?? 0;
       const append = options?.append ?? false;
-      const resolvedExcludeCancelled = resolvedFilterMode !== 'all' && resolvedFilterMode !== 'cancelled';
+      const resolvedExcludeCancelled = resolvedFilterMode !== 'cancelled';
+      const resolvedSortBy =
+        resolvedSortMode === 'time'
+          ? resolvedSortDirection === 'asc'
+            ? 'oldest'
+            : 'latest'
+          : resolvedSortMode;
 
       try {
         if (append) {
@@ -202,7 +210,7 @@ export default function SalesTabScreen() {
           company: resolvedCompany,
           statusFilter: resolvedFilterMode,
           excludeCancelled: resolvedExcludeCancelled,
-          sortBy: resolvedSortMode,
+          sortBy: resolvedSortBy,
           limit: PAGE_SIZE,
           start: resolvedStart,
         });
@@ -226,7 +234,7 @@ export default function SalesTabScreen() {
         }
       }
     },
-    [filterMode, searchKey, selectedCompany, showError, sortMode],
+    [filterMode, searchKey, selectedCompany, showError, sortDirection, sortMode],
   );
 
   useFocusEffect(
@@ -241,7 +249,7 @@ export default function SalesTabScreen() {
       return;
     }
     void loadOrders();
-  }, [filterMode, loadOrders, queryCompany, sortMode]);
+  }, [filterMode, loadOrders, queryCompany, sortDirection, sortMode]);
 
   useEffect(() => {
     if (pickerMode !== 'company') {
@@ -307,14 +315,15 @@ export default function SalesTabScreen() {
     },
   ];
 
-  const activeFilterLabel = FILTER_OPTIONS.find((option) => option.value === filterMode)?.label ?? '全部订单';
-  const activeSortLabel = SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? '未完成优先';
+  const activeFilterLabel = FILTER_OPTIONS.find((option) => option.value === filterMode)?.label ?? '有效订单';
+  const activeSortLabel = SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? '时间';
+  const activeDirectionLabel = sortDirection === 'asc' ? '升序' : '降序';
   const activeCompanyLabel = queryCompany || '全部公司';
   const hasActiveSearch = Boolean(searchKey.trim());
   const activeFilterChips = [
-    activeFilterLabel,
+    activeFilterLabel !== '有效订单' ? activeFilterLabel : null,
     activeCompanyLabel !== '全部公司' ? activeCompanyLabel : null,
-    activeSortLabel !== '未完成优先' ? activeSortLabel : null,
+    `${activeSortLabel}${sortMode === 'time' ? ` · ${activeDirectionLabel}` : ''}`,
     hasActiveSearch ? `关键词：${searchKey}` : null,
   ].filter((value): value is string => Boolean(value));
   const visibleOrderCount = deskSummary.visibleCount || orders.length;
@@ -541,6 +550,26 @@ export default function SalesTabScreen() {
                 </ThemedText>
               </Pressable>
 
+              <Pressable
+                disabled={sortMode !== 'time'}
+                onPress={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
+                style={[
+                  styles.selectCard,
+                  styles.filterSelectCard,
+                  { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE' },
+                  sortMode !== 'time' ? styles.selectCardDisabled : null,
+                ]}>
+                <View style={styles.selectCardTopRow}>
+                  <ThemedText style={[styles.selectLabel, styles.filterSelectLabel]}>时间方向</ThemedText>
+                  <IconSymbol color="#7C3AED" name={sortDirection === 'asc' ? 'arrow.up' : 'arrow.down'} size={14} />
+                </View>
+                <ThemedText style={[styles.selectValue, styles.filterSelectValue]} type="defaultSemiBold">
+                  {sortMode === 'time' ? activeDirectionLabel : '仅时间'}
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            <View style={styles.queryMetaRow}>
               <View style={[styles.resultSummaryStrip, { backgroundColor: '#F8FAFC', borderColor }]}>
                 <ThemedText style={styles.queryMetaLabel}>当前结果</ThemedText>
                 <View style={styles.resultSummaryMainRow}>
@@ -552,7 +581,7 @@ export default function SalesTabScreen() {
                   </ThemedText>
                 </View>
                 <ThemedText numberOfLines={1} style={styles.resultSummaryCaption}>
-                  {hideCancelledByDefault ? '当前结果 / 含已作废总数' : '当前结果 / 当前范围总数'}
+                  {hideCancelledByDefault ? '当前结果 / 含已作废总数' : '当前结果 / 已作废范围总数'}
                 </ThemedText>
               </View>
             </View>
@@ -561,7 +590,11 @@ export default function SalesTabScreen() {
           <WorkbenchSectionCard
             backgroundColor={surface}
             borderColor={borderColor}
-            hint="默认按未完成优先排序"
+            hint={
+              sortMode === 'time'
+                ? `当前按时间${activeDirectionLabel}排序`
+                : `当前按${activeSortLabel}排序`
+            }
             title="销售订单列表">
 
             {isLoading ? (
@@ -982,6 +1015,9 @@ const styles = StyleSheet.create({
     minHeight: 58,
     paddingHorizontal: 12,
     paddingVertical: 9,
+  },
+  selectCardDisabled: {
+    opacity: 0.55,
   },
   selectCardTopRow: {
     alignItems: 'center',

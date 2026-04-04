@@ -82,6 +82,9 @@ export function FormalPdfStage({ onError, onLoadComplete, pageCount, uri }: Form
     setCommandScale(1.02);
   };
 
+  const viewModeLabel =
+    fitPolicy === 0 && displayScale <= 1.08 ? '适宽' : displayScale <= 1.22 ? '阅读' : '自由缩放';
+
   return (
     <View style={styles.viewerShell}>
       <View style={styles.metaRow}>
@@ -94,51 +97,58 @@ export function FormalPdfStage({ onError, onLoadComplete, pageCount, uri }: Form
       </View>
       <View style={styles.toolbarRow}>
         <View style={styles.scaleGroup}>
-          <Pressable onPress={() => adjustScale(-0.25)} style={styles.toolButton}>
+          <Pressable onPress={() => adjustScale(-0.25)} style={styles.iconToolButton}>
             <ThemedText style={styles.toolButtonText} type="defaultSemiBold">
-              缩小
+              -
             </ThemedText>
           </Pressable>
-          <Pressable onPress={() => fitToWidth()} style={styles.toolButton}>
+          <Pressable onPress={() => fitToWidth()} style={styles.labelToolButton}>
             <ThemedText style={styles.toolButtonText} type="defaultSemiBold">
               适宽
             </ThemedText>
           </Pressable>
-          <Pressable onPress={() => resetScale()} style={styles.toolButton}>
+          <Pressable onPress={() => resetScale()} style={styles.labelToolButton}>
             <ThemedText style={styles.toolButtonText} type="defaultSemiBold">
               重置
             </ThemedText>
           </Pressable>
-          <Pressable onPress={() => adjustScale(0.25)} style={styles.toolButton}>
+          <Pressable onPress={() => adjustScale(0.25)} style={styles.iconToolButton}>
             <ThemedText style={styles.toolButtonText} type="defaultSemiBold">
-              放大
+              +
             </ThemedText>
           </Pressable>
         </View>
-        <View style={styles.scaleBadge}>
-          <ThemedText style={styles.scaleBadgeText} type="defaultSemiBold">
-            {Math.round(displayScale * 100)}%
-          </ThemedText>
+        <View style={styles.statusGroup}>
+          <View style={styles.modeBadge}>
+            <ThemedText style={styles.modeBadgeText} type="defaultSemiBold">
+              {viewModeLabel}
+            </ThemedText>
+          </View>
+          <View style={styles.scaleBadge}>
+            <ThemedText style={styles.scaleBadgeText} type="defaultSemiBold">
+              {Math.round(displayScale * 100)}%
+            </ThemedText>
+          </View>
         </View>
       </View>
       <View style={styles.pdfWrap}>
         <View style={styles.pdfViewport}>
-        <Pdf
-          enableDoubleTapZoom
-          enableAntialiasing
-          fitPolicy={fitPolicy}
-          maxScale={4}
-          minScale={1}
-          onScaleChanged={(nextScale: number) => setDisplayScale(nextScale)}
-          onError={(error: Error) => onError(error.message || 'PDF 查看失败。')}
-          onLoadComplete={(pages: number) => onLoadComplete(pages)}
-          ref={pdfRef}
-          scale={commandScale}
-          showsHorizontalScrollIndicator
-          showsVerticalScrollIndicator
-          source={{ cache: true, uri }}
-          spacing={16}
-          style={styles.pdf}
+          <Pdf
+            enableDoubleTapZoom
+            enableAntialiasing
+            fitPolicy={fitPolicy}
+            maxScale={4}
+            minScale={1}
+            onScaleChanged={(nextScale: number) => setDisplayScale(nextScale)}
+            onError={(error: Error) => onError(error.message || 'PDF 查看失败。')}
+            onLoadComplete={(pages: number) => onLoadComplete(pages)}
+            ref={pdfRef}
+            scale={commandScale}
+            showsHorizontalScrollIndicator
+            showsVerticalScrollIndicator
+            source={{ cache: true, uri }}
+            spacing={16}
+            style={styles.pdf}
             trustAllCerts={false}
           />
         </View>
@@ -169,11 +179,44 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 30,
   },
+  iconToolButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D6E4FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  labelToolButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D6E4FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    minWidth: 58,
+    paddingHorizontal: 12,
+  },
   metaRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
+  },
+  modeBadge: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D6E4FF',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  modeBadgeText: {
+    color: '#2563EB',
+    fontSize: 12,
   },
   pageCountText: {
     color: '#1D4ED8',
@@ -220,16 +263,10 @@ const styles = StyleSheet.create({
     gap: 8,
     rowGap: 8,
   },
-  toolButton: {
+  statusGroup: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D6E4FF',
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 40,
-    minWidth: 62,
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    gap: 8,
   },
   toolButtonText: {
     color: '#1D4ED8',
