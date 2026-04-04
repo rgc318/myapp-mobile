@@ -1,4 +1,3 @@
-import type { Href } from 'expo-router';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -7,6 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import {
+  WorkbenchHeroCard,
+  WorkbenchQuickActionsCard,
+  type WorkbenchMetricItem,
+  WorkbenchSectionCard,
+} from '@/components/workbench/workbench-shell';
 import { SALES_WORKBENCH_SIZE, WORKBENCH_SIZE } from '@/constants/workbench-size';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
@@ -269,36 +274,36 @@ export default function SalesTabScreen() {
 
   const quickActions = [
     {
-      href: '/sales/order/create' as Href,
       label: '销售下单',
       icon: 'cart.fill' as const,
       toneBackground: '#EFF6FF',
       toneBorder: '#BFDBFE',
       toneText: '#1D4ED8',
+      onPress: () => router.push('/sales/order/create'),
     },
     {
-      href: '/sales/delivery/create' as Href,
       label: '销售发货',
       icon: 'shippingbox.fill' as const,
       toneBackground: '#F0FDF4',
       toneBorder: '#BBF7D0',
       toneText: '#15803D',
+      onPress: () => router.push('/sales/delivery/create'),
     },
     {
-      href: '/sales/invoice/create' as Href,
       label: '销售开票',
       icon: 'doc.text.fill' as const,
       toneBackground: '#FFF7ED',
       toneBorder: '#FED7AA',
       toneText: '#C2410C',
+      onPress: () => router.push('/sales/invoice/create'),
     },
     {
-      href: '/sales/payment/create' as Href,
       label: '销售收款',
       icon: 'creditcard.fill' as const,
       toneBackground: '#F5F3FF',
       toneBorder: '#DDD6FE',
       toneText: '#6D28D9',
+      onPress: () => router.push('/sales/payment/create'),
     },
   ];
 
@@ -314,6 +319,77 @@ export default function SalesTabScreen() {
   ].filter((value): value is string => Boolean(value));
   const visibleOrderCount = deskSummary.visibleCount || orders.length;
   const totalOrderCount = deskSummary.totalCount || visibleOrderCount;
+  const heroMetrics: WorkbenchMetricItem[] = [
+    {
+      key: 'unfinished',
+      label: '未完成',
+      value: deskSummary.unfinishedCount,
+      textColor: filterMode === 'unfinished' ? '#B45309' : '#1F2A37',
+      backgroundColor: filterMode === 'unfinished' ? '#FFF5D6' : surfaceMuted,
+      borderColor: filterMode === 'unfinished' ? '#F59E0B' : borderColor,
+      active: filterMode === 'unfinished',
+      onPress: () => setFilterMode('unfinished'),
+    },
+    {
+      key: 'delivering',
+      label: '待出货',
+      value: deskSummary.deliveryCount,
+      textColor: filterMode === 'delivering' ? '#1D4ED8' : '#1F2A37',
+      backgroundColor: filterMode === 'delivering' ? '#E2EDFF' : surfaceMuted,
+      borderColor: filterMode === 'delivering' ? '#2563EB' : borderColor,
+      active: filterMode === 'delivering',
+      onPress: () => setFilterMode('delivering'),
+    },
+    {
+      key: 'paying',
+      label: '待收款',
+      value: deskSummary.paymentCount,
+      textColor: filterMode === 'paying' ? '#15803D' : '#1F2A37',
+      backgroundColor: filterMode === 'paying' ? '#DCFCE7' : surfaceMuted,
+      borderColor: filterMode === 'paying' ? '#16A34A' : borderColor,
+      active: filterMode === 'paying',
+      onPress: () => setFilterMode('paying'),
+    },
+    {
+      key: 'completed',
+      label: '已完成',
+      value: deskSummary.completedCount,
+      textColor: filterMode === 'completed' ? '#334155' : '#1F2A37',
+      backgroundColor: filterMode === 'completed' ? '#F1F5F9' : surfaceMuted,
+      borderColor: filterMode === 'completed' ? '#334155' : borderColor,
+      active: filterMode === 'completed',
+      onPress: () => setFilterMode('completed'),
+    },
+  ];
+  const heroGlows = [
+    {
+      right: SALES_WORKBENCH_SIZE.heroGlowA.right,
+      top: SALES_WORKBENCH_SIZE.heroGlowA.top,
+      width: SALES_WORKBENCH_SIZE.heroGlowA.width,
+      height: SALES_WORKBENCH_SIZE.heroGlowA.height,
+      borderRadius: SALES_WORKBENCH_SIZE.heroGlowA.radius,
+      backgroundColor: '#DBEAFE',
+    },
+    {
+      left: SALES_WORKBENCH_SIZE.heroGlowB.left,
+      bottom: SALES_WORKBENCH_SIZE.heroGlowB.bottom,
+      width: SALES_WORKBENCH_SIZE.heroGlowB.width,
+      height: SALES_WORKBENCH_SIZE.heroGlowB.height,
+      borderRadius: SALES_WORKBENCH_SIZE.heroGlowB.radius,
+      backgroundColor: '#FED7AA',
+      opacity: SALES_WORKBENCH_SIZE.heroGlowB.opacity,
+    },
+    {
+      right: SALES_WORKBENCH_SIZE.heroGlowC.right,
+      bottom: SALES_WORKBENCH_SIZE.heroGlowC.bottom,
+      width: SALES_WORKBENCH_SIZE.heroGlowC.width,
+      height: SALES_WORKBENCH_SIZE.heroGlowC.height,
+      borderRadius: SALES_WORKBENCH_SIZE.heroGlowC.radius,
+      backgroundColor: '#CFFAFE',
+      opacity: SALES_WORKBENCH_SIZE.heroGlowC.opacity,
+      transform: [{ rotate: '-12deg' }],
+    },
+  ];
 
   const handleSearch = async () => {
     const trimmedKeyword = searchInput.trim();
@@ -357,89 +433,26 @@ export default function SalesTabScreen() {
       <MobilePageHeader showBack={false} title="销售工作台" />
       <ScrollView contentContainerStyle={styles.container}>
         <>
-          <View style={[styles.heroCard, { backgroundColor: '#F8FBFF', borderColor }]}>
-            <View style={styles.heroGlowWrap} pointerEvents="none">
-              <View style={styles.heroGlowA} />
-              <View style={styles.heroGlowB} />
-              <View style={styles.heroGlowC} />
-            </View>
-            <ThemedText style={styles.eyebrow}>SALES DESK</ThemedText>
-            <View style={styles.heroHeader}>
-              <View style={styles.heroTextWrap}>
-                <ThemedText style={styles.heroTitle} type="title">
-                  销售工作台
-                </ThemedText>
-                <ThemedText style={styles.heroDescription}>
-                  默认聚焦未完成销售订单，并优先把待出货与待收款单据排在前面。
-                </ThemedText>
-              </View>
-              <View style={[styles.heroCountPill, { backgroundColor: '#FFFFFF' }]}>
-                <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                  {totalOrderCount} 单
-                </ThemedText>
-              </View>
-            </View>
-            <View style={styles.metricTiles}>
-              {[
-                { key: 'unfinished', label: '未完成', count: deskSummary.unfinishedCount, color: '#B45309', bg: '#FEF3C7' },
-                { key: 'delivering', label: '待出货', count: deskSummary.deliveryCount, color: '#1D4ED8', bg: '#DBEAFE' },
-                { key: 'paying', label: '待收款', count: deskSummary.paymentCount, color: '#15803D', bg: '#DCFCE7' },
-                { key: 'completed', label: '已完成', count: deskSummary.completedCount, color: '#475569', bg: '#E2E8F0' },
-              ].map((metric) => {
-                const active = filterMode === metric.key;
-                return (
-                  <Pressable
-                    key={metric.key}
-                    onPress={() => setFilterMode(metric.key as FilterMode)}
-                    style={[
-                      styles.metricTile,
-                      {
-                        backgroundColor: active ? metric.bg : surfaceMuted,
-                        borderColor: active ? metric.color : borderColor,
-                      },
-                    ]}>
-                    <ThemedText style={[styles.metricTileLabel, { color: active ? metric.color : '#64748B' }]}>
-                      {metric.label}
-                    </ThemedText>
-                    <ThemedText style={[styles.metricTileValue, { color: active ? metric.color : '#1F2A37' }]} type="defaultSemiBold">
-                      {metric.count}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+          <WorkbenchHeroCard
+            borderColor={borderColor}
+            countText={`${totalOrderCount} 单`}
+            description="默认聚焦未完成销售订单，并优先把待出货与待收款单据排在前面。"
+            eyebrow="SALES DESK"
+            glows={heroGlows}
+            metrics={heroMetrics}
+            title="销售工作台"
+          />
 
-          <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-            <View style={styles.sectionHeaderRow}>
-              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                常用动作
-              </ThemedText>
-              <ThemedText style={styles.sectionHint}>销售主流程入口</ThemedText>
-            </View>
-            <View style={styles.quickActionGrid}>
-              {quickActions.map((action) => (
-                <Pressable
-                  key={action.label}
-                  onPress={() => router.push(action.href)}
-                  style={[
-                    styles.quickActionCard,
-                    { backgroundColor: action.toneBackground, borderColor: action.toneBorder },
-                  ]}>
-                  <IconSymbol color={action.toneText} name={action.icon} size={22} />
-                  <ThemedText style={[styles.quickActionText, { color: action.toneText }]} type="defaultSemiBold">
-                    {action.label}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+          <WorkbenchQuickActionsCard
+            actions={quickActions}
+            backgroundColor={surface}
+            borderColor={borderColor}
+            hint="销售主流程入口"
+            title="常用动作"
+          />
 
-          <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-            <View style={styles.sectionHeaderRow}>
-              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                销售检索
-              </ThemedText>
+          <WorkbenchSectionCard
+            actionSlot={
               <View style={styles.headerActions}>
                 <Pressable onPress={() => void handleResetOrders()} style={[styles.headerActionButton, { backgroundColor: surfaceMuted }]}>
                   <ThemedText style={styles.headerActionText} type="defaultSemiBold">
@@ -452,7 +465,11 @@ export default function SalesTabScreen() {
                   </ThemedText>
                 </Pressable>
               </View>
-            </View>
+            }
+            backgroundColor={surface}
+            borderColor={borderColor}
+            hint="销售检索"
+            title="销售检索">
 
             <View style={styles.searchRow}>
               <View style={[styles.searchInputWrap, { backgroundColor: surfaceMuted, borderColor }]}>
@@ -491,61 +508,61 @@ export default function SalesTabScreen() {
               </View>
             ) : null}
 
-            <View style={styles.filterCardGrid}>
-              <Pressable onPress={() => setPickerMode('company')} style={[styles.filterCard, styles.infoCardInteractive, { backgroundColor: '#EEF6FF', borderColor: '#BFDBFE' }]}>
-                <View style={styles.filterCardHeader}>
-                  <ThemedText style={styles.filterLabel}>查询公司</ThemedText>
+            <View style={styles.queryMetaRow}>
+              <Pressable onPress={() => setPickerMode('company')} style={[styles.selectCard, styles.filterSelectCard, { backgroundColor: '#EEF6FF', borderColor: '#BFDBFE' }]}>
+                <View style={styles.selectCardTopRow}>
+                  <ThemedText style={[styles.selectLabel, styles.filterSelectLabel]}>查询公司</ThemedText>
                   <IconSymbol color="#2563EB" name="chevron.right" size={14} />
                 </View>
-                <ThemedText style={styles.filterValue} numberOfLines={2} type="defaultSemiBold">
+                <ThemedText style={[styles.selectValue, styles.filterSelectValue]} numberOfLines={1} type="defaultSemiBold">
                   {activeCompanyLabel}
                 </ThemedText>
               </Pressable>
 
-              <Pressable onPress={() => setPickerMode('filter')} style={[styles.filterCard, styles.infoCardInteractive, { backgroundColor: '#F7FCEB', borderColor: '#D9F99D' }]}>
-                <View style={styles.filterCardHeader}>
-                  <ThemedText style={styles.filterLabel}>订单状态</ThemedText>
+              <Pressable onPress={() => setPickerMode('filter')} style={[styles.selectCard, styles.filterSelectCard, { backgroundColor: '#F7FCEB', borderColor: '#D9F99D' }]}>
+                <View style={styles.selectCardTopRow}>
+                  <ThemedText style={[styles.selectLabel, styles.filterSelectLabel]}>订单状态</ThemedText>
                   <IconSymbol color="#65A30D" name="chevron.right" size={14} />
                 </View>
-                <ThemedText style={styles.filterValue} type="defaultSemiBold">
+                <ThemedText style={[styles.selectValue, styles.filterSelectValue]} type="defaultSemiBold">
                   {activeFilterLabel}
                 </ThemedText>
               </Pressable>
+            </View>
 
-              <Pressable onPress={() => setPickerMode('sort')} style={[styles.filterCard, styles.infoCardInteractive, { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }]}>
-                <View style={styles.filterCardHeader}>
-                  <ThemedText style={styles.filterLabel}>排序方式</ThemedText>
+            <View style={styles.queryMetaRow}>
+              <Pressable onPress={() => setPickerMode('sort')} style={[styles.selectCard, styles.filterSelectCard, { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }]}>
+                <View style={styles.selectCardTopRow}>
+                  <ThemedText style={[styles.selectLabel, styles.filterSelectLabel]}>排序方式</ThemedText>
                   <IconSymbol color="#EA580C" name="chevron.right" size={14} />
                 </View>
-                <ThemedText style={styles.filterValue} type="defaultSemiBold">
+                <ThemedText style={[styles.selectValue, styles.filterSelectValue]} type="defaultSemiBold">
                   {activeSortLabel}
                 </ThemedText>
               </Pressable>
 
-              <View style={[styles.filterCard, styles.infoCardNeutral, { backgroundColor: '#F8FAFC', borderColor }]}>
-                <ThemedText style={styles.filterLabel}>当前结果</ThemedText>
-                <View style={styles.resultMainRow}>
-                  <ThemedText style={styles.resultFraction} type="defaultSemiBold">
+              <View style={[styles.resultSummaryStrip, { backgroundColor: '#F8FAFC', borderColor }]}>
+                <ThemedText style={styles.queryMetaLabel}>当前结果</ThemedText>
+                <View style={styles.resultSummaryMainRow}>
+                  <ThemedText style={styles.resultSummaryValue} type="defaultSemiBold">
                     {visibleOrderCount} / {hideCancelledByDefault ? totalOrderCount + deskSummary.cancelledCount : totalOrderCount}
                   </ThemedText>
-                  <ThemedText style={styles.resultUnit} type="defaultSemiBold">
+                  <ThemedText style={styles.resultSummaryUnit} type="defaultSemiBold">
                     单
                   </ThemedText>
                 </View>
-                <ThemedText numberOfLines={1} style={styles.resultHint}>
+                <ThemedText numberOfLines={1} style={styles.resultSummaryCaption}>
                   {hideCancelledByDefault ? '当前结果 / 含已作废总数' : '当前结果 / 当前范围总数'}
                 </ThemedText>
               </View>
             </View>
-          </View>
+          </WorkbenchSectionCard>
 
-          <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-            <View style={styles.sectionHeaderRow}>
-              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-                销售订单列表
-              </ThemedText>
-              <ThemedText style={styles.sectionHint}>默认按未完成优先排序</ThemedText>
-            </View>
+          <WorkbenchSectionCard
+            backgroundColor={surface}
+            borderColor={borderColor}
+            hint="默认按未完成优先排序"
+            title="销售订单列表">
 
             {isLoading ? (
               <View style={styles.loadingWrap}>
@@ -642,7 +659,7 @@ export default function SalesTabScreen() {
                 <ThemedText>你可以输入订单号、客户或切换状态筛选查看销售订单。</ThemedText>
               </View>
             )}
-          </View>
+          </WorkbenchSectionCard>
         </>
       </ScrollView>
 
@@ -738,6 +755,7 @@ const styles = StyleSheet.create({
     paddingBottom: WORKBENCH_SIZE.containerPaddingBottom,
   },
   heroCard: {
+    backgroundColor: '#F7FBFF',
     borderRadius: WORKBENCH_SIZE.heroRadius,
     borderWidth: 1,
     gap: WORKBENCH_SIZE.heroGap,
@@ -779,7 +797,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-12deg' }],
   },
   eyebrow: {
-    color: '#1D4ED8',
+    color: '#2563EB',
     fontSize: WORKBENCH_SIZE.heroEyebrowFontSize,
     letterSpacing: WORKBENCH_SIZE.heroEyebrowLetterSpacing,
   },
@@ -800,14 +818,19 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: WORKBENCH_SIZE.heroSubtitleFontSize,
     lineHeight: WORKBENCH_SIZE.heroSubtitleLineHeight,
+    maxWidth: 420,
   },
   heroCountPill: {
-    alignItems: 'center',
     alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
     borderRadius: 999,
     minWidth: WORKBENCH_SIZE.heroCountPillMinWidth,
     paddingHorizontal: WORKBENCH_SIZE.heroCountPillPaddingHorizontal,
     paddingVertical: WORKBENCH_SIZE.heroCountPillPaddingVertical,
+  },
+  heroCountText: {
+    color: '#2563EB',
+    fontSize: 13,
   },
   metricTiles: {
     flexDirection: 'row',
@@ -821,8 +844,14 @@ const styles = StyleSheet.create({
     minHeight: WORKBENCH_SIZE.metricCardMinHeight,
     paddingHorizontal: WORKBENCH_SIZE.metricCardPaddingHorizontal,
     paddingVertical: WORKBENCH_SIZE.metricCardPaddingVertical,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 2,
   },
   metricTileLabel: {
+    color: '#475569',
     fontSize: WORKBENCH_SIZE.metricLabelFontSize,
   },
   metricTileValue: {
@@ -838,6 +867,7 @@ const styles = StyleSheet.create({
   sectionHeaderRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 12,
     justifyContent: 'space-between',
   },
   sectionTitle: {
@@ -845,7 +875,9 @@ const styles = StyleSheet.create({
   },
   sectionHint: {
     color: '#64748B',
+    flex: 1,
     fontSize: WORKBENCH_SIZE.sectionHintFontSize,
+    textAlign: 'right',
   },
   quickActionGrid: {
     flexDirection: 'row',
@@ -857,7 +889,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: WORKBENCH_SIZE.actionCardRadius,
     borderWidth: 1,
-    gap: SALES_WORKBENCH_SIZE.quickActionGap,
+    gap: 10,
     justifyContent: 'center',
     minHeight: WORKBENCH_SIZE.actionCardMinHeight,
     paddingHorizontal: WORKBENCH_SIZE.actionCardPaddingHorizontal,
@@ -872,37 +904,34 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: SALES_WORKBENCH_SIZE.headerActionGap,
+    gap: 8,
   },
   headerActionButton: {
-    alignItems: 'center',
     borderRadius: 999,
-    justifyContent: 'center',
-    minHeight: SALES_WORKBENCH_SIZE.headerActionMinHeight,
-    minWidth: SALES_WORKBENCH_SIZE.headerActionMinWidth,
-    paddingHorizontal: SALES_WORKBENCH_SIZE.headerActionPaddingHorizontal,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
   },
   headerActionText: {
     color: '#475569',
-    fontSize: SALES_WORKBENCH_SIZE.headerActionTextFontSize,
+    fontSize: 13,
   },
   searchRow: {
+    alignItems: 'center',
     flexDirection: 'row',
     gap: WORKBENCH_SIZE.searchRowGap,
   },
   searchInputWrap: {
-    alignItems: 'center',
     borderRadius: WORKBENCH_SIZE.searchInputRadius,
     borderWidth: 1,
     flex: 1,
     flexDirection: 'row',
     minHeight: WORKBENCH_SIZE.searchInputMinHeight,
-    paddingHorizontal: SALES_WORKBENCH_SIZE.searchInputPaddingHorizontal,
+    paddingHorizontal: 15,
   },
   searchInput: {
     flex: 1,
     fontSize: WORKBENCH_SIZE.searchInputFontSize,
-    minHeight: SALES_WORKBENCH_SIZE.searchInputInnerMinHeight,
+    minHeight: 38,
     paddingVertical: 0,
   },
   clearButton: {
@@ -914,7 +943,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: WORKBENCH_SIZE.searchButtonRadius,
     flexDirection: 'row',
-    gap: 4,
+    gap: 6,
     justifyContent: 'center',
     minHeight: WORKBENCH_SIZE.searchButtonMinHeight,
     minWidth: WORKBENCH_SIZE.searchButtonMinWidth,
@@ -927,68 +956,91 @@ const styles = StyleSheet.create({
   filterChipsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SALES_WORKBENCH_SIZE.filterChipGap,
+    gap: 8,
   },
   filterChip: {
-    borderRadius: SALES_WORKBENCH_SIZE.filterChipRadius,
+    borderRadius: 999,
     borderWidth: 1,
-    minHeight: SALES_WORKBENCH_SIZE.filterChipMinHeight,
+    minHeight: 34,
     justifyContent: 'center',
-    paddingHorizontal: SALES_WORKBENCH_SIZE.filterChipPaddingHorizontal,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   filterChipText: {
-    color: '#475569',
-    fontSize: SALES_WORKBENCH_SIZE.filterChipFontSize,
+    color: '#334155',
+    fontSize: 12,
   },
-  filterCardGrid: {
+  queryMetaRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SALES_WORKBENCH_SIZE.filterCardGridGap,
+    gap: 10,
   },
-  filterCard: {
-    borderRadius: WORKBENCH_SIZE.filterCardRadius,
+  selectCard: {
+    borderRadius: WORKBENCH_SIZE.searchInputRadius,
     borderWidth: 1,
-    gap: WORKBENCH_SIZE.filterCardGap,
-    minHeight: WORKBENCH_SIZE.filterCardMinHeight,
-    paddingHorizontal: WORKBENCH_SIZE.filterCardPaddingHorizontal,
-    paddingVertical: WORKBENCH_SIZE.filterCardPaddingVertical,
-    width: '47%',
+    flex: 1,
+    gap: 5,
+    minHeight: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
-  infoCardInteractive: {
-    justifyContent: 'space-between',
-  },
-  infoCardNeutral: {
-    justifyContent: 'flex-start',
-  },
-  filterCardHeader: {
+  selectCardTopRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  filterLabel: {
+  selectLabel: {
     color: '#64748B',
-    fontSize: WORKBENCH_SIZE.filterLabelFontSize,
+    fontSize: 11,
   },
-  filterValue: {
+  selectValue: {
     color: '#0F172A',
-    fontSize: WORKBENCH_SIZE.filterValueFontSize,
+    fontSize: 13,
   },
-  resultFraction: {
+  filterSelectCard: {
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
+  },
+  filterSelectLabel: {
+    color: '#64748B',
+  },
+  filterSelectValue: {
     color: '#0F172A',
-    fontSize: WORKBENCH_SIZE.resultFractionFontSize,
   },
-  resultMainRow: {
+  queryMetaLabel: {
+    color: '#64748B',
+    fontSize: 11,
+  },
+  resultSummaryStrip: {
+    borderRadius: WORKBENCH_SIZE.searchInputRadius,
+    borderWidth: 1,
+    flex: 1,
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  resultSummaryMainRow: {
     alignItems: 'baseline',
     flexDirection: 'row',
     gap: 6,
   },
-  resultUnit: {
+  resultSummaryValue: {
+    color: '#0F172A',
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  resultSummaryUnit: {
     color: '#64748B',
     fontSize: 12,
   },
-  resultHint: {
+  resultSummaryCaption: {
     color: '#64748B',
-    fontSize: WORKBENCH_SIZE.resultHintFontSize,
+    fontSize: 11,
+    lineHeight: 15,
   },
   resultList: {
     gap: 12,

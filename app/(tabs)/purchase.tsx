@@ -1,4 +1,3 @@
-import type { Href } from 'expo-router';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -7,6 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobilePageHeader } from '@/components/mobile-page-header';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import {
+  WorkbenchHeroCard,
+  WorkbenchQuickActionsCard,
+  type WorkbenchMetricItem,
+  WorkbenchSectionCard,
+} from '@/components/workbench/workbench-shell';
 import { WORKBENCH_SIZE } from '@/constants/workbench-size';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
@@ -276,36 +281,36 @@ export default function PurchaseTabScreen() {
 
   const quickActions = [
     {
-      href: '/purchase/order/create' as Href,
       label: '采购下单',
       icon: 'cart.fill' as const,
       toneBackground: '#EFF6FF',
       toneBorder: '#BFDBFE',
       toneText: '#1D4ED8',
+      onPress: () => router.push('/purchase/order/create'),
     },
     {
-      href: '/purchase/receipt/create' as Href,
       label: '采购收货',
       icon: 'shippingbox.fill' as const,
       toneBackground: '#F0FDF4',
       toneBorder: '#BBF7D0',
       toneText: '#15803D',
+      onPress: () => router.push('/purchase/receipt/create'),
     },
     {
-      href: '/purchase/invoice/create' as Href,
       label: '登记发票',
       icon: 'doc.text.fill' as const,
       toneBackground: '#FFF7ED',
       toneBorder: '#FED7AA',
       toneText: '#C2410C',
+      onPress: () => router.push('/purchase/invoice/create'),
     },
     {
-      href: '/purchase/payment/create' as Href,
       label: '供应商付款',
       icon: 'creditcard.fill' as const,
       toneBackground: '#F5F3FF',
       toneBorder: '#DDD6FE',
       toneText: '#6D28D9',
+      onPress: () => router.push('/purchase/payment/create'),
     },
   ];
 
@@ -327,6 +332,62 @@ export default function PurchaseTabScreen() {
     ? visibleOrderCount + hiddenCancelledCount
     : totalScopedCount;
   const hasMoreResults = visibleOrderCount > filteredSummaries.length;
+  const heroMetrics: WorkbenchMetricItem[] = [
+    {
+      key: 'unfinished',
+      label: '未完成',
+      value: unfinishedCount,
+      textColor: '#B45309',
+      backgroundColor: '#FFF5D6',
+      borderColor: filterMode === 'unfinished' ? '#F59E0B' : '#FDE68A',
+      active: filterMode === 'unfinished',
+      onPress: () => setFilterMode('unfinished'),
+    },
+    {
+      key: 'receiving',
+      label: '待收货',
+      value: receivingCount,
+      textColor: '#1D4ED8',
+      backgroundColor: '#E2EDFF',
+      borderColor: filterMode === 'receiving' ? '#2563EB' : '#BFDBFE',
+      active: filterMode === 'receiving',
+      onPress: () => setFilterMode('receiving'),
+    },
+    {
+      key: 'paying',
+      label: '待付款',
+      value: paymentCount,
+      textColor: '#15803D',
+      backgroundColor: '#DCFCE7',
+      borderColor: filterMode === 'paying' ? '#16A34A' : '#BBF7D0',
+      active: filterMode === 'paying',
+      onPress: () => setFilterMode('paying'),
+    },
+    {
+      key: 'completed',
+      label: '已完成',
+      value: completedCount,
+      textColor: '#334155',
+      backgroundColor: '#F1F5F9',
+      borderColor: filterMode === 'completed' ? '#334155' : '#CBD5E1',
+      active: filterMode === 'completed',
+      onPress: () => setFilterMode('completed'),
+    },
+  ];
+  const heroGlows = [
+    { right: -20, top: -18, width: 148, height: 148, borderRadius: 999, backgroundColor: '#DBEAFE' },
+    { left: -30, bottom: -48, width: 164, height: 164, borderRadius: 999, backgroundColor: '#FDE68A', opacity: 0.4 },
+    {
+      right: 88,
+      bottom: 24,
+      width: 92,
+      height: 92,
+      borderRadius: 28,
+      backgroundColor: '#BFDBFE',
+      opacity: 0.5,
+      transform: [{ rotate: '-12deg' }],
+    },
+  ];
 
   const companyPickerOptions = useMemo(() => {
     const allOptions: LinkOption[] = [{ label: '全部公司', value: '__all__', description: '跨公司查看全部采购订单' }];
@@ -364,116 +425,26 @@ export default function PurchaseTabScreen() {
       <MobilePageHeader title="采购" />
 
       <ScrollView contentContainerStyle={styles.container}>
-        <View style={[styles.heroStage, { borderColor }]}>
-          <View style={styles.heroGlowWrap} pointerEvents="none">
-            <View style={styles.heroGlowA} />
-            <View style={styles.heroGlowB} />
-            <View style={styles.heroGlowC} />
-          </View>
+        <WorkbenchHeroCard
+          borderColor={borderColor}
+          countText={`${deskSummary.visibleCount || filteredSummaries.length} 单`}
+          description="自动载入采购订单，并优先把未完成订单排在前面。"
+          eyebrow="PURCHASE DESK"
+          glows={heroGlows}
+          metrics={heroMetrics}
+          title="采购工作台"
+        />
 
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroCopy}>
-              <ThemedText style={styles.heroEyebrow}>PURCHASE DESK</ThemedText>
-              <ThemedText style={styles.heroTitle} type="title">
-                采购工作台
-              </ThemedText>
-              <ThemedText style={styles.heroSubtitle}>
-                自动载入采购订单，并优先把未完成订单排在前面。
-              </ThemedText>
-            </View>
-            <View style={styles.heroCountPill}>
-              <ThemedText style={styles.heroCountText} type="defaultSemiBold">
-                {deskSummary.visibleCount || filteredSummaries.length} 单
-              </ThemedText>
-            </View>
-          </View>
+        <WorkbenchQuickActionsCard
+          actions={quickActions}
+          backgroundColor={surface}
+          borderColor={borderColor}
+          hint="采购主流程入口"
+          title="常用动作"
+        />
 
-          <View style={styles.metricRow}>
-            <Pressable
-              onPress={() => setFilterMode('unfinished')}
-              style={[
-                styles.metricCard,
-                styles.metricPressable,
-                { backgroundColor: '#FFF5D6', borderColor: filterMode === 'unfinished' ? '#F59E0B' : '#FDE68A' },
-              ]}>
-              <ThemedText style={styles.metricLabel}>未完成</ThemedText>
-              <ThemedText style={[styles.metricValue, { color: '#B45309' }]} type="defaultSemiBold">
-                {unfinishedCount}
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setFilterMode('receiving')}
-              style={[
-                styles.metricCard,
-                styles.metricPressable,
-                { backgroundColor: '#E2EDFF', borderColor: filterMode === 'receiving' ? '#2563EB' : '#BFDBFE' },
-              ]}>
-              <ThemedText style={styles.metricLabel}>待收货</ThemedText>
-              <ThemedText style={[styles.metricValue, { color: '#1D4ED8' }]} type="defaultSemiBold">
-                {receivingCount}
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setFilterMode('paying')}
-              style={[
-                styles.metricCard,
-                styles.metricPressable,
-                { backgroundColor: '#DCFCE7', borderColor: filterMode === 'paying' ? '#16A34A' : '#BBF7D0' },
-              ]}>
-              <ThemedText style={styles.metricLabel}>待付款</ThemedText>
-              <ThemedText style={[styles.metricValue, { color: '#15803D' }]} type="defaultSemiBold">
-                {paymentCount}
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setFilterMode('completed')}
-              style={[
-                styles.metricCard,
-                styles.metricPressable,
-                { backgroundColor: '#F1F5F9', borderColor: filterMode === 'completed' ? '#334155' : '#CBD5E1' },
-              ]}>
-              <ThemedText style={styles.metricLabel}>已完成</ThemedText>
-              <ThemedText style={[styles.metricValue, { color: '#334155' }]} type="defaultSemiBold">
-                {completedCount}
-              </ThemedText>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={[styles.quickActionsCard, { backgroundColor: surface, borderColor }]}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-              常用动作
-            </ThemedText>
-            <ThemedText style={styles.sectionHint}>采购主流程入口</ThemedText>
-          </View>
-
-          <View style={styles.actionGrid}>
-            {quickActions.map((action) => (
-              <Pressable
-                key={action.label}
-                onPress={() => router.push(action.href)}
-                style={[
-                  styles.actionCard,
-                  {
-                    backgroundColor: action.toneBackground,
-                    borderColor: action.toneBorder,
-                  },
-                ]}>
-                <IconSymbol color={action.toneText} name={action.icon} size={20} />
-                <ThemedText style={[styles.actionLabel, { color: action.toneText }]} type="defaultSemiBold">
-                  {action.label}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={[styles.panel, { backgroundColor: surface, borderColor }]}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-              采购检索
-            </ThemedText>
+        <WorkbenchSectionCard
+          actionSlot={
             <View style={styles.headerActions}>
               <Pressable onPress={handleResetQuery} style={[styles.refreshButton, { backgroundColor: surfaceMuted }]}>
                 <ThemedText style={[styles.refreshButtonText, { color: '#475569' }]} type="defaultSemiBold">
@@ -486,7 +457,11 @@ export default function PurchaseTabScreen() {
                 </ThemedText>
               </Pressable>
             </View>
-          </View>
+          }
+          backgroundColor={surface}
+          borderColor={borderColor}
+          hint="采购检索"
+          title="采购检索">
 
           <View style={styles.searchComposer}>
             <View style={styles.searchInputWrap}>
@@ -583,16 +558,13 @@ export default function PurchaseTabScreen() {
               </ThemedText>
             </View>
           </View>
+        </WorkbenchSectionCard>
 
-        </View>
-
-        <View style={[styles.panel, { backgroundColor: surface, borderColor }]}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-              采购订单列表
-            </ThemedText>
-            <ThemedText style={styles.sectionHint}>默认按未完成优先排序</ThemedText>
-          </View>
+        <WorkbenchSectionCard
+          backgroundColor={surface}
+          borderColor={borderColor}
+          hint="默认按未完成优先排序"
+          title="采购订单列表">
 
           {isLoading ? (
             <View style={styles.loadingWrap}>
@@ -714,12 +686,12 @@ export default function PurchaseTabScreen() {
               ) : null}
             </>
           ) : (
-            <View style={[styles.emptyCard, { backgroundColor: surfaceMuted }]}>
-              <ThemedText type="defaultSemiBold">当前没有匹配的采购订单</ThemedText>
-              <ThemedText>你可以调整筛选条件，或者直接新建采购订单。</ThemedText>
-            </View>
-          )}
-        </View>
+              <View style={[styles.emptyCard, { backgroundColor: surfaceMuted }]}>
+                <ThemedText type="defaultSemiBold">当前没有匹配的采购订单</ThemedText>
+                <ThemedText>你可以调整筛选条件，或者直接新建采购订单。</ThemedText>
+              </View>
+            )}
+        </WorkbenchSectionCard>
       </ScrollView>
 
       <Modal animationType="fade" transparent visible={pickerMode !== null} onRequestClose={() => setPickerMode(null)}>

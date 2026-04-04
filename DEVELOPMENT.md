@@ -5573,17 +5573,32 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
   - filter panels
 - this reduces repeated one-off visual tuning and makes future workbench updates easier to keep aligned
 
+### Shared Workbench Shell
+
+- sales and purchase workbenches no longer only share size tokens
+- a shared shell component layer now exists in:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/workbench/workbench-shell.tsx`
+- the following blocks now come from the same component family:
+  - hero card
+  - top metric cards
+  - quick-action card section
+  - section card frame used by search and list panels
+- this was important because the sales tab had previously been restored from an older implementation while purchase had already moved to a newer layout structure
+- sharing the shell removes that layout drift and makes later workbench UI changes much safer
+
 ### Sales Workbench Alignment
 
 - the sales workbench visual structure was adjusted to match the purchase workbench more closely
 - aligned areas include:
   - search bar and button sizing
   - filter card proportions
+  - query-company / status / sort / result-summary card sizing
   - result-card display style
   - workbench spacing rhythm
 - the result summary now uses the same compact count pattern as purchase:
   - `current / total`
   - instead of oversized wrapped count text
+- the sales workbench filter area now follows the same two-row card layout as purchase instead of the earlier `47%` width legacy grid
 
 ### Search And Paging Notes
 
