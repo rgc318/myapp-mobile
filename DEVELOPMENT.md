@@ -6017,9 +6017,10 @@ Practical rule:
 
 ### Current Behavior
 
-- overview cards and the foldable receivable/payable sections still use `get_business_report_v1`
+- overview cards use `get_business_report_overview_v1`
 - sales analysis uses `get_sales_report_v1`
 - purchase analysis uses `get_purchase_report_v1`
+- receivable/payable tables use `get_receivable_payable_report_v1`
 - cashflow analysis uses:
   - `get_cashflow_report_v1`
   - `list_cashflow_entries_v1`

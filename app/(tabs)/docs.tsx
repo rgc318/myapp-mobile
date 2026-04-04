@@ -716,9 +716,9 @@ function buildTrendBuckets(
   dailyRows: BusinessReport['tables']['salesTrend'] | BusinessReport['tables']['purchaseTrend'],
   hourlyRows: BusinessReport['tables']['salesTrendHourly'] | BusinessReport['tables']['purchaseTrendHourly'],
   granularity: TrendGranularity,
-  anchorDate: string,
+  range: { dateFrom: string; dateTo: string },
 ) {
-  const anchor = new Date(`${anchorDate || toIsoDate(new Date())}T00:00:00`);
+  const anchor = new Date(`${range.dateTo || toIsoDate(new Date())}T00:00:00`);
   const dayMap = new Map((dailyRows || []).map((row) => [row.trendDate, row]));
   const hourMap = new Map((hourlyRows || []).map((row) => [row.trendHour, row]));
 
@@ -731,27 +731,11 @@ function buildTrendBuckets(
     }));
   }
 
-  if (granularity === 'week') {
-    const start = new Date(anchor);
-    start.setDate(anchor.getDate() - 6);
-    return Array.from({ length: 7 }, (_, index) => {
-      const current = new Date(start);
-      current.setDate(start.getDate() + index);
-      const key = toIsoDateLocal(current);
-      const row = dayMap.get(key);
-      return {
-        key,
-        label: key.slice(5),
-        amount: row?.amount || 0,
-        count: row?.count || 0,
-      };
-    });
-  }
-
-  if (granularity === 'month') {
-    const start = new Date(anchor);
-    start.setDate(anchor.getDate() - 29);
-    return Array.from({ length: 30 }, (_, index) => {
+  if (granularity === 'week' || granularity === 'month') {
+    const start = new Date(`${range.dateFrom || toIsoDateLocal(anchor)}T00:00:00`);
+    const end = new Date(`${range.dateTo || toIsoDateLocal(anchor)}T00:00:00`);
+    const totalDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
+    return Array.from({ length: totalDays }, (_, index) => {
       const current = new Date(start);
       current.setDate(start.getDate() + index);
       const key = toIsoDateLocal(current);
@@ -1536,13 +1520,19 @@ export default function ReportsScreen() {
     salesAnalysisReport.tables.salesTrend || [],
     salesAnalysisReport.tables.salesTrendHourly || [],
     salesTrendGranularity,
-    salesAnalysisReport.meta.dateTo || '',
+    {
+      dateFrom: salesAnalysisReport.meta.dateFrom || '',
+      dateTo: salesAnalysisReport.meta.dateTo || '',
+    },
   );
   const purchaseTrendSeries = buildTrendBuckets(
     purchaseAnalysisReport.tables.purchaseTrend || [],
     purchaseAnalysisReport.tables.purchaseTrendHourly || [],
     purchaseTrendGranularity,
-    purchaseAnalysisReport.meta.dateTo || '',
+    {
+      dateFrom: purchaseAnalysisReport.meta.dateFrom || '',
+      dateTo: purchaseAnalysisReport.meta.dateTo || '',
+    },
   );
   const salesCollectionRate =
     salesAnalysisReport.overview.salesAmountTotal > 0
@@ -1561,7 +1551,7 @@ export default function ReportsScreen() {
       rangeMode === 'custom' ? customRangeApplied : resolveDateRange(rangeMode);
     try {
       setIsLoading(true);
-      const [overviewReport, settlementReport] = await Promise.all([
+      const [overviewReport, settlementReport, salesSummaryReport, purchaseSummaryReport] = await Promise.all([
         fetchBusinessReportOverview({
           company: queryCompany,
           dateFrom,
@@ -1573,11 +1563,25 @@ export default function ReportsScreen() {
           dateTo,
           limit: 8,
         }),
+        fetchSalesReport({
+          company: queryCompany,
+          dateFrom,
+          dateTo,
+          limit: 8,
+        }),
+        fetchPurchaseReport({
+          company: queryCompany,
+          dateFrom,
+          dateTo,
+          limit: 8,
+        }),
       ]);
       setReport({
         overview: overviewReport.overview,
         tables: {
           ...overviewReport.tables,
+          salesSummary: salesSummaryReport.tables.salesSummary,
+          purchaseSummary: purchaseSummaryReport.tables.purchaseSummary,
           ...settlementReport.tables,
         },
         meta: overviewReport.meta,
