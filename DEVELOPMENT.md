@@ -5967,6 +5967,45 @@ Practical rule:
 - `npm run lint -- services/reports.ts app/(tabs)/docs.tsx`
 - Result: passed
 
+## Report Page Visual Cleanup
+
+### What Changed
+
+- fixed the top report trend range rendering so month-based views no longer show extra days from the previous month
+- restored the summary fold area data after the report endpoint split, so overview-linked summary tables no longer appear empty because of a missing data source
+- simplified the lower detail area to keep only:
+  - receivable/payable detail
+  - cashflow detail
+- removed the duplicated sales/purchase detail entry from the lower section because sales and purchase already have dedicated analysis modules above
+- adjusted the hero date-range layout so the current range sits inline with the hero copy instead of floating as a cramped top-right pill
+- compressed the overview KPI cards to reduce the amount of vertical space they occupy on mobile
+
+### Why This Was Needed
+
+- the report page had started to show a few UI regressions after the endpoint split:
+  - trend axes could imply missing data because the visible range was wider than the actual query range
+  - lower summary tables could show empty states even when the corresponding analysis modules had data
+  - the lower detail entry area repeated sales/purchase concepts that were already represented above
+- visually, the hero badge and KPI area were also taking more attention and space than they should on a phone-sized screen
+
+### Current Behavior
+
+- top trend charts now follow the actual queried date range
+- the lower detail section acts only as a finance/detail continuation area
+- sales and purchase stay in the main analysis modules
+- receivable/payable and cashflow stay in the lower detail area
+- the hero date-range label and overview KPI cards are more compact
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/DEVELOPMENT.md`
+
+### Validation
+
+- `npm run lint -- app/(tabs)/docs.tsx`
+- Result: passed
+
 ## Report Overview And Settlement Endpoint Split
 
 ### What Changed

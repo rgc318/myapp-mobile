@@ -916,15 +916,22 @@ function OverviewMetric({
   label,
   value,
   accent,
+  compact = false,
 }: {
   label: string;
   value: string;
   accent: string;
+  compact?: boolean;
 }) {
   return (
-    <View style={[styles.metricCard, { borderColor: `${accent}33`, backgroundColor: `${accent}0F` }]}>
-      <ThemedText style={styles.metricLabel}>{label}</ThemedText>
-      <ThemedText style={[styles.metricValue, { color: accent }]} type="defaultSemiBold">
+    <View
+      style={[
+        styles.metricCard,
+        compact ? styles.metricCardCompact : null,
+        { borderColor: `${accent}33`, backgroundColor: `${accent}0F` },
+      ]}>
+      <ThemedText style={[styles.metricLabel, compact ? styles.metricLabelCompact : null]}>{label}</ThemedText>
+      <ThemedText style={[styles.metricValue, compact ? styles.metricValueCompact : null, { color: accent }]} type="defaultSemiBold">
         {value}
       </ThemedText>
     </View>
@@ -1499,8 +1506,6 @@ export default function ReportsScreen() {
   const [companyOptions, setCompanyOptions] = useState<LinkOption[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
-    sales: false,
-    purchase: false,
     receivable: false,
     payable: false,
     cashflow: false,
@@ -1542,6 +1547,33 @@ export default function ReportsScreen() {
     purchaseAnalysisReport.overview.purchaseAmountTotal > 0
       ? `${((purchaseAnalysisReport.overview.paidAmountTotal / purchaseAnalysisReport.overview.purchaseAmountTotal) * 100).toFixed(1)}%`
       : '0.0%';
+  const detailEntryCards = [
+    {
+      key: 'settlement',
+      title: '应收与应付明细',
+      subtitle: '客户应收压力与供应商待付款结构',
+      accent: '#B45309',
+      active: expandedSections.receivable || expandedSections.payable,
+      actionLabel: expandedSections.receivable || expandedSections.payable ? '收起' : '查看',
+      onPress: () => {
+        const next = !(expandedSections.receivable || expandedSections.payable);
+        setExpandedSections((prev) => ({
+          ...prev,
+          receivable: next,
+          payable: next,
+        }));
+      },
+    },
+    {
+      key: 'cashflow',
+      title: '资金流水',
+      subtitle: '收支明细与分页查看',
+      accent: '#0F766E',
+      active: expandedSections.cashflow,
+      actionLabel: expandedSections.cashflow ? '收起' : '查看',
+      onPress: () => toggleSection('cashflow'),
+    },
+  ] as const;
   const toggleSection = useCallback((key: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
@@ -1821,11 +1853,12 @@ export default function ReportsScreen() {
               <ThemedText style={styles.heroText}>
                 先从最关键的销售、采购、应收应付和资金流水开始，把经营面先看清楚。
               </ThemedText>
-            </View>
-            <View style={[styles.heroBadge, { borderColor }]}>
-              <ThemedText style={styles.heroBadgeValue} type="defaultSemiBold">
-                {report.meta.dateFrom && report.meta.dateTo ? `${report.meta.dateFrom} ~ ${report.meta.dateTo}` : '本月'}
-              </ThemedText>
+              <View style={[styles.heroBadge, { borderColor }]}>
+                <ThemedText style={styles.heroBadgeLabel}>当前范围</ThemedText>
+                <ThemedText style={styles.heroBadgeValue} type="defaultSemiBold">
+                  {report.meta.dateFrom && report.meta.dateTo ? `${report.meta.dateFrom} ~ ${report.meta.dateTo}` : '本月'}
+                </ThemedText>
+              </View>
             </View>
           </View>
 
@@ -1897,13 +1930,13 @@ export default function ReportsScreen() {
         </View>
 
         <View style={styles.metricsGrid}>
-          <OverviewMetric accent="#2563EB" label="销售额" value={formatMoney(report.overview.salesAmountTotal)} />
-          <OverviewMetric accent="#EA580C" label="采购额" value={formatMoney(report.overview.purchaseAmountTotal)} />
-          <OverviewMetric accent="#16A34A" label="收入" value={formatMoney(report.overview.receivedAmountTotal)} />
-          <OverviewMetric accent="#DC2626" label="支出" value={formatMoney(report.overview.paidAmountTotal)} />
-          <OverviewMetric accent="#0F766E" label="净现金流" value={formatMoney(report.overview.netCashflowTotal)} />
-          <OverviewMetric accent="#B45309" label="应收未结" value={formatMoney(report.overview.receivableOutstandingTotal)} />
-          <OverviewMetric accent="#7C3AED" label="应付未结" value={formatMoney(report.overview.payableOutstandingTotal)} />
+          <OverviewMetric compact accent="#2563EB" label="销售额" value={formatMoney(report.overview.salesAmountTotal)} />
+          <OverviewMetric compact accent="#EA580C" label="采购额" value={formatMoney(report.overview.purchaseAmountTotal)} />
+          <OverviewMetric compact accent="#16A34A" label="收入" value={formatMoney(report.overview.receivedAmountTotal)} />
+          <OverviewMetric compact accent="#DC2626" label="支出" value={formatMoney(report.overview.paidAmountTotal)} />
+          <OverviewMetric compact accent="#0F766E" label="净现金流" value={formatMoney(report.overview.netCashflowTotal)} />
+          <OverviewMetric compact accent="#B45309" label="应收未结" value={formatMoney(report.overview.receivableOutstandingTotal)} />
+          <OverviewMetric compact accent="#7C3AED" label="应付未结" value={formatMoney(report.overview.payableOutstandingTotal)} />
         </View>
 
         <View style={[styles.salesModuleCard, { backgroundColor: surface, borderColor }]}>
@@ -2190,98 +2223,99 @@ export default function ReportsScreen() {
           surface={surface}
         />
 
-        <View style={[styles.foldCard, { backgroundColor: surface, borderColor }]}>
-          {(
-            [
-              ['sales', '销售汇总表', '客户聚合明细'],
-              ['purchase', '采购汇总表', '供应商聚合明细'],
-              ['receivable', '应收账款表', '客户应收压力'],
-              ['payable', '应付账款表', '供应商应付结构'],
-              ['cashflow', '资金流水', '收支流水明细'],
-            ] as const
-          ).map(([key, title, subtitle]) => (
-            <Pressable key={key} onPress={() => toggleSection(key)} style={styles.foldRow}>
-              <View style={styles.foldCopy}>
-                <ThemedText style={styles.foldTitle} type="defaultSemiBold">
-                  {title}
-                </ThemedText>
-                <ThemedText style={styles.foldSubtitle}>{subtitle}</ThemedText>
-              </View>
-              <View style={[styles.foldBadge, { backgroundColor: expandedSections[key] ? 'rgba(37,99,235,0.18)' : 'rgba(148,163,184,0.2)' }]}>
-                <ThemedText style={[styles.foldBadgeText, expandedSections[key] ? styles.foldBadgeTextActive : null]} type="defaultSemiBold">
-                  {expandedSections[key] ? '收起' : '展开'}
-                </ThemedText>
-              </View>
-            </Pressable>
+        <View style={[styles.detailHubCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.detailHubHeader}>
+            <ThemedText style={styles.detailHubTitle} type="defaultSemiBold">
+              明细查看
+            </ThemedText>
+            <ThemedText style={styles.detailHubSubtitle}>看完趋势后，在这里快速切到可核对的明细表。</ThemedText>
+          </View>
+          {detailEntryCards.map((entry) => (
+            <View key={entry.key} style={styles.detailEntryBlock}>
+              <Pressable onPress={entry.onPress} style={[styles.detailEntryRow, { borderColor }]}>
+                <View style={styles.detailEntryMain}>
+                  <View style={[styles.detailEntryAccent, { backgroundColor: entry.accent }]} />
+                  <View style={styles.detailEntryCopy}>
+                    <ThemedText style={styles.detailEntryTitle} type="defaultSemiBold">
+                      {entry.title}
+                    </ThemedText>
+                    <ThemedText style={styles.detailEntrySubtitle}>{entry.subtitle}</ThemedText>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    styles.detailEntryBadge,
+                    entry.active ? { backgroundColor: `${entry.accent}22` } : { backgroundColor: 'rgba(148,163,184,0.16)' },
+                  ]}>
+                  <ThemedText
+                    style={[
+                      styles.detailEntryBadgeText,
+                      entry.active ? { color: entry.accent } : null,
+                    ]}
+                    type="defaultSemiBold">
+                    {entry.actionLabel}
+                  </ThemedText>
+                </View>
+              </Pressable>
+
+              {entry.key === 'settlement' && entry.active ? (
+                <View style={[styles.detailExpandedPanel, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <View style={styles.detailExpandedHeader}>
+                    <View style={[styles.detailExpandedAccent, { backgroundColor: '#B45309' }]} />
+                    <ThemedText style={styles.detailExpandedLabel} type="defaultSemiBold">
+                      应收与应付明细
+                    </ThemedText>
+                  </View>
+                  <View style={styles.detailExpandedGroup}>
+                  <PartyTableSection
+                    amountLabel="应收总额"
+                    amountTone="#B45309"
+                    borderColor={borderColor}
+                    hint="按客户聚合，看未结应收压力。"
+                    rows={report.tables.receivableSummary}
+                    surface={surface}
+                    title="应收账款表"
+                  />
+                  <PartyTableSection
+                    amountLabel="应付总额"
+                    amountTone="#7C3AED"
+                    borderColor={borderColor}
+                    hint="按供应商聚合，看待付款结构。"
+                    rows={report.tables.payableSummary}
+                    surface={surface}
+                    title="应付账款表"
+                  />
+                  </View>
+                </View>
+              ) : null}
+
+              {entry.key === 'cashflow' && entry.active ? (
+                <View style={[styles.detailExpandedPanel, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <View style={styles.detailExpandedHeader}>
+                    <View style={[styles.detailExpandedAccent, { backgroundColor: '#0F766E' }]} />
+                    <ThemedText style={styles.detailExpandedLabel} type="defaultSemiBold">
+                      资金流水明细
+                    </ThemedText>
+                  </View>
+                  <View style={styles.detailExpandedGroup}>
+                  <CashflowSection
+                    borderColor={borderColor}
+                    hasMore={cashflowEntries.pagination.hasMore}
+                    isLoadingMore={isCashflowLoadingMore}
+                    onLoadMore={() => {
+                      void loadMoreCashflowEntries();
+                    }}
+                    rows={cashflowEntries.rows}
+                    surface={surface}
+                    totalCount={cashflowEntries.pagination.totalCount}
+                  />
+                  </View>
+                </View>
+              ) : null}
+            </View>
           ))}
         </View>
 
-        {expandedSections.sales ? (
-          <PartyTableSection
-            amountLabel="销售额"
-            amountTone="#2563EB"
-            borderColor={borderColor}
-            hint="按客户聚合，看谁贡献最多销售额。"
-            rows={report.tables.salesSummary}
-            surface={surface}
-            title="销售汇总表"
-          />
-        ) : null}
-        {expandedSections.purchase ? (
-          <PartyTableSection
-            amountLabel="采购额"
-            amountTone="#EA580C"
-            borderColor={borderColor}
-            hint="按供应商聚合，看采购金额集中在哪些供应商。"
-            rows={report.tables.purchaseSummary}
-            surface={surface}
-            title="采购汇总表"
-          />
-        ) : null}
-        {expandedSections.receivable ? (
-          <PartyTableSection
-            amountLabel="应收总额"
-            amountTone="#B45309"
-            borderColor={borderColor}
-            hint="按客户聚合，看未结应收压力。"
-            rows={report.tables.receivableSummary}
-            surface={surface}
-            title="应收账款表"
-          />
-        ) : null}
-        {expandedSections.payable ? (
-          <PartyTableSection
-            amountLabel="应付总额"
-            amountTone="#7C3AED"
-            borderColor={borderColor}
-            hint="按供应商聚合，看待付款结构。"
-            rows={report.tables.payableSummary}
-            surface={surface}
-            title="应付账款表"
-          />
-        ) : null}
-        {expandedSections.cashflow ? (
-          <CashflowSection
-            borderColor={borderColor}
-            hasMore={cashflowEntries.pagination.hasMore}
-            isLoadingMore={isCashflowLoadingMore}
-            onLoadMore={() => {
-              void loadMoreCashflowEntries();
-            }}
-            rows={cashflowEntries.rows}
-            surface={surface}
-            totalCount={cashflowEntries.pagination.totalCount}
-          />
-        ) : null}
-
-        <View style={[styles.noteCard, { backgroundColor: surfaceMuted }]}>
-          <ThemedText style={styles.noteTitle} type="defaultSemiBold">
-            下一阶段
-          </ThemedText>
-          <ThemedText style={styles.noteText}>
-            当前先保证销售、采购、应收应付、资金流水这 5 张表稳定可用。库存收发存、成本、毛利分析会在成本口径统一后继续补。
-          </ThemedText>
-        </View>
       </ScrollView>
 
       <Modal animationType="fade" onRequestClose={() => setPickerVisible(false)} transparent visible={pickerVisible}>
@@ -2378,13 +2412,10 @@ const styles = StyleSheet.create({
   },
   heroHeader: {
     alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
   },
   heroCopy: {
     flex: 1,
-    gap: 8,
+    gap: 10,
   },
   heroTitle: {
     fontSize: 22,
@@ -2395,17 +2426,25 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   heroBadge: {
-    backgroundColor: 'rgba(255,255,255,0.86)',
-    borderRadius: 999,
+    alignItems: 'flex-start',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 18,
     borderWidth: 1,
-    maxWidth: 140,
+    gap: 4,
+    marginTop: 2,
+    maxWidth: '100%',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
+  },
+  heroBadgeLabel: {
+    color: '#64748B',
+    fontSize: 11,
   },
   heroBadgeValue: {
     color: '#0F172A',
     fontSize: 12,
-    textAlign: 'center',
+    lineHeight: 18,
   },
   filterRow: {
     flexDirection: 'row',
@@ -2645,13 +2684,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
+  metricCardCompact: {
+    borderRadius: 16,
+    minWidth: '47%',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   metricLabel: {
     color: '#64748B',
     fontSize: 12,
     marginBottom: 6,
   },
+  metricLabelCompact: {
+    fontSize: 11,
+    marginBottom: 4,
+  },
   metricValue: {
     fontSize: 19,
+  },
+  metricValueCompact: {
+    fontSize: 16,
   },
   sectionCard: {
     borderRadius: 22,
@@ -3312,45 +3364,96 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 11,
   },
-  foldCard: {
+  detailHubCard: {
     borderRadius: 18,
     borderWidth: 1,
-    overflow: 'hidden',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    gap: 10,
+    padding: 14,
   },
-  foldRow: {
+  detailHubHeader: {
+    gap: 4,
+    marginBottom: 2,
+  },
+  detailHubTitle: {
+    color: '#0F172A',
+    fontSize: 16,
+  },
+  detailHubSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  detailEntryBlock: {
+    gap: 10,
+  },
+  detailEntryRow: {
     alignItems: 'center',
-    borderBottomColor: '#E2E8F0',
     borderBottomWidth: 1,
+    borderRadius: 16,
+    borderTopWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
-  foldCopy: {
+  detailEntryMain: {
+    alignItems: 'center',
     flex: 1,
+    flexDirection: 'row',
+    gap: 10,
     marginRight: 12,
   },
-  foldTitle: {
+  detailEntryAccent: {
+    borderRadius: 999,
+    height: 12,
+    width: 12,
+  },
+  detailEntryCopy: {
+    flex: 1,
+  },
+  detailEntryTitle: {
     color: '#0F172A',
     fontSize: 15,
   },
-  foldSubtitle: {
+  detailEntrySubtitle: {
     color: '#64748B',
     fontSize: 11,
     marginTop: 2,
   },
-  foldBadge: {
+  detailEntryBadge: {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  foldBadgeText: {
+  detailEntryBadgeText: {
     color: '#475569',
     fontSize: 12,
   },
-  foldBadgeTextActive: {
-    color: '#2563EB',
+  detailExpandedGroup: {
+    gap: 12,
+  },
+  detailExpandedPanel: {
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    padding: 10,
+  },
+  detailExpandedHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 4,
+    paddingTop: 2,
+  },
+  detailExpandedAccent: {
+    borderRadius: 999,
+    height: 10,
+    width: 10,
+  },
+  detailExpandedLabel: {
+    color: '#475569',
+    fontSize: 12,
+    letterSpacing: 0.3,
   },
   noteTitle: {
     fontSize: 16,
