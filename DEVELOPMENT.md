@@ -5615,6 +5615,26 @@ This round cleaned up the mobile workbench structure after the sales desk was pr
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
 - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/constants/workbench-size.ts`
 
+### Follow-up Fix (2026-04-04)
+
+- later report work repurposed `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx` into the business reports page
+- meanwhile `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/sales.tsx`
+  had already been simplified to:
+  - `export { default } from './docs'`
+- that combination accidentally caused the bottom `销售` tab to render the reports page instead of the sales workbench
+
+Current correction:
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/sales.tsx`
+  now again hosts the actual sales workbench page
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx`
+  remains the reports page
+
+Practical rule:
+
+- do not use `sales.tsx -> docs.tsx` style re-export routing for primary tabs once the target page has its own product identity
+- sales and reports should remain separate tab roots even if they temporarily share layout patterns
+
 ## Supplier Management UI Update (2026-04-02)
 
 ### What Changed
