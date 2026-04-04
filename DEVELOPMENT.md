@@ -6088,3 +6088,47 @@ Practical rule:
 
 - `npm run lint -- services/reports.ts app/(tabs)/docs.tsx`
 - Result: passed
+
+## Printing Design Alignment
+
+### Current Direction
+
+- the first formal printing phase should target business documents, not receipt printers
+- mobile should remain responsible for:
+  - preview entry
+  - preview display
+  - system print trigger
+  - PDF share / export
+- mobile should not become the place where official document layout is manually assembled
+
+### Backend / Frontend Boundary
+
+- backend should own:
+  - print context building
+  - template selection
+  - HTML / PDF rendering
+  - permission checks
+- frontend should own:
+  - unified print actions
+  - preview route
+  - print / share trigger
+  - loading and failure handling
+
+### First-Phase Priority
+
+- `Sales Invoice` should be the first real print chain
+- this fits the current state because:
+  - invoice pages already behave like document previews
+  - a dedicated invoice preview route already exists
+  - the remaining gap is the real print / PDF / share connection
+
+### Current Recommendation
+
+- frontend should plan around `expo-print` + `expo-sharing`
+- backend should provide dedicated print-preview and print-file interfaces
+- fixed templates should stay on the backend side
+
+### Source Of Truth
+
+- the main implementation design now lives in:
+  - `/home/rgc318/python-project/frappe_docker/apps/myapp/PRINTING_TECH_DESIGN.zh-CN.md`
