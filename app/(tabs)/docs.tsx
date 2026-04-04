@@ -13,9 +13,13 @@ import { formatCurrencyValue } from '@/lib/display-currency';
 import { useFeedback } from '@/providers/feedback-provider';
 import { type LinkOption } from '@/services/master-data';
 import {
+  fetchCashflowEntries,
+  fetchCashflowReport,
   fetchBusinessReport,
   type BusinessCashflowRow,
   type BusinessCashflowTrendRow,
+  type CashflowEntriesPage,
+  type CashflowReport,
   type BusinessPartySummaryRow,
   type BusinessReport,
 } from '@/services/reports';
@@ -54,7 +58,7 @@ const CUSTOM_PERIOD_OPTIONS: { value: CustomPeriodMode; label: string }[] = [
   { value: 'month', label: '按月份' },
   { value: 'year', label: '按年份' },
 ];
-const CASHFLOW_REPORT_LIMIT = 2000;
+const CASHFLOW_ENTRIES_PAGE_SIZE = 50;
 const PERIOD_PICKER_ITEM_HEIGHT = 42;
 const PERIOD_PICKER_ITEM_GAP = 8;
 const PERIOD_PICKER_VIEWPORT_HEIGHT = 240;
@@ -87,6 +91,35 @@ const EMPTY_REPORT: BusinessReport = {
     dateFrom: '',
     dateTo: '',
     limit: 0,
+  },
+};
+
+const EMPTY_CASHFLOW_REPORT: CashflowReport = {
+  overview: {
+    receivedAmountTotal: 0,
+    paidAmountTotal: 0,
+    netCashflowTotal: 0,
+  },
+  trend: [],
+  meta: {
+    company: null,
+    dateFrom: '',
+    dateTo: '',
+  },
+};
+
+const EMPTY_CASHFLOW_ENTRIES: CashflowEntriesPage = {
+  rows: [],
+  pagination: {
+    page: 1,
+    pageSize: CASHFLOW_ENTRIES_PAGE_SIZE,
+    totalCount: 0,
+    hasMore: false,
+  },
+  meta: {
+    company: null,
+    dateFrom: '',
+    dateTo: '',
   },
 };
 
@@ -977,10 +1010,18 @@ function PartyTableSection({
 
 function CashflowSection({
   rows,
+  totalCount,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
   surface,
   borderColor,
 }: {
   rows: BusinessCashflowRow[];
+  totalCount: number;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
   surface: string;
   borderColor: string;
 }) {
@@ -997,7 +1038,7 @@ function CashflowSection({
 
       {rows.length ? (
         <>
-          <ThemedText style={styles.tableScrollHint}>{`共 ${rows.length} 条，区域内上下滑动查看更多`}</ThemedText>
+          <ThemedText style={styles.tableScrollHint}>{`已加载 ${rows.length} / ${Math.max(totalCount, rows.length)} 条，区域内上下滑动查看更多`}</ThemedText>
           <ScrollView
             nestedScrollEnabled
             showsVerticalScrollIndicator
@@ -1031,6 +1072,16 @@ function CashflowSection({
               );
             })}
           </ScrollView>
+          {hasMore ? (
+            <Pressable
+              disabled={isLoadingMore}
+              onPress={onLoadMore}
+              style={[styles.tableLoadMoreButton, { borderColor, backgroundColor: surface }]}>
+              <ThemedText style={styles.tableLoadMoreText} type="defaultSemiBold">
+                {isLoadingMore ? '正在加载更多...' : `加载更多 (${rows.length}/${totalCount})`}
+              </ThemedText>
+            </Pressable>
+          ) : null}
         </>
       ) : (
         <ThemedText style={styles.emptyText}>当前筛选范围内暂无资金流水。</ThemedText>
@@ -1449,11 +1500,13 @@ export default function ReportsScreen() {
   const [report, setReport] = useState<BusinessReport>(EMPTY_REPORT);
   const [salesAnalysisReport, setSalesAnalysisReport] = useState<BusinessReport>(EMPTY_REPORT);
   const [purchaseAnalysisReport, setPurchaseAnalysisReport] = useState<BusinessReport>(EMPTY_REPORT);
-  const [cashflowReport, setCashflowReport] = useState<BusinessReport>(EMPTY_REPORT);
+  const [cashflowReport, setCashflowReport] = useState<CashflowReport>(EMPTY_CASHFLOW_REPORT);
+  const [cashflowEntries, setCashflowEntries] = useState<CashflowEntriesPage>(EMPTY_CASHFLOW_ENTRIES);
   const [isLoading, setIsLoading] = useState(false);
   const [isSalesLoading, setIsSalesLoading] = useState(false);
   const [isPurchaseLoading, setIsPurchaseLoading] = useState(false);
   const [isCashflowLoading, setIsCashflowLoading] = useState(false);
+  const [isCashflowLoadingMore, setIsCashflowLoadingMore] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [companyQuery, setCompanyQuery] = useState('');
   const [companyOptions, setCompanyOptions] = useState<LinkOption[]>([]);
@@ -1562,19 +1615,74 @@ export default function ReportsScreen() {
       cashflowRangeMode === 'custom' ? cashflowCustomRangeApplied : resolveDateRange(cashflowRangeMode);
     try {
       setIsCashflowLoading(true);
-      const next = await fetchBusinessReport({
-        company: queryCompany,
-        dateFrom,
-        dateTo,
-        limit: CASHFLOW_REPORT_LIMIT,
-      });
-      setCashflowReport(next);
+      const [nextReport, nextEntries] = await Promise.all([
+        fetchCashflowReport({
+          company: queryCompany,
+          dateFrom,
+          dateTo,
+        }),
+        fetchCashflowEntries({
+          company: queryCompany,
+          dateFrom,
+          dateTo,
+          page: 1,
+          pageSize: CASHFLOW_ENTRIES_PAGE_SIZE,
+        }),
+      ]);
+      setCashflowReport(nextReport);
+      setCashflowEntries(nextEntries);
     } catch (error) {
       showError(normalizeAppError(error).message);
     } finally {
       setIsCashflowLoading(false);
     }
   }, [cashflowCustomRangeApplied, cashflowRangeMode, queryCompany, showError]);
+
+  const loadMoreCashflowEntries = useCallback(async () => {
+    if (isCashflowLoadingMore || !cashflowEntries.pagination.hasMore) {
+      return;
+    }
+
+    const { dateFrom, dateTo } =
+      cashflowRangeMode === 'custom' ? cashflowCustomRangeApplied : resolveDateRange(cashflowRangeMode);
+
+    try {
+      setIsCashflowLoadingMore(true);
+      const nextPage = cashflowEntries.pagination.page + 1;
+      const nextEntries = await fetchCashflowEntries({
+        company: queryCompany,
+        dateFrom,
+        dateTo,
+        page: nextPage,
+        pageSize: cashflowEntries.pagination.pageSize || CASHFLOW_ENTRIES_PAGE_SIZE,
+      });
+
+      setCashflowEntries((current) => {
+        const seen = new Set(current.rows.map((row) => row.name ?? `${row.postingDate}-${row.party}-${row.amount}`));
+        const mergedRows = [
+          ...current.rows,
+          ...nextEntries.rows.filter((row) => !seen.has(row.name ?? `${row.postingDate}-${row.party}-${row.amount}`)),
+        ];
+        return {
+          ...nextEntries,
+          rows: mergedRows,
+        };
+      });
+    } catch (error) {
+      showError(normalizeAppError(error).message);
+    } finally {
+      setIsCashflowLoadingMore(false);
+    }
+  }, [
+    cashflowCustomRangeApplied,
+    cashflowEntries.pagination.hasMore,
+    cashflowEntries.pagination.page,
+    cashflowEntries.pagination.pageSize,
+    cashflowRangeMode,
+    isCashflowLoadingMore,
+    queryCompany,
+    showError,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -2056,8 +2164,8 @@ export default function ReportsScreen() {
             setCashflowRangeMode(mode);
           }}
           rangeMode={cashflowRangeMode}
-          rows={cashflowReport.tables.cashflowSummary}
-          trendRows={cashflowReport.tables.cashflowTrend}
+          rows={cashflowEntries.rows}
+          trendRows={cashflowReport.trend}
           surface={surface}
         />
 
@@ -2131,7 +2239,19 @@ export default function ReportsScreen() {
             title="应付账款表"
           />
         ) : null}
-        {expandedSections.cashflow ? <CashflowSection borderColor={borderColor} rows={cashflowReport.tables.cashflowSummary} surface={surface} /> : null}
+        {expandedSections.cashflow ? (
+          <CashflowSection
+            borderColor={borderColor}
+            hasMore={cashflowEntries.pagination.hasMore}
+            isLoadingMore={isCashflowLoadingMore}
+            onLoadMore={() => {
+              void loadMoreCashflowEntries();
+            }}
+            rows={cashflowEntries.rows}
+            surface={surface}
+            totalCount={cashflowEntries.pagination.totalCount}
+          />
+        ) : null}
 
         <View style={[styles.noteCard, { backgroundColor: surfaceMuted }]}>
           <ThemedText style={styles.noteTitle} type="defaultSemiBold">
@@ -2938,6 +3058,19 @@ const styles = StyleSheet.create({
   },
   tableScrollContent: {
     paddingBottom: 4,
+  },
+  tableLoadMoreButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 10,
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  tableLoadMoreText: {
+    color: '#475569',
+    fontSize: 13,
   },
   flowChip: {
     alignSelf: 'flex-start',

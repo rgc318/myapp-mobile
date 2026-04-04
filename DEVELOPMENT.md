@@ -5923,3 +5923,46 @@ Practical rule:
 
 - `npm run lint -- app/(tabs)/docs.tsx app/(tabs)/index.tsx services/reports.ts`
 - Result: passed
+
+## Reports Cashflow Split Follow-up (2026-04-04)
+
+### What Changed
+
+- the reports page cashflow module no longer relies on `get_business_report_v1` with an oversized `limit`
+- added dedicated frontend service calls for:
+  - `get_cashflow_report_v1`
+  - `list_cashflow_entries_v1`
+- the cashflow trend card now reads:
+  - overview
+    - received amount
+    - paid amount
+    - net cashflow
+  - trend
+    - daily in/out rows
+  from the dedicated cashflow report endpoint
+- the foldable `资金流水` section now uses the paged cashflow entry endpoint instead of pretending to be full-list data
+
+### Why This Was Needed
+
+- the previous mobile implementation tried to fetch cashflow detail by calling the unified business-report endpoint with a very large `limit`
+- backend report logic intentionally clamps report `limit`, so that approach was never a trustworthy way to represent a full cashflow list
+- trend data and entry-list data have different responsibilities and should not share one overloaded request path
+
+### Current Behavior
+
+- cashflow trend chart:
+  - uses `get_cashflow_report_v1`
+- cashflow detail table:
+  - uses `list_cashflow_entries_v1`
+  - displays loaded count versus total count
+  - supports `加载更多`
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/reports.ts`
+
+### Validation
+
+- `npm run lint -- services/reports.ts app/(tabs)/docs.tsx`
+- Result: passed
