@@ -6128,6 +6128,58 @@ Practical rule:
 - backend should provide dedicated print-preview and print-file interfaces
 - fixed templates should stay on the backend side
 
+### Current Implementation State
+
+- `Sales Invoice` now has a real print chain instead of a placeholder preview shell
+- invoice detail keeps the mobile-friendly verification sheet
+- tapping `打印预览` now redirects directly into a dedicated formal PDF route:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/preview.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/pdf-viewer.tsx`
+- preview and print actions are backed by shared print-document helpers:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/printing.ts`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/print-documents.ts`
+
+### Web vs Native Preview Behavior
+
+- web preview uses the browser PDF viewer through an embedded frame
+  - this means browser-native controls such as zoom, page search, and print remain available
+- native preview uses `react-native-pdf`
+  - this gives the app an in-app viewer instead of forcing users into external document apps
+  - native does not get browser-style controls automatically, so the mobile app now provides its own lightweight toolbar
+
+### Current Mobile PDF Viewer Behavior
+
+- the native PDF viewer page now includes:
+  - `缩小`
+  - `适宽`
+  - `重置`
+  - `放大`
+  - current scale percentage
+- the native stage now defaults to a slightly enlarged reading mode instead of a fully edge-fitted mode
+  - this improves panning feel and makes the first view less cramped on phone screens
+- the PDF stage uses a dedicated document viewport with a subtle stage boundary
+  - this helps distinguish the printable document from the page background
+
+### Native Build Requirement
+
+- adding the in-app PDF viewer introduced native dependencies:
+  - `react-native-pdf`
+  - `react-native-blob-util`
+- JS-only reload is enough for toolbar and layout tweaks
+- but the first time these native viewer dependencies are introduced, the Android client must be rebuilt and reinstalled
+- recommended local rebuild path remains:
+  1. `npx expo prebuild -p android`
+  2. `cd android && ./gradlew assembleDebug`
+
+### Known UX Boundaries
+
+- browser and native previewers are intentionally different
+  - web uses the browser's built-in PDF controls
+  - native uses an app-owned viewer surface
+- native panning is naturally limited when the PDF is perfectly fitted inside the viewport
+  - this is a viewer behavior, not just a styling issue
+  - the current mitigation is to default to a slightly larger reading scale and provide explicit fit / zoom controls
+
 ### Source Of Truth
 
 - the main implementation design now lives in:

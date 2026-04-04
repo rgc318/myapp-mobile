@@ -1,4 +1,3 @@
-import { CameraView, type BarcodeScanningResult, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -6,6 +5,25 @@ import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+
+type CameraPermission = {
+  canAskAgain?: boolean;
+  granted?: boolean;
+};
+
+type BarcodeScanResultLike = {
+  data?: string | null;
+};
+
+type CameraModuleLike = {
+  CameraView?: React.ComponentType<{
+    barcodeScannerSettings?: { barcodeTypes?: string[] };
+    onBarcodeScanned?: ((result: BarcodeScanResultLike) => void) | undefined;
+    style?: object;
+  }>;
+  getCameraPermissionsAsync?: () => Promise<CameraPermission>;
+  requestCameraPermissionsAsync?: () => Promise<CameraPermission>;
+};
 
 type BarcodeScannerSheetProps = {
   description?: string;
@@ -17,6 +35,14 @@ type BarcodeScannerSheetProps = {
 
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'code93', 'codabar', 'itf14', 'qr'] as const;
 
+let cameraModule: CameraModuleLike | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  cameraModule = require('expo-camera') as CameraModuleLike;
+} catch {
+  cameraModule = null;
+}
+
 export function BarcodeScannerSheet({
   description = '将条码放入取景框内，扫到后会自动搜索并加入采购单。',
   onClose,
@@ -24,22 +50,53 @@ export function BarcodeScannerSheet({
   title = '扫码添加',
   visible,
 }: BarcodeScannerSheetProps) {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, setPermission] = useState<CameraPermission | null>(null);
   const [isHandlingScan, setIsHandlingScan] = useState(false);
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
+  const CameraView = cameraModule?.CameraView ?? null;
+  const hasNativeCameraModule = Boolean(CameraView && cameraModule);
 
-  useEffect(() => {
-    if (!visible || Platform.OS === 'web') {
+  async function requestPermission() {
+    if (!cameraModule?.requestCameraPermissionsAsync) {
       return;
     }
 
-    if (!permission?.granted && permission?.canAskAgain !== false) {
-      void requestPermission();
+    const nextPermission = await cameraModule.requestCameraPermissionsAsync();
+    setPermission(nextPermission);
+  }
+
+  useEffect(() => {
+    let active = true;
+
+    async function syncPermission() {
+      if (!visible || Platform.OS === 'web' || !hasNativeCameraModule) {
+        return;
+      }
+
+      const nextPermission = cameraModule?.getCameraPermissionsAsync
+        ? await cameraModule.getCameraPermissionsAsync()
+        : null;
+      if (!active) {
+        return;
+      }
+      setPermission(nextPermission);
+
+      if (!nextPermission?.granted && nextPermission?.canAskAgain !== false) {
+        const requestedPermission = await cameraModule?.requestCameraPermissionsAsync?.();
+        if (active) {
+          setPermission(requestedPermission ?? nextPermission);
+        }
+      }
     }
-  }, [permission?.canAskAgain, permission?.granted, requestPermission, visible]);
+
+    void syncPermission();
+    return () => {
+      active = false;
+    };
+  }, [hasNativeCameraModule, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -47,7 +104,7 @@ export function BarcodeScannerSheet({
     }
   }, [visible]);
 
-  const handleBarcodeScanned = async (result: BarcodeScanningResult) => {
+  const handleBarcodeScanned = async (result: BarcodeScanResultLike) => {
     const data = typeof result.data === 'string' ? result.data.trim() : '';
     if (!data || isHandlingScan) {
       return;
@@ -58,18 +115,32 @@ export function BarcodeScannerSheet({
     await onScanned(data);
   };
 
+  const renderPlaceholder = (titleText: string, bodyText: string, allowPermissionRequest = false) => (
+    <View style={[styles.placeholderCard, { backgroundColor: surfaceMuted, borderColor }]}>
+      <IconSymbol color={tintColor} name="barcode.viewfinder" size={28} />
+      <ThemedText style={styles.placeholderTitle} type="defaultSemiBold">
+        {titleText}
+      </ThemedText>
+      <ThemedText style={styles.placeholderText}>{bodyText}</ThemedText>
+      {allowPermissionRequest ? (
+        <Pressable onPress={() => void requestPermission()} style={[styles.permissionButton, { backgroundColor: tintColor }]}>
+          <ThemedText style={styles.permissionButtonText} type="defaultSemiBold">
+            继续授权
+          </ThemedText>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
   const renderContent = () => {
     if (Platform.OS === 'web') {
-      return (
-        <View style={[styles.placeholderCard, { backgroundColor: surfaceMuted, borderColor }]}>
-          <IconSymbol color={tintColor} name="barcode.viewfinder" size={28} />
-          <ThemedText style={styles.placeholderTitle} type="defaultSemiBold">
-            Web 暂不支持摄像头扫码
-          </ThemedText>
-          <ThemedText style={styles.placeholderText}>
-            请在移动端使用扫码，或直接输入商品条码进行搜索。
-          </ThemedText>
-        </View>
+      return renderPlaceholder('Web 暂不支持摄像头扫码', '请在移动端使用扫码，或直接输入商品条码进行搜索。');
+    }
+
+    if (!hasNativeCameraModule || !CameraView) {
+      return renderPlaceholder(
+        '当前客户端缺少相机模块',
+        '这通常是因为当前运行的开发客户端没有包含 expo-camera。请重启并重新构建移动端客户端，或先手动输入商品条码。'
       );
     }
 
@@ -94,25 +165,7 @@ export function BarcodeScannerSheet({
     }
 
     const canAskPermission = permission == null || permission.canAskAgain !== false;
-
-    return (
-      <View style={[styles.placeholderCard, { backgroundColor: surfaceMuted, borderColor }]}>
-        <IconSymbol color={tintColor} name="barcode.viewfinder" size={28} />
-        <ThemedText style={styles.placeholderTitle} type="defaultSemiBold">
-          需要相机权限
-        </ThemedText>
-        <ThemedText style={styles.placeholderText}>
-          允许访问相机后，才能直接扫码把商品加入采购单。
-        </ThemedText>
-        {canAskPermission ? (
-          <Pressable onPress={() => void requestPermission()} style={[styles.permissionButton, { backgroundColor: tintColor }]}>
-            <ThemedText style={styles.permissionButtonText} type="defaultSemiBold">
-              继续授权
-            </ThemedText>
-          </Pressable>
-        ) : null}
-      </View>
-    );
+    return renderPlaceholder('需要相机权限', '允许访问相机后，才能直接扫码把商品加入采购单。', canAskPermission);
   };
 
   return (
@@ -220,8 +273,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     gap: 10,
-    minHeight: 260,
     justifyContent: 'center',
+    minHeight: 260,
     paddingHorizontal: 22,
     paddingVertical: 24,
   },
