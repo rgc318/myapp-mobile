@@ -5967,6 +5967,40 @@ Practical rule:
 - `npm run lint -- services/reports.ts app/(tabs)/docs.tsx`
 - Result: passed
 
+## Report Overview And Settlement Endpoint Split
+
+### What Changed
+
+- the reports page overview cards now use `get_business_report_overview_v1`
+- the foldable receivable/payable sections now use `get_receivable_payable_report_v1`
+- the page still keeps the same local `BusinessReport` state shape, but overview and receivable/payable tables are now assembled from dedicated requests instead of a single oversized payload
+
+### Why This Was Needed
+
+- overview cards only need KPI totals and should not force-fetch sales, purchase, and cashflow detail
+- receivable/payable tables need grouped invoice rows, but do not need sales trend or product ranking data
+- after sales, purchase, and cashflow were already split, these remaining sections were the last major consumers of `get_business_report_v1` on the mobile reports page
+
+### Current Behavior
+
+- overview cards use `get_business_report_overview_v1`
+- sales analysis uses `get_sales_report_v1`
+- purchase analysis uses `get_purchase_report_v1`
+- receivable/payable tables use `get_receivable_payable_report_v1`
+- cashflow analysis uses:
+  - `get_cashflow_report_v1`
+  - `list_cashflow_entries_v1`
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/reports.ts`
+
+### Validation
+
+- `npm run lint -- services/reports.ts app/(tabs)/docs.tsx`
+- Result: passed
+
 ## Report Analysis Endpoint Split
 
 ### What Changed

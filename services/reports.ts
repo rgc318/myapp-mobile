@@ -325,6 +325,77 @@ export async function fetchBusinessReport(options?: {
   };
 }
 
+export async function fetchBusinessReportOverview(options?: {
+  company?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+}): Promise<BusinessReport> {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.get_business_report_overview_v1', {
+    company: options?.company?.trim() || undefined,
+    date_from: options?.dateFrom?.trim() || undefined,
+    date_to: options?.dateTo?.trim() || undefined,
+  });
+
+  const overview = data?.overview && typeof data.overview === 'object' ? data.overview : {};
+  const meta = data?.meta && typeof data.meta === 'object' ? data.meta : {};
+
+  return {
+    overview: {
+      salesAmountTotal: toNumber(overview.sales_amount_total),
+      purchaseAmountTotal: toNumber(overview.purchase_amount_total),
+      receivedAmountTotal: toNumber(overview.received_amount_total),
+      paidAmountTotal: toNumber(overview.paid_amount_total),
+      netCashflowTotal: toNumber(overview.net_cashflow_total),
+      receivableOutstandingTotal: toNumber(overview.receivable_outstanding_total),
+      payableOutstandingTotal: toNumber(overview.payable_outstanding_total),
+    },
+    tables: createEmptyTables(),
+    meta: {
+      ...mapMeta(meta),
+      limit: 0,
+    },
+  };
+}
+
+export async function fetchReceivablePayableReport(options?: {
+  company?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  limit?: number;
+}): Promise<BusinessReport> {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.get_receivable_payable_report_v1', {
+    company: options?.company?.trim() || undefined,
+    date_from: options?.dateFrom?.trim() || undefined,
+    date_to: options?.dateTo?.trim() || undefined,
+    limit: options?.limit ?? 8,
+  });
+
+  const overview = data?.overview && typeof data.overview === 'object' ? data.overview : {};
+  const tables = data?.tables && typeof data.tables === 'object' ? data.tables : {};
+  const meta = data?.meta && typeof data.meta === 'object' ? data.meta : {};
+
+  return {
+    overview: {
+      ...createEmptyOverview(),
+      receivableOutstandingTotal: toNumber(overview.receivable_outstanding_total),
+      payableOutstandingTotal: toNumber(overview.payable_outstanding_total),
+    },
+    tables: {
+      ...createEmptyTables(),
+      receivableSummary: (Array.isArray(tables.receivable_summary) ? tables.receivable_summary : [])
+        .map(mapPartyRow)
+        .filter((row): row is BusinessPartySummaryRow => Boolean(row)),
+      payableSummary: (Array.isArray(tables.payable_summary) ? tables.payable_summary : [])
+        .map(mapPartyRow)
+        .filter((row): row is BusinessPartySummaryRow => Boolean(row)),
+    },
+    meta: {
+      ...mapMeta(meta),
+      limit: toNumber(meta.limit),
+    },
+  };
+}
+
 export async function fetchSalesReport(options?: {
   company?: string | null;
   dateFrom?: string | null;

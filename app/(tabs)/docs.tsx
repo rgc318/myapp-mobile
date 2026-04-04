@@ -13,10 +13,11 @@ import { formatCurrencyValue } from '@/lib/display-currency';
 import { useFeedback } from '@/providers/feedback-provider';
 import { type LinkOption } from '@/services/master-data';
 import {
-  fetchBusinessReport,
+  fetchBusinessReportOverview,
   fetchCashflowEntries,
   fetchCashflowReport,
   fetchPurchaseReport,
+  fetchReceivablePayableReport,
   fetchSalesReport,
   type BusinessCashflowRow,
   type BusinessCashflowTrendRow,
@@ -1560,13 +1561,27 @@ export default function ReportsScreen() {
       rangeMode === 'custom' ? customRangeApplied : resolveDateRange(rangeMode);
     try {
       setIsLoading(true);
-      const next = await fetchBusinessReport({
-        company: queryCompany,
-        dateFrom,
-        dateTo,
-        limit: 8,
+      const [overviewReport, settlementReport] = await Promise.all([
+        fetchBusinessReportOverview({
+          company: queryCompany,
+          dateFrom,
+          dateTo,
+        }),
+        fetchReceivablePayableReport({
+          company: queryCompany,
+          dateFrom,
+          dateTo,
+          limit: 8,
+        }),
+      ]);
+      setReport({
+        overview: overviewReport.overview,
+        tables: {
+          ...overviewReport.tables,
+          ...settlementReport.tables,
+        },
+        meta: overviewReport.meta,
       });
-      setReport(next);
     } catch (error) {
       showError(normalizeAppError(error).message);
     } finally {
