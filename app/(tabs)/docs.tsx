@@ -13,9 +13,11 @@ import { formatCurrencyValue } from '@/lib/display-currency';
 import { useFeedback } from '@/providers/feedback-provider';
 import { type LinkOption } from '@/services/master-data';
 import {
+  fetchBusinessReport,
   fetchCashflowEntries,
   fetchCashflowReport,
-  fetchBusinessReport,
+  fetchPurchaseReport,
+  fetchSalesReport,
   type BusinessCashflowRow,
   type BusinessCashflowTrendRow,
   type CashflowEntriesPage,
@@ -1577,7 +1579,7 @@ export default function ReportsScreen() {
       salesRangeMode === 'custom' ? salesCustomRangeApplied : resolveDateRange(salesRangeMode);
     try {
       setIsSalesLoading(true);
-      const next = await fetchBusinessReport({
+      const next = await fetchSalesReport({
         company: queryCompany,
         dateFrom,
         dateTo,
@@ -1596,7 +1598,7 @@ export default function ReportsScreen() {
       purchaseRangeMode === 'custom' ? purchaseCustomRangeApplied : resolveDateRange(purchaseRangeMode);
     try {
       setIsPurchaseLoading(true);
-      const next = await fetchBusinessReport({
+      const next = await fetchPurchaseReport({
         company: queryCompany,
         dateFrom,
         dateTo,

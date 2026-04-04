@@ -110,6 +110,35 @@ export type BusinessReport = {
   };
 };
 
+function createEmptyOverview(): BusinessReportOverview {
+  return {
+    salesAmountTotal: 0,
+    purchaseAmountTotal: 0,
+    receivedAmountTotal: 0,
+    paidAmountTotal: 0,
+    netCashflowTotal: 0,
+    receivableOutstandingTotal: 0,
+    payableOutstandingTotal: 0,
+  };
+}
+
+function createEmptyTables(): BusinessReport['tables'] {
+  return {
+    salesSummary: [],
+    salesTrend: [],
+    salesTrendHourly: [],
+    salesProductSummary: [],
+    purchaseSummary: [],
+    purchaseTrend: [],
+    purchaseTrendHourly: [],
+    purchaseProductSummary: [],
+    receivableSummary: [],
+    payableSummary: [],
+    cashflowSummary: [],
+    cashflowTrend: [],
+  };
+}
+
 function toNumber(value: unknown) {
   return typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : 0;
 }
@@ -288,6 +317,98 @@ export async function fetchBusinessReport(options?: {
       cashflowTrend: (Array.isArray(tables.cashflow_trend) ? tables.cashflow_trend : [])
         .map(mapCashflowTrendRow)
         .filter((row): row is BusinessCashflowTrendRow => Boolean(row)),
+    },
+    meta: {
+      ...mapMeta(meta),
+      limit: toNumber(meta.limit),
+    },
+  };
+}
+
+export async function fetchSalesReport(options?: {
+  company?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  limit?: number;
+}): Promise<BusinessReport> {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.get_sales_report_v1', {
+    company: options?.company?.trim() || undefined,
+    date_from: options?.dateFrom?.trim() || undefined,
+    date_to: options?.dateTo?.trim() || undefined,
+    limit: options?.limit ?? 8,
+  });
+
+  const overview = data?.overview && typeof data.overview === 'object' ? data.overview : {};
+  const tables = data?.tables && typeof data.tables === 'object' ? data.tables : {};
+  const meta = data?.meta && typeof data.meta === 'object' ? data.meta : {};
+
+  return {
+    overview: {
+      ...createEmptyOverview(),
+      salesAmountTotal: toNumber(overview.sales_amount_total),
+      receivedAmountTotal: toNumber(overview.received_amount_total),
+      receivableOutstandingTotal: toNumber(overview.receivable_outstanding_total),
+    },
+    tables: {
+      ...createEmptyTables(),
+      salesSummary: (Array.isArray(tables.sales_summary) ? tables.sales_summary : [])
+        .map(mapPartyRow)
+        .filter((row): row is BusinessPartySummaryRow => Boolean(row)),
+      salesTrend: (Array.isArray(tables.sales_trend) ? tables.sales_trend : [])
+        .map(mapTrendRow)
+        .filter((row): row is BusinessTrendRow => Boolean(row)),
+      salesTrendHourly: (Array.isArray(tables.sales_trend_hourly) ? tables.sales_trend_hourly : [])
+        .map(mapTrendHourlyRow)
+        .filter((row): row is BusinessTrendHourlyRow => Boolean(row)),
+      salesProductSummary: (Array.isArray(tables.sales_product_summary) ? tables.sales_product_summary : [])
+        .map(mapProductSummaryRow)
+        .filter((row): row is BusinessProductSummaryRow => Boolean(row)),
+    },
+    meta: {
+      ...mapMeta(meta),
+      limit: toNumber(meta.limit),
+    },
+  };
+}
+
+export async function fetchPurchaseReport(options?: {
+  company?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  limit?: number;
+}): Promise<BusinessReport> {
+  const data = await callGatewayMethod<Record<string, any>>('myapp.api.gateway.get_purchase_report_v1', {
+    company: options?.company?.trim() || undefined,
+    date_from: options?.dateFrom?.trim() || undefined,
+    date_to: options?.dateTo?.trim() || undefined,
+    limit: options?.limit ?? 8,
+  });
+
+  const overview = data?.overview && typeof data.overview === 'object' ? data.overview : {};
+  const tables = data?.tables && typeof data.tables === 'object' ? data.tables : {};
+  const meta = data?.meta && typeof data.meta === 'object' ? data.meta : {};
+
+  return {
+    overview: {
+      ...createEmptyOverview(),
+      purchaseAmountTotal: toNumber(overview.purchase_amount_total),
+      paidAmountTotal: toNumber(overview.paid_amount_total),
+      payableOutstandingTotal: toNumber(overview.payable_outstanding_total),
+    },
+    tables: {
+      ...createEmptyTables(),
+      purchaseSummary: (Array.isArray(tables.purchase_summary) ? tables.purchase_summary : [])
+        .map(mapPartyRow)
+        .filter((row): row is BusinessPartySummaryRow => Boolean(row)),
+      purchaseTrend: (Array.isArray(tables.purchase_trend) ? tables.purchase_trend : [])
+        .map(mapTrendRow)
+        .filter((row): row is BusinessTrendRow => Boolean(row)),
+      purchaseTrendHourly: (Array.isArray(tables.purchase_trend_hourly) ? tables.purchase_trend_hourly : [])
+        .map(mapTrendHourlyRow)
+        .filter((row): row is BusinessTrendHourlyRow => Boolean(row)),
+      purchaseProductSummary: (Array.isArray(tables.purchase_product_summary) ? tables.purchase_product_summary : [])
+        .map(mapProductSummaryRow)
+        .filter((row): row is BusinessProductSummaryRow => Boolean(row)),
     },
     meta: {
       ...mapMeta(meta),

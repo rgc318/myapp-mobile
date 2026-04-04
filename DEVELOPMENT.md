@@ -5966,3 +5966,36 @@ Practical rule:
 
 - `npm run lint -- services/reports.ts app/(tabs)/docs.tsx`
 - Result: passed
+
+## Report Analysis Endpoint Split
+
+### What Changed
+
+- the reports page sales-analysis module now uses `get_sales_report_v1`
+- the reports page purchase-analysis module now uses `get_purchase_report_v1`
+- frontend report services map these dedicated payloads back into the existing `BusinessReport` shape so the page can adopt the new APIs without a broad UI rewrite
+
+### Why This Was Needed
+
+- sales analysis and purchase analysis were still calling `get_business_report_v1`
+- that meant each analysis block re-fetched unrelated receivable, payable, and cashflow payloads
+- the backend had already been split into dedicated report endpoints, so the frontend needed to stop paying the cost of the old all-in-one contract for these modules
+
+### Current Behavior
+
+- overview cards and the foldable receivable/payable sections still use `get_business_report_v1`
+- sales analysis uses `get_sales_report_v1`
+- purchase analysis uses `get_purchase_report_v1`
+- cashflow analysis uses:
+  - `get_cashflow_report_v1`
+  - `list_cashflow_entries_v1`
+
+### Files Updated
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/docs.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/reports.ts`
+
+### Validation
+
+- `npm run lint -- services/reports.ts app/(tabs)/docs.tsx`
+- Result: passed
