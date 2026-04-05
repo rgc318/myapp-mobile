@@ -5693,6 +5693,37 @@ Sales delivery notes now follow the same formal print-preview flow as invoices.
 - specification remains an independent table column
 - financial-style `预览并打印` wording is not reused here; the page keeps a single `打印预览` entry
 
+## Purchase Receipt Print Preview (2026-04-06)
+
+Purchase receipt now follows the same formal print-preview flow as sales delivery and invoices.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/_layout.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/receipt/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/receipt/preview.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/receipt/pdf-viewer.tsx`
+
+### What Changed
+
+- purchase-receipt detail page now exposes a `打印预览` entry
+- preview route forwards into the formal PDF viewer
+- viewer reuses the common formal-print pipeline:
+  - preview metadata
+  - PDF render
+  - system print / share actions
+
+### Presentation Rules
+
+- purchase receipt is treated as a warehouse receiving document
+- supplier information and item rows should be visually emphasized over secondary notes
+- item display priority follows:
+  - `（nickname）itemName` when nickname exists
+  - `itemName` when nickname is absent
+- specification remains an independent column
+- warehouse is also elevated into the formal table as a first-class field
+- detail page keeps `打印预览` as a separate utility action and does not replace the main invoice-flow action
+
 ### Implication For Next Work
 
 - do not spend the next major frontend iteration on advanced return scenarios

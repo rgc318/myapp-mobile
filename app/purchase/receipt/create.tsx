@@ -285,6 +285,18 @@ export default function PurchaseReceiptCreateScreen() {
   const primaryOrderNameFromReceipt = receiptDetail?.purchaseOrders[0]?.trim() || '';
   const actions: { href: Href; label: string; description?: string }[] = [];
 
+  function openPrintPreview() {
+    if (!receiptDetail?.name) {
+      showError('缺少采购收货单号。');
+      return;
+    }
+
+    router.push({
+      pathname: '/purchase/receipt/preview',
+      params: { purchaseReceipt: receiptDetail.name },
+    });
+  }
+
   const handleSubmit = async () => {
     const trimmedOrderName = orderName.trim();
     if (!trimmedOrderName) {
@@ -496,8 +508,17 @@ export default function PurchaseReceiptCreateScreen() {
                   </ThemedText>
                 </Pressable>
               ) : null}
-              {!isReceiptCancelled ? (
-                canCreateInvoiceForReceipt ? (
+              <Pressable
+                onPress={openPrintPreview}
+                style={[styles.footerActionButton, styles.secondaryActionButton, { borderColor }]}>
+                <ThemedText style={[styles.secondaryActionText, { color: tintColor }]} type="defaultSemiBold">
+                  打印预览
+                </ThemedText>
+              </Pressable>
+            </View>
+            {!isReceiptCancelled ? (
+              <View style={styles.footerActionRow}>
+                {canCreateInvoiceForReceipt ? (
                   <Pressable
                     onPress={() =>
                       router.push({
@@ -531,9 +552,9 @@ export default function PurchaseReceiptCreateScreen() {
                       当前不可开票
                     </ThemedText>
                   </Pressable>
-                )
-              ) : null}
-            </View>
+                )}
+              </View>
+            ) : null}
           </View>
         ) : (
           <View style={styles.footerWrap}>
