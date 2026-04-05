@@ -510,8 +510,32 @@ This round corrected a design mismatch between the purchase workbench UI and the
   - change company / status / sort -> re-query backend
   - press search button or keyboard search -> execute backend keyword search
   - default mode:
-    - `status_filter = unfinished`
+    - `status_filter = all`
     - `exclude_cancelled = true`
+    - `sort_by = latest`
+
+### Purchase Desk Sort Model (2026-04-05)
+
+- purchase desk sort behavior now uses a unified model:
+  - sort field:
+    - `时间`
+    - `金额`
+    - `未完成优先`
+  - sort direction:
+    - `升序`
+    - `降序`
+- current mapping:
+  - `时间 + 升序` -> `oldest`
+  - `时间 + 降序` -> `latest`
+  - `金额 + 升序` -> `amount_asc`
+  - `金额 + 降序` -> `amount_desc`
+  - `未完成优先` -> fixed business rule, no direction switching
+- reset behavior should return to:
+  - `有效订单`
+  - `时间`
+  - `降序`
+- `有效订单` must exclude cancelled orders by default
+  - cancelled orders remain available only under the explicit `已作废` filter
 
 ### Current Purchase Desk UI Rules
 
@@ -596,9 +620,32 @@ This round aligned the sales list-search foundation with the same interface spli
   - default search mode:
     - `status_filter = all`
     - `exclude_cancelled = true`
-    - `sort_by = unfinished_first`
+    - `sort_by = latest`
 
 This matters because the previous implementation only fetched a fixed summary list and then filtered it locally, which was not suitable for a future sales workbench.
+
+### Sales Desk Sort Model (2026-04-05)
+
+- sales desk sort behavior now uses a unified model:
+  - sort field:
+    - `时间`
+    - `金额`
+    - `未完成优先`
+  - sort direction:
+    - `升序`
+    - `降序`
+- current mapping:
+  - `时间 + 升序` -> `oldest`
+  - `时间 + 降序` -> `latest`
+  - `金额 + 升序` -> `amount_asc`
+  - `金额 + 降序` -> `amount_desc`
+  - `未完成优先` -> fixed business rule, no direction switching
+- reset behavior should return to:
+  - `有效订单`
+  - `时间`
+  - `降序`
+- `有效订单` must exclude cancelled orders by default
+  - cancelled orders remain available only under the explicit `已作废` filter
 
 ### Confirmed Search Coverage
 
@@ -607,6 +654,11 @@ The backend and real HTTP regression now cover:
 - exact order-name keyword search
 - explicit cancelled-order search
 - default hidden-cancelled behavior
+- isolated real HTTP verification for:
+  - sales amount asc / desc
+  - sales latest
+  - purchase amount asc / desc
+  - purchase latest
 
 ## Purchase Quick Flow Notes (2026-04-01)
 

@@ -805,7 +805,7 @@ export async function searchSalesOrdersV2(options?: {
   company?: string;
   statusFilter?: 'all' | 'unfinished' | 'delivering' | 'paying' | 'completed' | 'cancelled';
   excludeCancelled?: boolean;
-  sortBy?: 'unfinished_first' | 'latest' | 'oldest' | 'amount_desc';
+  sortBy?: 'unfinished_first' | 'latest' | 'oldest' | 'amount_desc' | 'amount_asc';
   limit?: number;
   start?: number;
 }): Promise<{ items: SalesOrderSummaryItem[]; summary: SalesDeskSearchSummary }> {

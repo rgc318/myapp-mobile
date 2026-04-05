@@ -26,7 +26,7 @@ import {
 import type { LinkOption } from '@/services/master-data';
 
 type FilterMode = 'all' | 'unfinished' | 'receiving' | 'paying' | 'completed' | 'cancelled';
-type SortMode = 'time' | 'unfinished_first' | 'amount_desc';
+type SortMode = 'time' | 'unfinished_first' | 'amount';
 type SortDirection = 'asc' | 'desc';
 type PickerMode = 'company' | 'filter' | 'sort' | null;
 const PAGE_SIZE = 20;
@@ -42,8 +42,8 @@ const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: 'time', label: '时间' },
+  { value: 'amount', label: '金额' },
   { value: 'unfinished_first', label: '未完成优先' },
-  { value: 'amount_desc', label: '金额从高到低' },
 ];
 
 function formatMoney(value: number | null) {
@@ -193,7 +193,11 @@ export default function PurchaseTabScreen() {
         ? sortDirection === 'asc'
           ? 'oldest'
           : 'latest'
-        : resolvedSortMode;
+        : resolvedSortMode === 'amount'
+          ? sortDirection === 'asc'
+            ? 'amount_asc'
+            : 'amount_desc'
+          : 'unfinished_first';
     const resolvedStart = options?.start ?? 0;
     const append = options?.append ?? false;
     const resolvedExcludeCancelled = resolvedFilterMode !== 'cancelled';
@@ -330,7 +334,7 @@ export default function PurchaseTabScreen() {
   const activeFilterChips = [
     activeFilterLabel !== '有效订单' ? activeFilterLabel : null,
     activeCompanyLabel !== '全部公司' ? activeCompanyLabel : null,
-    `${activeSortLabel}${sortMode === 'time' ? ` · ${activeDirectionLabel}` : ''}`,
+    `${activeSortLabel}${sortMode !== 'unfinished_first' ? ` · ${activeDirectionLabel}` : ''}`,
     hasActiveSearch ? `关键词：${searchKey}` : null,
   ].filter((value): value is string => Boolean(value));
   const visibleOrderCount = deskSummary.visibleCount || filteredSummaries.length;
@@ -411,13 +415,14 @@ export default function PurchaseTabScreen() {
     setSearchInput('');
     setSearchKey('');
     setQueryCompany(preferences.defaultCompany);
-    setFilterMode('unfinished');
-    setSortMode('unfinished_first');
+    setFilterMode('all');
+    setSortMode('time');
+    setSortDirection('desc');
     void loadSummaries({
       nextSearchKey: '',
       nextCompany: preferences.defaultCompany,
-      nextFilterMode: 'unfinished',
-      nextSortMode: 'unfinished_first',
+      nextFilterMode: 'all',
+      nextSortMode: 'time',
       start: 0,
     });
   }
@@ -514,74 +519,70 @@ export default function PurchaseTabScreen() {
             ))}
           </View>
 
-          <View style={styles.queryMetaRow}>
+          <View style={styles.compactFilterRow}>
             <Pressable
               onPress={() => setPickerMode('company')}
-              style={[styles.selectCard, styles.filterSelectCard, { backgroundColor: '#EEF6FF', borderColor: '#BFDBFE' }]}>
-              <View style={styles.selectCardTopRow}>
-                <ThemedText style={[styles.selectLabel, styles.filterSelectLabel]}>查询公司</ThemedText>
-                <IconSymbol color="#2563EB" name="chevron.right" size={14} />
+              style={[styles.compactFilterChip, { backgroundColor: '#EEF6FF', borderColor: '#BFDBFE' }]}>
+              <ThemedText style={styles.compactFilterLabel}>公司</ThemedText>
+              <View style={styles.compactFilterValueRow}>
+                <ThemedText style={styles.compactFilterValue} numberOfLines={1} type="defaultSemiBold">
+                  {activeCompanyLabel}
+                </ThemedText>
+                <IconSymbol color="#2563EB" name="chevron.right" size={13} />
               </View>
-              <ThemedText style={[styles.selectValue, styles.filterSelectValue]} numberOfLines={1} type="defaultSemiBold">
-                {activeCompanyLabel}
-              </ThemedText>
             </Pressable>
             <Pressable
               onPress={() => setPickerMode('filter')}
-              style={[styles.selectCard, styles.filterSelectCard, { backgroundColor: '#F7FCEB', borderColor: '#D9F99D' }]}>
-              <View style={styles.selectCardTopRow}>
-                <ThemedText style={[styles.selectLabel, styles.filterSelectLabel]}>订单状态</ThemedText>
-                <IconSymbol color="#65A30D" name="chevron.right" size={14} />
+              style={[styles.compactFilterChip, { backgroundColor: '#F7FCEB', borderColor: '#D9F99D' }]}>
+              <ThemedText style={styles.compactFilterLabel}>状态</ThemedText>
+              <View style={styles.compactFilterValueRow}>
+                <ThemedText style={styles.compactFilterValue} numberOfLines={1} type="defaultSemiBold">
+                  {activeFilterLabel}
+                </ThemedText>
+                <IconSymbol color="#65A30D" name="chevron.right" size={13} />
               </View>
-              <ThemedText style={[styles.selectValue, styles.filterSelectValue]} numberOfLines={1} type="defaultSemiBold">
-                {activeFilterLabel}
-              </ThemedText>
             </Pressable>
-          </View>
-
-          <View style={styles.queryMetaRow}>
             <Pressable
               onPress={() => setPickerMode('sort')}
-              style={[styles.selectCard, styles.filterSelectCard, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
-              <View style={styles.selectCardTopRow}>
-                <ThemedText style={[styles.selectLabel, styles.filterSelectLabel]}>排序方式</ThemedText>
-                <IconSymbol color="#EA580C" name="chevron.right" size={14} />
+              style={[styles.compactFilterChip, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
+              <ThemedText style={styles.compactFilterLabel}>排序</ThemedText>
+              <View style={styles.compactFilterValueRow}>
+                <ThemedText style={styles.compactFilterValue} numberOfLines={1} type="defaultSemiBold">
+                  {activeSortLabel}
+                </ThemedText>
+                <IconSymbol color="#EA580C" name="chevron.right" size={13} />
               </View>
-              <ThemedText style={[styles.selectValue, styles.filterSelectValue]} numberOfLines={1} type="defaultSemiBold">
-                {activeSortLabel}
-              </ThemedText>
             </Pressable>
             <Pressable
-              disabled={sortMode !== 'time'}
+              disabled={sortMode === 'unfinished_first'}
               onPress={() => setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))}
               style={[
-                styles.selectCard,
-                styles.filterSelectCard,
+                styles.compactFilterChip,
                 { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE' },
-                sortMode !== 'time' ? styles.selectCardDisabled : null,
+                sortMode === 'unfinished_first' ? styles.selectCardDisabled : null,
               ]}>
-              <View style={styles.selectCardTopRow}>
-                <ThemedText style={[styles.selectLabel, styles.filterSelectLabel]}>时间方向</ThemedText>
-                <IconSymbol color="#7C3AED" name={sortDirection === 'asc' ? 'arrow.up' : 'arrow.down'} size={14} />
+              <ThemedText style={styles.compactFilterLabel}>方向</ThemedText>
+              <View style={styles.compactFilterValueRow}>
+                <ThemedText style={styles.compactFilterValue} numberOfLines={1} type="defaultSemiBold">
+                  {sortMode === 'unfinished_first' ? '固定' : activeDirectionLabel}
+                </ThemedText>
+                <IconSymbol color="#7C3AED" name={sortDirection === 'asc' ? 'arrow.up' : 'arrow.down'} size={13} />
               </View>
-              <ThemedText style={[styles.selectValue, styles.filterSelectValue]} numberOfLines={1} type="defaultSemiBold">
-                {sortMode === 'time' ? activeDirectionLabel : '仅时间'}
-              </ThemedText>
             </Pressable>
           </View>
-          <View style={styles.queryMetaRow}>
-            <View style={[styles.resultSummaryStrip, { backgroundColor: '#F8FAFC', borderColor }]}>
-              <ThemedText style={styles.queryMetaLabel}>当前结果</ThemedText>
-              <View style={styles.resultSummaryMainRow}>
-                <ThemedText style={styles.resultSummaryValue} type="defaultSemiBold">
-                  {visibleOrderCount} / {resultDenominator}
-                </ThemedText>
-                <ThemedText style={styles.resultSummaryUnit} type="defaultSemiBold">
-                  单
-                </ThemedText>
-              </View>
-              <ThemedText style={styles.resultSummaryCaption}>
-                {isCancelledHiddenByDefault && hiddenCancelledCount > 0 ? '当前结果 / 含已作废总数' : '当前结果 / 已作废范围总数'}
+          <View style={[styles.compactSummaryBar, { backgroundColor: '#F8FAFC', borderColor }]}>
+            <View style={styles.compactSummaryCopy}>
+              <ThemedText style={styles.compactSummaryLabel}>当前结果</ThemedText>
+              <ThemedText style={styles.compactSummaryCaption}>
+                {isCancelledHiddenByDefault && hiddenCancelledCount > 0 ? '含已作废总数' : '已作废范围总数'}
+              </ThemedText>
+            </View>
+            <View style={styles.compactSummaryMetric}>
+              <ThemedText style={styles.compactSummaryValue} type="defaultSemiBold">
+                {visibleOrderCount} / {resultDenominator}
+              </ThemedText>
+              <ThemedText style={styles.compactSummaryUnit} type="defaultSemiBold">
+                单
               </ThemedText>
             </View>
           </View>
@@ -591,9 +592,9 @@ export default function PurchaseTabScreen() {
           backgroundColor={surface}
           borderColor={borderColor}
           hint={
-            sortMode === 'time'
-              ? `当前按时间${activeDirectionLabel}排序`
-              : `当前按${activeSortLabel}排序`
+            sortMode === 'unfinished_first'
+              ? '当前按未完成优先排序'
+              : `当前按${activeSortLabel}${activeDirectionLabel}排序`
           }
           title="采购订单列表">
 
@@ -1047,6 +1048,72 @@ const styles = StyleSheet.create({
   queryMetaRow: {
     flexDirection: 'row',
     gap: 10,
+  },
+  compactFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  compactFilterChip: {
+    borderRadius: WORKBENCH_SIZE.searchInputRadius,
+    borderWidth: 1,
+    gap: 4,
+    minHeight: 54,
+    minWidth: '47%',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  compactFilterLabel: {
+    color: '#64748B',
+    fontSize: 11,
+  },
+  compactFilterValue: {
+    color: '#0F172A',
+    flex: 1,
+    fontSize: 13,
+  },
+  compactFilterValueRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  compactSummaryBar: {
+    alignItems: 'center',
+    borderRadius: WORKBENCH_SIZE.searchInputRadius,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  compactSummaryCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  compactSummaryLabel: {
+    color: '#64748B',
+    fontSize: 11,
+  },
+  compactSummaryCaption: {
+    color: '#94A3B8',
+    fontSize: 11,
+  },
+  compactSummaryMetric: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: 6,
+    marginLeft: 12,
+  },
+  compactSummaryValue: {
+    color: '#0F172A',
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  compactSummaryUnit: {
+    color: '#64748B',
+    fontSize: 12,
   },
   queryMetaCard: {
     borderWidth: 1,

@@ -585,7 +585,7 @@ export async function searchPurchaseOrdersV2(options?: {
   company?: string;
   statusFilter?: 'all' | 'unfinished' | 'receiving' | 'paying' | 'completed' | 'cancelled';
   excludeCancelled?: boolean;
-  sortBy?: 'unfinished_first' | 'latest' | 'oldest' | 'amount_desc';
+  sortBy?: 'unfinished_first' | 'latest' | 'oldest' | 'amount_desc' | 'amount_asc';
   limit?: number;
   start?: number;
 }): Promise<{ items: PurchaseOrderSummaryItem[]; summary: PurchaseDeskSearchSummary }> {
