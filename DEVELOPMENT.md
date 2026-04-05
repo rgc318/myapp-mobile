@@ -6279,6 +6279,31 @@ Practical rule:
 - sales-invoice printable tables hide internal `itemCode`
 - purchase-invoice detail keeps some internal traceability information on-page, but the formal PDF still follows the same primary column structure
 
+### Invoice Footer Action Rule
+
+- invoice detail footer actions should avoid duplicate print semantics
+- `打印预览` is the single print entry from the detail page
+- the right-side primary button should represent the current business state, not another print alias
+  - sales invoice:
+    - outstanding amount > 0 -> `前往收款`
+    - fully paid -> disabled `已收款`
+  - purchase invoice:
+    - outstanding amount > 0 -> `去登记付款`
+    - fully paid -> disabled `已付款`
+    - cancelled -> disabled `发票已作废`
+- this keeps print behavior and settlement behavior visually distinct
+
+### Workbench Metric Color Rule
+
+- sales and purchase top metric cards should use the same persistent semantic palette
+- the four primary dashboard metrics should stay color-coded even when not selected:
+  - unfinished -> warm yellow
+  - delivering / receiving -> light blue
+  - paying -> light green
+  - completed -> light slate
+- active selection may strengthen the border, but should not switch the base card back to a gray neutral state
+- this rule exists because sales and purchase are parallel workbenches and should not drift into separate visual languages for the same workflow meanings
+
 ### Web vs Native Preview Behavior
 
 - web preview uses the browser PDF viewer through an embedded frame

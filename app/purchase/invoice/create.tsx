@@ -467,8 +467,8 @@ export default function PurchaseInvoiceCreateScreen() {
             <View style={styles.footerActionRow}>
               <Pressable
                 onPress={openPrintPreview}
-                style={[styles.footerButton, styles.secondaryActionButton, { borderColor }]}>
-                <ThemedText style={[styles.secondaryActionText, { color: tintColor }]} type="defaultSemiBold">
+                style={[styles.footerButton, styles.footerGhostButton]}>
+                <ThemedText style={styles.footerGhostText} type="defaultSemiBold">
                   打印预览
                 </ThemedText>
               </Pressable>
@@ -480,7 +480,7 @@ export default function PurchaseInvoiceCreateScreen() {
                       params: { referenceName: invoiceDetail.name },
                     })
                   }
-                  style={[styles.footerButton, styles.primaryFooterButton, { backgroundColor: tintColor }]}>
+                  style={[styles.footerButton, styles.primaryButton]}>
                   <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
                     去登记付款
                   </ThemedText>
@@ -488,7 +488,7 @@ export default function PurchaseInvoiceCreateScreen() {
               ) : invoiceDetail.documentStatus === 'cancelled' ? (
                 <Pressable
                   disabled
-                  style={[styles.footerButton, styles.primaryFooterButton, { backgroundColor: surfaceMuted }]}>
+                  style={[styles.footerButton, styles.primaryButton, styles.footerDisabledButton]}>
                   <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
                     发票已作废
                   </ThemedText>
@@ -496,9 +496,9 @@ export default function PurchaseInvoiceCreateScreen() {
               ) : (
                 <Pressable
                   disabled
-                  style={[styles.footerButton, styles.primaryFooterButton, { backgroundColor: surfaceMuted }]}>
+                  style={[styles.footerButton, styles.primaryButton, styles.footerDisabledButton]}>
                   <ThemedText style={styles.footerButtonText} type="defaultSemiBold">
-                    无需付款
+                    已付款
                   </ThemedText>
                 </Pressable>
               )}
@@ -1313,11 +1313,24 @@ const styles = StyleSheet.create({
   footerButton: {
     alignItems: 'center',
     borderRadius: 16,
+    flex: 1,
     justifyContent: 'center',
     minHeight: 52,
   },
-  primaryFooterButton: {
-    flex: 1,
+  footerDisabledButton: {
+    opacity: 0.55,
+  },
+  footerGhostButton: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D6E4FF',
+    borderWidth: 1,
+  },
+  footerGhostText: {
+    color: '#1D4ED8',
+    fontSize: 15,
+  },
+  primaryButton: {
+    backgroundColor: '#2563EB',
   },
   footerButtonText: {
     color: '#FFFFFF',

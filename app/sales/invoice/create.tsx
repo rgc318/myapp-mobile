@@ -527,9 +527,9 @@ export default function SalesInvoiceCreateScreen() {
                   </ThemedText>
                 </Pressable>
               ) : (
-                <Pressable onPress={openPrintPreview} style={[styles.footerButton, styles.primaryButton]}>
+                <Pressable disabled style={[styles.footerButton, styles.primaryButton, styles.footerDisabledButton]}>
                   <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
-                    预览并打印
+                    已收款
                   </ThemedText>
                 </Pressable>
               )}
