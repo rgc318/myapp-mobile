@@ -321,7 +321,6 @@ export function SalesOrderItemEditor({
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const warningColor = useThemeColor({}, 'warning');
-  const tintColor = useThemeColor({}, 'tint');
   const primaryLabel = nickname?.trim() || itemName || itemCode;
   const secondaryLabel = nickname?.trim() && itemName && nickname.trim() !== itemName ? itemName : '';
 
@@ -338,21 +337,17 @@ export function SalesOrderItemEditor({
           )}
 
           <View style={styles.groupCopy}>
-            <View style={styles.groupTitleRow}>
-              <ThemedText numberOfLines={1} style={styles.groupTitle} type="defaultSemiBold">
-                {primaryLabel}
-              </ThemedText>
-              {specification ? (
-                <View style={styles.specBadge}>
-                  <ThemedText style={[styles.specBadgeText, { color: tintColor }]} numberOfLines={1} type="defaultSemiBold">
-                    {specification}
-                  </ThemedText>
-                </View>
-              ) : null}
-            </View>
+            <ThemedText numberOfLines={1} style={styles.groupTitle} type="defaultSemiBold">
+              {primaryLabel}
+            </ThemedText>
             {secondaryLabel ? (
               <ThemedText numberOfLines={1} style={styles.groupSubtitle}>
                 {secondaryLabel}
+              </ThemedText>
+            ) : null}
+            {specification ? (
+              <ThemedText numberOfLines={1} style={styles.groupSpecification}>
+                规格 {specification}
               </ThemedText>
             ) : null}
             <ThemedText style={styles.groupMeta}>{'编码 '} {itemCode}</ThemedText>
@@ -460,33 +455,19 @@ const styles = StyleSheet.create({
     gap: 3,
     minWidth: 0,
   },
-  groupTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
   groupTitle: {
-    flex: 1,
     fontSize: 16,
   },
   groupSubtitle: {
-    color: '#64748B',
+    color: '#607086',
     fontSize: 12,
+  },
+  groupSpecification: {
+    color: '#2F5FAE',
+    fontSize: 13,
   },
   groupMeta: {
     color: '#64748B',
-    fontSize: 12,
-  },
-  specBadge: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(37,99,235,0.10)',
-    borderRadius: 999,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  specBadgeText: {
     fontSize: 12,
   },
   groupSummary: {

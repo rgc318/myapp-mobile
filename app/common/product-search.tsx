@@ -191,21 +191,17 @@ function ResultRow({
       <View style={styles.resultMain}>
         <View style={styles.resultHeaderRow}>
           <View style={styles.resultIdentity}>
-            <View style={styles.resultTitleRow}>
-              <ThemedText numberOfLines={1} style={styles.resultTitle} type="defaultSemiBold">
-                {primaryLabel}
-              </ThemedText>
-              {item.specification ? (
-                <View style={[styles.badge, { backgroundColor: surfaceMuted }]}>
-                  <ThemedText numberOfLines={1} style={[styles.badgeText, { color: tintColor }]} type="defaultSemiBold">
-                    {item.specification}
-                  </ThemedText>
-                </View>
-              ) : null}
-            </View>
+            <ThemedText numberOfLines={1} style={styles.resultTitle} type="defaultSemiBold">
+              {primaryLabel}
+            </ThemedText>
             {secondaryLabel ? (
               <ThemedText numberOfLines={1} style={styles.resultNicknameSubline}>
                 {secondaryLabel}
+              </ThemedText>
+            ) : null}
+            {item.specification ? (
+              <ThemedText numberOfLines={1} style={styles.resultSpecification}>
+                规格 {item.specification}
               </ThemedText>
             ) : null}
 
@@ -1427,13 +1423,7 @@ const styles = StyleSheet.create({
     gap: 3,
     minWidth: 0,
   },
-  resultTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
   resultTitle: {
-    flex: 1,
     fontSize: 18,
   },
   resultWarehouseHeadline: {
@@ -1441,18 +1431,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   resultNicknameSubline: {
-    color: '#64748B',
+    color: '#607086',
     fontSize: 12,
     marginTop: -1,
   },
-  badge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  badgeText: {
-    fontSize: 12,
-    opacity: 0.7,
+  resultSpecification: {
+    color: '#2F5FAE',
+    fontSize: 13,
   },
   resultMeta: {
     opacity: 0.68,

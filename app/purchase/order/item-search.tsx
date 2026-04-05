@@ -150,21 +150,17 @@ function ResultRow({
       </View>
 
       <View style={styles.resultMain}>
-        <View style={styles.resultTitleRow}>
-          <ThemedText numberOfLines={1} style={styles.resultTitle} type="defaultSemiBold">
-            {primaryLabel}
-          </ThemedText>
-          {item.specification ? (
-            <View style={styles.specBadge}>
-              <ThemedText numberOfLines={1} style={styles.specBadgeText} type="defaultSemiBold">
-                {item.specification}
-              </ThemedText>
-            </View>
-          ) : null}
-        </View>
+        <ThemedText numberOfLines={1} style={styles.resultTitle} type="defaultSemiBold">
+          {primaryLabel}
+        </ThemedText>
         {secondaryLabel ? (
           <ThemedText numberOfLines={1} style={styles.resultSubtitle}>
             {secondaryLabel}
+          </ThemedText>
+        ) : null}
+        {item.specification ? (
+          <ThemedText numberOfLines={1} style={styles.resultSpecification}>
+            规格 {item.specification}
           </ThemedText>
         ) : null}
 
@@ -989,32 +985,17 @@ const styles = StyleSheet.create({
     gap: 4,
     minWidth: 0,
   },
-  resultTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
   resultTitle: {
-    flex: 1,
     fontSize: 17,
   },
   resultSubtitle: {
-    color: '#64748B',
+    color: '#607086',
     fontSize: 12,
     marginTop: -1,
   },
-  specBadge: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(37,99,235,0.10)',
-    borderRadius: 999,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  specBadgeText: {
-    color: '#2563EB',
-    fontSize: 12,
+  resultSpecification: {
+    color: '#2F5FAE',
+    fontSize: 13,
   },
   resultMeta: {
     color: '#64748B',

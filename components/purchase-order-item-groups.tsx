@@ -209,21 +209,17 @@ export function PurchaseOrderItemGroups({
                   <ThemedText style={styles.groupLabel} type="defaultSemiBold">
                     采购商品 {groupIndex + 1}
                   </ThemedText>
-                  <View style={styles.groupTitleRow}>
-                    <ThemedText style={styles.groupTitle} type="defaultSemiBold">
-                      {group.nickname?.trim() || group.itemName || group.itemCode}
-                    </ThemedText>
-                    {group.specification ? (
-                      <View style={styles.specBadge}>
-                        <ThemedText style={styles.specBadgeText} numberOfLines={1} type="defaultSemiBold">
-                          {group.specification}
-                        </ThemedText>
-                      </View>
-                    ) : null}
-                  </View>
+                  <ThemedText style={styles.groupTitle} type="defaultSemiBold">
+                    {group.nickname?.trim() || group.itemName || group.itemCode}
+                  </ThemedText>
                   {group.nickname && group.itemName && group.nickname !== group.itemName ? (
                     <ThemedText numberOfLines={1} style={styles.groupSubtitle}>
                       {group.itemName}
+                    </ThemedText>
+                  ) : null}
+                  {group.specification ? (
+                    <ThemedText numberOfLines={1} style={styles.groupSpecification}>
+                      规格 {group.specification}
                     </ThemedText>
                   ) : null}
                   <ThemedText style={styles.groupMeta}>编码 {group.itemCode}</ThemedText>
@@ -573,38 +569,23 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  groupTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
   groupLabel: {
     color: '#2563EB',
     fontSize: 12,
   },
   groupTitle: {
-    flex: 1,
     fontSize: 17,
   },
   groupSubtitle: {
-    color: '#64748B',
+    color: '#607086',
     fontSize: 12,
+  },
+  groupSpecification: {
+    color: '#2F5FAE',
+    fontSize: 13,
   },
   groupMeta: {
     color: '#64748B',
-    fontSize: 12,
-  },
-  specBadge: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(37,99,235,0.10)',
-    borderRadius: 999,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  specBadgeText: {
-    color: '#2563EB',
     fontSize: 12,
   },
   groupInfoRow: {
