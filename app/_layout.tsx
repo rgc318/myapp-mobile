@@ -63,6 +63,8 @@ function RootNavigation() {
         <Stack.Screen name="sales/order/[orderName]" options={{ headerShown: false }} />
         <Stack.Screen name="sales/invoice/preview" options={{ headerShown: false }} />
         <Stack.Screen name="sales/invoice/pdf-viewer" options={{ headerShown: false }} />
+        <Stack.Screen name="purchase/invoice/preview" options={{ headerShown: false }} />
+        <Stack.Screen name="purchase/invoice/pdf-viewer" options={{ headerShown: false }} />
         <Stack.Screen name="purchase/order/create" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: false }} />

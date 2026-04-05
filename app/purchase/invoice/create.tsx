@@ -128,6 +128,20 @@ function groupInvoiceItems(items: InvoiceItemLine[]) {
   );
 }
 
+function formatGroupedRateSummary(group: InvoiceItemGroup, currency = 'CNY') {
+  const normalizedRates = group.lines
+    .map((line) => (typeof line.rate === 'number' && Number.isFinite(line.rate) ? line.rate : null))
+    .filter((value): value is number => value !== null);
+  const uniqueRates = Array.from(new Set(normalizedRates));
+  const uniqueUoms = Array.from(new Set(group.lines.map((line) => line.uom?.trim() || '').filter(Boolean)));
+
+  if (uniqueRates.length === 1 && uniqueUoms.length === 1) {
+    return `${formatMoney(uniqueRates[0], currency)} / ${uniqueUoms[0]}`;
+  }
+
+  return '多单价/单位';
+}
+
 function hasPositivePayableBalance(invoiceDetail: PurchaseInvoiceDetail | null) {
   if (!invoiceDetail || invoiceDetail.documentStatus === 'cancelled') {
     return false;
@@ -279,6 +293,18 @@ export default function PurchaseInvoiceCreateScreen() {
   const receiptItemGroups = receiptDetail ? groupInvoiceItems(receiptDetail.items) : [];
   const invoiceItemGroups = invoiceDetail ? groupInvoiceItems(invoiceDetail.items) : [];
   const canOpenPaymentFlow = hasPositivePayableBalance(invoiceDetail);
+
+  function openPrintPreview() {
+    if (!invoiceDetail?.name) {
+      showInfo('当前采购发票详情尚未加载完成。');
+      return;
+    }
+
+    router.push({
+      pathname: '/purchase/invoice/preview',
+      params: { purchaseInvoice: invoiceDetail.name },
+    });
+  }
 
   useEffect(() => {
     if (!receiptDetail) {
@@ -439,6 +465,13 @@ export default function PurchaseInvoiceCreateScreen() {
               </View>
             ) : null}
             <View style={styles.footerActionRow}>
+              <Pressable
+                onPress={openPrintPreview}
+                style={[styles.footerButton, styles.secondaryActionButton, { borderColor }]}>
+                <ThemedText style={[styles.secondaryActionText, { color: tintColor }]} type="defaultSemiBold">
+                  打印预览
+                </ThemedText>
+              </Pressable>
               {canOpenPaymentFlow ? (
                 <Pressable
                   onPress={() =>
@@ -586,40 +619,54 @@ export default function PurchaseInvoiceCreateScreen() {
               <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
                 商品明细
               </ThemedText>
+              <View style={styles.compactTableHeader}>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellName]} type="defaultSemiBold">
+                  商品
+                </ThemedText>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellSpec]} type="defaultSemiBold">
+                  规格
+                </ThemedText>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellQty]} type="defaultSemiBold">
+                  数量
+                </ThemedText>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellRate]} type="defaultSemiBold">
+                  单价
+                </ThemedText>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellAmount]} type="defaultSemiBold">
+                  金额
+                </ThemedText>
+              </View>
               <View style={styles.itemList}>
                 {receiptItemGroups.map((group) => {
                   const expanded = expandedReceiptGroups[group.key] ?? false;
                   return (
                     <View key={group.key} style={[styles.compactGroupCard, { backgroundColor: surfaceMuted }]}>
                       <View style={styles.compactGroupHeader}>
-                        <View style={styles.compactGroupTitleWrap}>
-                          <ThemedText style={styles.compactGroupTitle} type="defaultSemiBold">
+                        <View style={[styles.compactTableCell, styles.compactTableCellName]}>
+                          <ThemedText numberOfLines={2} style={styles.compactGroupTitle} type="defaultSemiBold">
                             {group.itemName}
                           </ThemedText>
-                          {group.specification ? (
-                            <ThemedText style={styles.itemSpec} type="defaultSemiBold">
-                              规格 {group.specification}
-                            </ThemedText>
-                          ) : null}
-                          <ThemedText style={styles.itemMeta}>
-                            编码 {group.itemCode}
-                            {group.lines.length > 1 ? ` · ${group.lines.length} 条仓库行` : ''}
+                        </View>
+                        <View style={[styles.compactTableCell, styles.compactTableCellSpec]}>
+                          <ThemedText numberOfLines={2} style={styles.itemSpec}>
+                            {group.specification || '—'}
                           </ThemedText>
                         </View>
-                        <View style={styles.compactAmountWrap}>
-                          <ThemedText style={styles.compactAmountLabel}>小计</ThemedText>
-                          <ThemedText style={styles.compactAmountValue} type="defaultSemiBold">
-                            {formatMoney(group.totalAmount, receiptDetail.currency || 'CNY')}
-                          </ThemedText>
-                        </View>
+                        <ThemedText style={[styles.compactTableCell, styles.compactTableCellQty, styles.compactTableValue]} type="defaultSemiBold">
+                          {formatQty(group.totalQty)}
+                          {group.uom ? ` ${group.uom}` : ''}
+                        </ThemedText>
+                        <ThemedText style={[styles.compactTableCell, styles.compactTableCellRate, styles.compactTableValue]}>
+                          {formatGroupedRateSummary(group, receiptDetail.currency || 'CNY')}
+                        </ThemedText>
+                        <ThemedText style={[styles.compactTableCell, styles.compactTableCellAmount, styles.compactAmountValue]} type="defaultSemiBold">
+                          {formatMoney(group.totalAmount, receiptDetail.currency || 'CNY')}
+                        </ThemedText>
                       </View>
                       <View style={styles.compactMetaRow}>
                         <ThemedText style={styles.itemMeta}>
-                          数量 {formatQty(group.totalQty)}
-                          {group.uom ? ` ${group.uom}` : ''}
-                        </ThemedText>
-                        <ThemedText style={styles.itemMeta}>
-                          均价 {formatMoney(group.totalQty > 0 ? group.totalAmount / group.totalQty : null, receiptDetail.currency || 'CNY')}
+                          编码 {group.itemCode}
+                          {group.lines.length > 1 ? ` · ${group.lines.length} 条仓库行` : ''}
                         </ThemedText>
                       </View>
                       <ThemedText style={styles.itemMeta}>
@@ -722,40 +769,54 @@ export default function PurchaseInvoiceCreateScreen() {
               <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
                 商品明细
               </ThemedText>
+              <View style={styles.compactTableHeader}>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellName]} type="defaultSemiBold">
+                  商品
+                </ThemedText>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellSpec]} type="defaultSemiBold">
+                  规格
+                </ThemedText>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellQty]} type="defaultSemiBold">
+                  数量
+                </ThemedText>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellRate]} type="defaultSemiBold">
+                  单价
+                </ThemedText>
+                <ThemedText style={[styles.compactTableCell, styles.compactTableCellAmount]} type="defaultSemiBold">
+                  金额
+                </ThemedText>
+              </View>
               <View style={styles.itemList}>
                 {invoiceItemGroups.map((group) => {
                   const expanded = expandedInvoiceGroups[group.key] ?? false;
                   return (
                     <View key={group.key} style={[styles.compactGroupCard, { backgroundColor: surfaceMuted }]}>
                       <View style={styles.compactGroupHeader}>
-                        <View style={styles.compactGroupTitleWrap}>
-                          <ThemedText style={styles.compactGroupTitle} type="defaultSemiBold">
+                        <View style={[styles.compactTableCell, styles.compactTableCellName]}>
+                          <ThemedText numberOfLines={2} style={styles.compactGroupTitle} type="defaultSemiBold">
                             {group.itemName}
                           </ThemedText>
-                          {group.specification ? (
-                            <ThemedText style={styles.itemSpec} type="defaultSemiBold">
-                              规格 {group.specification}
-                            </ThemedText>
-                          ) : null}
-                          <ThemedText style={styles.itemMeta}>
-                            编码 {group.itemCode}
-                            {group.lines.length > 1 ? ` · ${group.lines.length} 条仓库行` : ''}
+                        </View>
+                        <View style={[styles.compactTableCell, styles.compactTableCellSpec]}>
+                          <ThemedText numberOfLines={2} style={styles.itemSpec}>
+                            {group.specification || '—'}
                           </ThemedText>
                         </View>
-                        <View style={styles.compactAmountWrap}>
-                          <ThemedText style={styles.compactAmountLabel}>小计</ThemedText>
-                          <ThemedText style={styles.compactAmountValue} type="defaultSemiBold">
-                            {formatMoney(group.totalAmount, invoiceDetail.currency || 'CNY')}
-                          </ThemedText>
-                        </View>
+                        <ThemedText style={[styles.compactTableCell, styles.compactTableCellQty, styles.compactTableValue]} type="defaultSemiBold">
+                          {formatQty(group.totalQty)}
+                          {group.uom ? ` ${group.uom}` : ''}
+                        </ThemedText>
+                        <ThemedText style={[styles.compactTableCell, styles.compactTableCellRate, styles.compactTableValue]}>
+                          {formatGroupedRateSummary(group, invoiceDetail.currency || 'CNY')}
+                        </ThemedText>
+                        <ThemedText style={[styles.compactTableCell, styles.compactTableCellAmount, styles.compactAmountValue]} type="defaultSemiBold">
+                          {formatMoney(group.totalAmount, invoiceDetail.currency || 'CNY')}
+                        </ThemedText>
                       </View>
                       <View style={styles.compactMetaRow}>
                         <ThemedText style={styles.itemMeta}>
-                          数量 {formatQty(group.totalQty)}
-                          {group.uom ? ` ${group.uom}` : ''}
-                        </ThemedText>
-                        <ThemedText style={styles.itemMeta}>
-                          均价 {formatMoney(group.totalQty > 0 ? group.totalAmount / group.totalQty : null, invoiceDetail.currency || 'CNY')}
+                          编码 {group.itemCode}
+                          {group.lines.length > 1 ? ` · ${group.lines.length} 条仓库行` : ''}
                         </ThemedText>
                       </View>
                       <ThemedText style={styles.itemMeta}>
@@ -1011,38 +1072,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  compactTableHeader: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    flexDirection: 'row',
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   compactGroupHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+    gap: 10,
   },
-  compactGroupTitleWrap: {
+  compactTableCell: {
+    color: '#334155',
     flex: 1,
-    gap: 4,
+    fontSize: 12,
+  },
+  compactTableCellName: {
+    flex: 1.85,
+  },
+  compactTableCellSpec: {
+    flex: 1.15,
+  },
+  compactTableCellQty: {
+    flex: 1.05,
+  },
+  compactTableCellRate: {
+    flex: 1.1,
+  },
+  compactTableCellAmount: {
+    flex: 1.15,
+    textAlign: 'right',
+  },
+  compactTableValue: {
+    color: '#334155',
+    fontSize: 13,
   },
   compactGroupTitle: {
-    fontSize: 17,
-    lineHeight: 23,
+    fontSize: 15,
+    lineHeight: 21,
   },
   itemSpec: {
     color: '#475569',
     fontSize: 12,
     lineHeight: 18,
   },
-  compactAmountWrap: {
-    alignItems: 'flex-end',
-    gap: 2,
-    minWidth: 104,
-  },
-  compactAmountLabel: {
-    color: '#64748B',
-    fontSize: 11,
-  },
   compactAmountValue: {
     color: '#C2410C',
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'right',
   },
   compactMetaRow: {
     flexDirection: 'row',

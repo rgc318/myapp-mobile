@@ -6256,13 +6256,28 @@ Practical rule:
 ### Current Implementation State
 
 - `Sales Invoice` now has a real print chain instead of a placeholder preview shell
+- `Purchase Invoice` now also has a real print chain aligned to the same formal-PDF pattern
 - invoice detail keeps the mobile-friendly verification sheet
 - tapping `打印预览` now redirects directly into a dedicated formal PDF route:
   - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/preview.tsx`
   - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/pdf-viewer.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/invoice/preview.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/invoice/pdf-viewer.tsx`
 - preview and print actions are backed by shared print-document helpers:
   - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/printing.ts`
   - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/print-documents.ts`
+
+### Invoice Print Identity Rule
+
+- both sales-invoice and purchase-invoice printable tables now use:
+  - product name
+  - specification
+  - quantity
+  - rate
+  - amount
+- `specification` is treated as a standalone commercial column, not a subtitle under product name
+- sales-invoice printable tables hide internal `itemCode`
+- purchase-invoice detail keeps some internal traceability information on-page, but the formal PDF still follows the same primary column structure
 
 ### Web vs Native Preview Behavior
 
