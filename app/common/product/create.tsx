@@ -45,6 +45,7 @@ export default function ProductCreateScreen() {
   const [brand, setBrand] = useState('');
   const [barcode, setBarcode] = useState('');
   const [nickname, setNickname] = useState('');
+  const [specification, setSpecification] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [stockUom, setStockUom] = useState('Box');
@@ -193,6 +194,7 @@ export default function ProductCreateScreen() {
         brand: trimmedBrand || undefined,
         barcode: barcode.trim() || undefined,
         nickname: nickname.trim() || undefined,
+        specification: specification.trim() || undefined,
         description: description.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
         stockUom: trimmedStockUom,
@@ -400,8 +402,9 @@ export default function ProductCreateScreen() {
           </View>
           <ProductTextField label="主条码" onChangeText={setBarcode} placeholder="输入商品主条码" value={barcode} />
           <ProductTextField label="商品昵称" onChangeText={setNickname} placeholder="如常用简称或别名" value={nickname} />
+          <ProductTextField label="规格" onChangeText={setSpecification} placeholder="如 500ml / 大号 / A4" value={specification} />
           <ProductTextField label="图片地址" onChangeText={setImageUrl} placeholder="输入商品图片 URL" value={imageUrl} />
-          <ProductTextField label="描述" multiline onChangeText={setDescription} placeholder="补充规格、备注或说明" value={description} />
+          <ProductTextField label="描述" multiline onChangeText={setDescription} placeholder="补充备注或说明" value={description} />
         </View>
 
         <View style={[styles.sectionBlock, { backgroundColor: surface, borderColor }]}>

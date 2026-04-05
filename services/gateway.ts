@@ -34,6 +34,7 @@ export type ProductSearchItem = {
   imageUrl?: string | null;
   description?: string | null;
   nickname?: string | null;
+  specification?: string | null;
 };
 
 export type SalesOrderItemInput = {
@@ -244,7 +245,7 @@ export async function searchProducts(
     company: options?.company,
     limit: options?.limit ?? 20,
     in_stock_only: options?.inStockOnly ? 1 : 0,
-    search_fields: ['item_code', 'item_name', 'barcode', 'nickname', 'description'],
+    search_fields: ['item_code', 'item_name', 'barcode', 'nickname', 'description', 'specification'],
     sort_by: 'relevance',
     sort_order: 'asc',
   });
@@ -339,6 +340,7 @@ export async function searchProducts(
               : null,
       description: typeof row.description === 'string' ? row.description : null,
       nickname: typeof row.nickname === 'string' ? row.nickname : null,
+      specification: typeof row.specification === 'string' ? row.specification : null,
     }))
     .filter((row: ProductSearchItem) => row.itemCode);
 }

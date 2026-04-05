@@ -52,6 +52,11 @@ function ProductCard({ item, onOpen }: { item: ProductListItem; onOpen: (code: s
           <ThemedText numberOfLines={2} style={styles.cardTitle} type="defaultSemiBold">
             {item.itemName || item.itemCode}
           </ThemedText>
+          {item.specification ? (
+            <ThemedText numberOfLines={1} style={styles.cardMeta}>
+              规格: {item.specification}
+            </ThemedText>
+          ) : null}
           <ThemedText numberOfLines={1} style={styles.cardMeta}>
             商品编码: {shortCode}
           </ThemedText>
@@ -212,7 +217,7 @@ export default function ProductsScreen() {
               <ThemedText style={styles.filterTitle} type="defaultSemiBold">
                 检索与筛选
               </ThemedText>
-              <ThemedText style={styles.filterHint}>支持按商品名称、编码和昵称快速定位。</ThemedText>
+              <ThemedText style={styles.filterHint}>支持按商品名称、编码、昵称和规格快速定位。</ThemedText>
             </View>
             <Pressable
               onPress={() => {
@@ -230,7 +235,7 @@ export default function ProductsScreen() {
             <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
             <TextInput
               onChangeText={setQuery}
-              placeholder="搜索商品名称、编码、昵称"
+              placeholder="搜索商品名称、编码、昵称、规格"
               placeholderTextColor="rgba(31,42,55,0.42)"
               style={styles.searchInput}
               value={query}

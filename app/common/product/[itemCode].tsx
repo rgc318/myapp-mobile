@@ -93,6 +93,7 @@ export default function ProductDetailScreen() {
   const [draftBrand, setDraftBrand] = useState('');
   const [draftBarcode, setDraftBarcode] = useState('');
   const [draftNickname, setDraftNickname] = useState('');
+  const [draftSpecification, setDraftSpecification] = useState('');
   const [draftDescription, setDraftDescription] = useState('');
   const [draftImageUrl, setDraftImageUrl] = useState('');
   const [draftStandardRate, setDraftStandardRate] = useState('');
@@ -114,6 +115,7 @@ export default function ProductDetailScreen() {
     setDraftBrand(next.brand || '');
     setDraftBarcode(next.barcode || '');
     setDraftNickname(next.nickname || '');
+    setDraftSpecification(next.specification || '');
     setDraftDescription(next.description || '');
     setDraftImageUrl(next.imageUrl || '');
     setDraftStandardRate(next.priceSummary?.standardSellingRate != null ? String(next.priceSummary.standardSellingRate) : '');
@@ -603,6 +605,7 @@ export default function ProductDetailScreen() {
         stockUom: trimmedStockUom,
         uomConversions,
         nickname: draftNickname.trim() || undefined,
+        specification: draftSpecification.trim() || undefined,
         description: draftDescription.trim() || undefined,
         imageUrl: draftImageUrl.trim() || undefined,
         standardRate: toNumberOrNull(draftStandardRate),
@@ -1385,6 +1388,7 @@ export default function ProductDetailScreen() {
                   </View>
                   <DetailField label="主条码" onChangeText={setDraftBarcode} placeholder="输入商品主条码" value={draftBarcode} />
                   <DetailField label="商品昵称" onChangeText={setDraftNickname} placeholder="输入商品昵称" value={draftNickname} />
+                  <DetailField label="规格" onChangeText={setDraftSpecification} placeholder="输入规格，如 500ml / 大号 / A4" value={draftSpecification} />
                   <DetailField label="图片地址" onChangeText={setDraftImageUrl} placeholder="输入商品图片 URL" value={draftImageUrl} />
                   <DetailField label="描述" multiline onChangeText={setDraftDescription} placeholder="输入商品说明" value={draftDescription} />
                 </View>
@@ -1400,6 +1404,12 @@ export default function ProductDetailScreen() {
                     <ThemedText style={styles.readOnlyLabel}>商品昵称</ThemedText>
                     <ThemedText style={styles.readOnlyValue} type="defaultSemiBold">
                       {detail.nickname || '未设置'}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.readOnlyRow}>
+                    <ThemedText style={styles.readOnlyLabel}>规格</ThemedText>
+                    <ThemedText style={styles.readOnlyValue} type="defaultSemiBold">
+                      {detail.specification || '未设置'}
                     </ThemedText>
                   </View>
                   <View style={styles.readOnlyRow}>

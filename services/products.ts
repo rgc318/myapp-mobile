@@ -17,6 +17,7 @@ export type ProductDetail = {
   itemGroup: string;
   brand: string;
   stockUom: string;
+  specification: string;
   description: string;
   imageUrl: string;
   disabled: boolean;
@@ -54,6 +55,7 @@ export type CreateProductPayload = {
     conversionFactor: number;
   }[];
   nickname?: string;
+  specification?: string;
   description?: string;
   imageUrl?: string;
   standardRate?: number | null;
@@ -78,6 +80,7 @@ export type SaveProductPayload = {
   }[];
   description?: string;
   nickname?: string;
+  specification?: string;
   imageUrl?: string;
   standardRate?: number | null;
   wholesaleRate?: number | null;
@@ -251,6 +254,7 @@ function mapProductRow(
     itemGroup: typeof data.item_group === 'string' ? data.item_group : '',
     brand: typeof data.brand === 'string' ? data.brand : '',
     stockUom: typeof data.stock_uom === 'string' ? data.stock_uom : typeof data.uom === 'string' ? data.uom : '',
+    specification: typeof data.specification === 'string' ? data.specification : '',
     description: typeof data.description === 'string' ? data.description : '',
     imageUrl:
       typeof data.image === 'string'
@@ -376,6 +380,7 @@ export async function saveProductBasicInfo(payload: SaveProductPayload) {
       })),
       description: payload.description,
       nickname: payload.nickname,
+      specification: payload.specification,
       image: payload.imageUrl,
       standard_rate: payload.standardRate,
       selling_prices: sellingPrices,
@@ -413,6 +418,7 @@ export async function createProduct(payload: CreateProductPayload) {
         conversion_factor: entry.conversionFactor,
       })),
       nickname: payload.nickname,
+      specification: payload.specification,
       description: payload.description,
       image: payload.imageUrl,
       standard_rate: payload.standardRate,
@@ -456,6 +462,7 @@ export async function createProductAndStock(payload: {
   openingUom?: string;
   standardRate?: number;
   description?: string;
+  specification?: string;
   image?: string;
 }) {
   const data = await callGatewayMethod<Record<string, unknown>>(
@@ -467,6 +474,7 @@ export async function createProductAndStock(payload: {
       opening_uom: payload.openingUom,
       standard_rate: payload.standardRate,
       description: payload.description,
+      specification: payload.specification,
       image: payload.image,
     },
   );
@@ -483,6 +491,7 @@ export async function createProductAndStock(payload: {
     warehouse: typeof data?.warehouse === 'string' ? data.warehouse : null,
     imageUrl: typeof data?.image === 'string' ? data.image : null,
     description: typeof payload.description === 'string' ? payload.description : null,
+    specification: typeof data?.specification === 'string' ? data.specification : null,
     nickname: typeof data?.nickname === 'string' ? data.nickname : null,
     disabled: false,
     barcode: '',

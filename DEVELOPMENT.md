@@ -219,6 +219,51 @@ This round turned the mobile product flow from "search-only helper pages" into a
     - `fetchProductDetail()`
     - `createProduct()`
 
+## Product Specification Field Alignment (2026-04-05)
+
+This round aligned the mobile product module with the new backend `custom_specification` field, while keeping the current modeling rule that different sellable specs are still separate products.
+
+### Completed
+
+- product create page now treats `specification` as first-class product master data
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+  - current create form now includes:
+    - item name
+    - nickname
+    - specification
+    - description
+
+- product detail page now supports viewing and editing `specification`
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+
+- product list cards now surface `specification` directly
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/products.tsx`
+
+- product API mapping now carries `specification` through create/detail/update/list/search flows
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/products.ts`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/gateway.ts`
+
+### Current Product Modeling Rule
+
+- `specification` is currently a display/search/print field, not a full ERPNext variant model
+- different sellable specs should still be modeled as different products / different SKUs
+- examples:
+  - `可乐 500ml`
+  - `可乐 1000ml`
+  - these may share a similar name stem, but should not share the same product record
+
+### Validation Outcome
+
+- backend regression now confirms:
+  - specification CRUD works
+  - specification search works
+  - same-name different-spec products remain distinct
+  - disabling one spec product does not hide other spec products with the same name
+
 ## Reports Module Update (2026-04-04)
 
 This round focused on turning the reports page into a more practical mobile business dashboard and fixing time-range edge cases that were affecting month-based analysis.
