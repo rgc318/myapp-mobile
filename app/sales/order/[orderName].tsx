@@ -1518,6 +1518,18 @@ export default function SalesOrderDetailScreen() {
     enterEditMode('all');
   }
 
+  function openPrintPreview() {
+    if (!detail?.name) {
+      showError('缺少销售订单号。');
+      return;
+    }
+
+    router.push({
+      pathname: '/sales/order/preview',
+      params: { salesOrder: detail.name },
+    });
+  }
+
   const workflowAction = detail?.canSubmitDelivery
     ? {
         label: '出货',
@@ -1745,6 +1757,16 @@ export default function SalesOrderDetailScreen() {
               </ThemedText>
             </View>
           </View>
+
+          {!isEditingAnySection && detail ? (
+            <View style={styles.heroUtilityRow}>
+              <Pressable onPress={openPrintPreview} style={styles.heroUtilityButton}>
+                <ThemedText style={styles.heroUtilityButtonText} type="defaultSemiBold">
+                  打印预览
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
 
         <View style={[styles.card, { backgroundColor: surface, borderColor }]}>
@@ -2451,6 +2473,24 @@ const styles = StyleSheet.create({
   heroMetrics: {
     flexDirection: 'row',
     gap: 8,
+  },
+  heroUtilityRow: {
+    justifyContent: 'flex-start',
+  },
+  heroUtilityButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#C7D7F7',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 40,
+    minWidth: 112,
+    paddingHorizontal: 16,
+  },
+  heroUtilityButtonText: {
+    color: '#1D4ED8',
+    fontSize: 14,
   },
   metricCard: {
     backgroundColor: 'rgba(248,250,252,0.9)',

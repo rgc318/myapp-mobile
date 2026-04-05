@@ -5724,6 +5724,35 @@ Purchase receipt now follows the same formal print-preview flow as sales deliver
 - warehouse is also elevated into the formal table as a first-class field
 - detail page keeps `打印预览` as a separate utility action and does not replace the main invoice-flow action
 
+## Sales Order Print Preview (2026-04-06)
+
+Sales order now also supports the formal print-preview flow, but its role is different from delivery and invoice.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/_layout.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/preview.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/pdf-viewer.tsx`
+
+### What Changed
+
+- sales-order detail page now exposes a standalone `打印预览` utility action
+- preview route forwards into the formal PDF viewer
+- viewer reuses the common formal-print pipeline:
+  - preview metadata
+  - PDF render
+  - system print / share actions
+
+### Presentation Rules
+
+- sales order is treated as a confirmation / preparation document
+- nickname is allowed in the formal order print as item identity assist:
+  - `（nickname）itemName`
+- specification remains an independent column
+- internal item code is not exposed in the formal print layout
+- order detail page keeps print preview separate from the main workflow action so it does not compete with `出货 / 开票 / 收款`
+
 ### Implication For Next Work
 
 - do not spend the next major frontend iteration on advanced return scenarios
