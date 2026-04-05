@@ -996,6 +996,18 @@ export default function PurchaseOrderEditScreen() {
     });
   };
 
+  const openPrintPreview = () => {
+    if (!detail?.name) {
+      showError('缺少采购订单号。');
+      return;
+    }
+
+    router.push({
+      pathname: '/purchase/order/preview',
+      params: { purchaseOrder: detail.name },
+    });
+  };
+
   const openInvoiceCreate = () => {
     if (!detail?.canCreateInvoice) {
       return;
@@ -1845,6 +1857,13 @@ export default function PurchaseOrderEditScreen() {
                 />
                 <MetaBlock label="计划到货" value={detail.scheduleDate || '未设置'} />
               </View>
+              <View style={styles.heroUtilityRow}>
+                <Pressable onPress={openPrintPreview} style={styles.heroUtilityButton}>
+                  <ThemedText style={styles.heroUtilityButtonText} type="defaultSemiBold">
+                    打印预览
+                  </ThemedText>
+                </Pressable>
+              </View>
               <View style={[styles.paymentProgressCard, { borderColor }]}>
                 <View style={styles.paymentProgressHeader}>
                   <ThemedText style={styles.paymentProgressLabel} type="defaultSemiBold">
@@ -2399,6 +2418,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  heroUtilityRow: {
+    justifyContent: 'flex-start',
+  },
+  heroUtilityButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#C7D7F7',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 40,
+    minWidth: 112,
+    paddingHorizontal: 16,
+  },
+  heroUtilityButtonText: {
+    color: '#1D4ED8',
+    fontSize: 14,
   },
   metaBlock: {
     backgroundColor: 'rgba(248,250,252,0.9)',

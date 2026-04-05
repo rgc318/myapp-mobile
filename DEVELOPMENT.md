@@ -5753,6 +5753,35 @@ Sales order now also supports the formal print-preview flow, but its role is dif
 - internal item code is not exposed in the formal print layout
 - order detail page keeps print preview separate from the main workflow action so it does not compete with `出货 / 开票 / 收款`
 
+## Purchase Order Print Preview (2026-04-06)
+
+Purchase order now also supports the formal print-preview flow and follows the same “confirmation document” positioning as sales order.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/_layout.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/edit/[orderName].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/preview.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/pdf-viewer.tsx`
+
+### What Changed
+
+- purchase-order detail page now exposes a standalone `打印预览` utility action
+- preview route forwards into the formal PDF viewer
+- viewer reuses the common formal-print pipeline:
+  - preview metadata
+  - PDF render
+  - system print / share actions
+
+### Presentation Rules
+
+- purchase order is treated as a confirmation / preparation document
+- nickname is allowed in the formal order print as item identity assist:
+  - `（nickname）itemName`
+- specification remains an independent column
+- internal item code is not exposed in the formal print layout
+- order detail page keeps print preview separate from the main workflow action so it does not compete with `去收货 / 去开票 / 去付款`
+
 ### Implication For Next Work
 
 - do not spend the next major frontend iteration on advanced return scenarios
