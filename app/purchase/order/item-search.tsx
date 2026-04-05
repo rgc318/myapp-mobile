@@ -59,6 +59,19 @@ function formatQty(value: number | null | undefined) {
   return String(value);
 }
 
+function getPrimaryProductLabel(item: Pick<ProductSearchItem | PurchaseOrderDraftItem, 'nickname' | 'itemName' | 'itemCode'>) {
+  return item.nickname?.trim() || item.itemName?.trim() || item.itemCode;
+}
+
+function getSecondaryProductLabel(item: Pick<ProductSearchItem | PurchaseOrderDraftItem, 'nickname' | 'itemName'>) {
+  const nickname = item.nickname?.trim();
+  const itemName = item.itemName?.trim();
+  if (!nickname || !itemName || nickname === itemName) {
+    return '';
+  }
+  return itemName;
+}
+
 function DraftSummaryRow({
   item,
   onRemove,
@@ -66,12 +79,29 @@ function DraftSummaryRow({
   item: PurchaseOrderDraftItem;
   onRemove: (id: string) => void;
 }) {
+  const primaryLabel = getPrimaryProductLabel(item);
+  const secondaryLabel = getSecondaryProductLabel(item);
+
   return (
     <View style={styles.draftRow}>
       <View style={styles.draftRowCopy}>
-        <ThemedText numberOfLines={1} style={styles.draftRowTitle} type="defaultSemiBold">
-          {item.itemName || item.itemCode}
-        </ThemedText>
+        <View style={styles.resultTitleRow}>
+          <ThemedText numberOfLines={1} style={styles.draftRowTitle} type="defaultSemiBold">
+            {primaryLabel}
+          </ThemedText>
+          {item.specification ? (
+            <View style={styles.specBadge}>
+              <ThemedText numberOfLines={1} style={styles.specBadgeText} type="defaultSemiBold">
+                {item.specification}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
+        {secondaryLabel ? (
+          <ThemedText numberOfLines={1} style={styles.resultSubtitle}>
+            {secondaryLabel}
+          </ThemedText>
+        ) : null}
         <ThemedText style={styles.draftRowMeta}>
           {item.qty} · {item.warehouse || '未指定仓库'} · {item.price || '默认采购价'}
         </ThemedText>
@@ -106,6 +136,8 @@ function ResultRow({
   const tintColor = useThemeColor({}, 'tint');
   const stockUomLabel = item.stockUom ? formatDisplayUom(item.stockUom) : '未设置';
   const totalStockQty = item.globalTotalQty ?? item.totalQty;
+  const primaryLabel = getPrimaryProductLabel(item);
+  const secondaryLabel = getSecondaryProductLabel(item);
 
   return (
     <View style={[styles.resultRow, { backgroundColor: surface, borderColor }]}>
@@ -120,9 +152,21 @@ function ResultRow({
       <View style={styles.resultMain}>
         <View style={styles.resultTitleRow}>
           <ThemedText numberOfLines={1} style={styles.resultTitle} type="defaultSemiBold">
-            {item.itemName || item.itemCode}
+            {primaryLabel}
           </ThemedText>
+          {item.specification ? (
+            <View style={styles.specBadge}>
+              <ThemedText numberOfLines={1} style={styles.specBadgeText} type="defaultSemiBold">
+                {item.specification}
+              </ThemedText>
+            </View>
+          ) : null}
         </View>
+        {secondaryLabel ? (
+          <ThemedText numberOfLines={1} style={styles.resultSubtitle}>
+            {secondaryLabel}
+          </ThemedText>
+        ) : null}
 
         <View style={styles.resultMetaRow}>
           <ThemedText numberOfLines={1} style={styles.resultMeta}>
@@ -384,6 +428,8 @@ export default function PurchaseOrderItemSearchScreen() {
       id: lineId || existing?.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       itemCode: item.itemCode,
       itemName: item.itemName || item.itemCode,
+      nickname: item.nickname ?? null,
+      specification: item.specification ?? null,
       imageUrl: item.imageUrl || existing?.imageUrl || null,
       standardBuyingRate:
         typeof item.priceSummary?.standardBuyingRate === 'number'
@@ -951,6 +997,24 @@ const styles = StyleSheet.create({
   resultTitle: {
     flex: 1,
     fontSize: 17,
+  },
+  resultSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+    marginTop: -1,
+  },
+  specBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderRadius: 999,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  specBadgeText: {
+    color: '#2563EB',
+    fontSize: 12,
   },
   resultMeta: {
     color: '#64748B',

@@ -13,6 +13,8 @@ export type PurchaseOrderEditorItem = {
   id: string;
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   qty: string;
   price: string;
   warehouse: string;
@@ -74,6 +76,8 @@ function groupPurchaseItems(items: PurchaseOrderEditorItem[]) {
     {
       itemCode: string;
       itemName: string;
+      nickname?: string | null;
+      specification?: string | null;
       rows: PurchaseOrderEditorItem[];
     }
   >();
@@ -88,6 +92,8 @@ function groupPurchaseItems(items: PurchaseOrderEditorItem[]) {
     groups.set(key, {
       itemCode: item.itemCode,
       itemName: item.itemName,
+      nickname: item.nickname ?? null,
+      specification: item.specification ?? null,
       rows: [item],
     });
   });
@@ -203,9 +209,23 @@ export function PurchaseOrderItemGroups({
                   <ThemedText style={styles.groupLabel} type="defaultSemiBold">
                     采购商品 {groupIndex + 1}
                   </ThemedText>
-                  <ThemedText style={styles.groupTitle} type="defaultSemiBold">
-                    {group.itemName || group.itemCode}
-                  </ThemedText>
+                  <View style={styles.groupTitleRow}>
+                    <ThemedText style={styles.groupTitle} type="defaultSemiBold">
+                      {group.nickname?.trim() || group.itemName || group.itemCode}
+                    </ThemedText>
+                    {group.specification ? (
+                      <View style={styles.specBadge}>
+                        <ThemedText style={styles.specBadgeText} numberOfLines={1} type="defaultSemiBold">
+                          {group.specification}
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                  </View>
+                  {group.nickname && group.itemName && group.nickname !== group.itemName ? (
+                    <ThemedText numberOfLines={1} style={styles.groupSubtitle}>
+                      {group.itemName}
+                    </ThemedText>
+                  ) : null}
                   <ThemedText style={styles.groupMeta}>编码 {group.itemCode}</ThemedText>
                   <View style={styles.groupInfoRow}>
                     {groupReferenceBuyingRate != null ? (
@@ -553,15 +573,38 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  groupTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   groupLabel: {
     color: '#2563EB',
     fontSize: 12,
   },
   groupTitle: {
+    flex: 1,
     fontSize: 17,
+  },
+  groupSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
   },
   groupMeta: {
     color: '#64748B',
+    fontSize: 12,
+  },
+  specBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderRadius: 999,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  specBadgeText: {
+    color: '#2563EB',
     fontSize: 12,
   },
   groupInfoRow: {

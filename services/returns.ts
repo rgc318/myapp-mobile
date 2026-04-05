@@ -23,6 +23,8 @@ export type ReturnSourceContextItem = {
   detailSubmitKey: string;
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   uom: string;
   warehouse: string;
   rate: number | null;
@@ -174,6 +176,18 @@ export async function fetchReturnSourceContext(
           detailSubmitKey,
           itemCode: String(item.item_code ?? ''),
           itemName: String(item.item_name ?? item.item_code ?? ''),
+          nickname:
+            typeof item.nickname === 'string'
+              ? item.nickname
+              : typeof item.custom_nickname === 'string'
+                ? item.custom_nickname
+                : null,
+          specification:
+            typeof item.specification === 'string'
+              ? item.specification
+              : typeof item.custom_specification === 'string'
+                ? item.custom_specification
+                : null,
           uom: String(item.uom ?? ''),
           warehouse: String(item.warehouse ?? ''),
           rate: toOptionalNumber(item.rate),

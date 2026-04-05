@@ -12,6 +12,8 @@ export type PurchaseOrderDraftItem = {
   id: string;
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   imageUrl?: string | null;
   standardBuyingRate?: number | null;
   qty: string;
@@ -57,6 +59,8 @@ function normalizeDraftItem(item: Partial<PurchaseOrderDraftItem>) {
     id: typeof item.id === 'string' ? item.id : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     itemCode: typeof item.itemCode === 'string' ? item.itemCode : '',
     itemName: typeof item.itemName === 'string' ? item.itemName : typeof item.itemCode === 'string' ? item.itemCode : '',
+    nickname: typeof item.nickname === 'string' ? item.nickname : null,
+    specification: typeof item.specification === 'string' ? item.specification : null,
     imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
     standardBuyingRate: normalizeOptionalNumber(item.standardBuyingRate),
     qty: typeof item.qty === 'string' ? item.qty : '1',

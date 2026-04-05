@@ -526,8 +526,16 @@ export function ReturnCreateScreen({ businessType, title, description }: ReturnC
                         <View style={styles.itemHeader}>
                           <View style={styles.itemHeaderMain}>
                             <ThemedText style={styles.itemName} type="defaultSemiBold">
-                              {item.itemName || item.itemCode}
+                              {item.nickname?.trim() || item.itemName || item.itemCode}
                             </ThemedText>
+                            {item.nickname && item.itemName && item.nickname !== item.itemName ? (
+                              <ThemedText style={styles.itemAlias}>{item.itemName}</ThemedText>
+                            ) : null}
+                            {item.specification ? (
+                              <ThemedText style={styles.itemSpec} type="defaultSemiBold">
+                                规格 {item.specification}
+                              </ThemedText>
+                            ) : null}
                             <ThemedText style={styles.itemMeta}>{`编码 ${item.itemCode || '未填'}${
                               item.warehouse ? ` · 仓库 ${item.warehouse}` : ''
                             }`}</ThemedText>
@@ -762,6 +770,14 @@ const styles = StyleSheet.create({
   },
   itemName: {
     fontSize: 17,
+  },
+  itemAlias: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  itemSpec: {
+    color: '#2563EB',
+    fontSize: 12,
   },
   itemMeta: {
     color: '#71859D',

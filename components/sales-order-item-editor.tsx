@@ -71,6 +71,8 @@ type GroupedWarehouseLine = WarehouseEntryEditorProps & {
 export type SalesOrderItemEditorProps = {
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   imageUrl?: string | null;
   lineAmountLabel: string;
   warehouse?: string | null;
@@ -292,6 +294,8 @@ function WarehouseEntryEditor({
 export function SalesOrderItemEditor({
   itemCode,
   itemName,
+  nickname,
+  specification,
   imageUrl,
   lineAmountLabel,
   warehouse,
@@ -317,6 +321,9 @@ export function SalesOrderItemEditor({
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const warningColor = useThemeColor({}, 'warning');
+  const tintColor = useThemeColor({}, 'tint');
+  const primaryLabel = nickname?.trim() || itemName || itemCode;
+  const secondaryLabel = nickname?.trim() && itemName && nickname.trim() !== itemName ? itemName : '';
 
   if (groupedLines?.length) {
     return (
@@ -331,9 +338,23 @@ export function SalesOrderItemEditor({
           )}
 
           <View style={styles.groupCopy}>
-            <ThemedText numberOfLines={1} style={styles.groupTitle} type="defaultSemiBold">
-              {itemName || itemCode}
-            </ThemedText>
+            <View style={styles.groupTitleRow}>
+              <ThemedText numberOfLines={1} style={styles.groupTitle} type="defaultSemiBold">
+                {primaryLabel}
+              </ThemedText>
+              {specification ? (
+                <View style={styles.specBadge}>
+                  <ThemedText style={[styles.specBadgeText, { color: tintColor }]} numberOfLines={1} type="defaultSemiBold">
+                    {specification}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+            {secondaryLabel ? (
+              <ThemedText numberOfLines={1} style={styles.groupSubtitle}>
+                {secondaryLabel}
+              </ThemedText>
+            ) : null}
             <ThemedText style={styles.groupMeta}>{'编码 '} {itemCode}</ThemedText>
             {groupedSummaryLabel ? (
               <ThemedText style={styles.groupSummary} type="defaultSemiBold">
@@ -439,11 +460,33 @@ const styles = StyleSheet.create({
     gap: 3,
     minWidth: 0,
   },
+  groupTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   groupTitle: {
+    flex: 1,
     fontSize: 16,
+  },
+  groupSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
   },
   groupMeta: {
     color: '#64748B',
+    fontSize: 12,
+  },
+  specBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(37,99,235,0.10)',
+    borderRadius: 999,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  specBadgeText: {
     fontSize: 12,
   },
   groupSummary: {

@@ -708,6 +708,8 @@ export default function PurchaseOrderCreateScreen() {
         id: nextId,
         itemCode: baseRow.itemCode,
         itemName: baseRow.itemName,
+        nickname: baseRow.nickname ?? null,
+        specification: baseRow.specification ?? null,
         imageUrl: baseRow.imageUrl ?? null,
         qty: '1',
         price: baseRow.price,

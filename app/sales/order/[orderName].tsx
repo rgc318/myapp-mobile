@@ -48,6 +48,8 @@ import { DateFieldInput } from '@/components/date-field-input';
 type EditableOrderItem = {
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   qty: number;
   rate: number | null;
   amount: number | null;
@@ -285,6 +287,8 @@ function mapDraftItemToEditable(item: SalesOrderDraftItem): EditableOrderItem {
   return {
     itemCode: item.itemCode,
     itemName: item.itemName,
+    nickname: item.nickname ?? null,
+    specification: item.specification ?? null,
     qty: item.qty,
     rate: item.price,
     amount: (item.price ?? 0) * item.qty,
@@ -344,6 +348,8 @@ function buildComparableItemSignature(items: {
 function groupOrderItemsByProduct<T extends {
   itemCode: string;
   itemName?: string | null;
+  nickname?: string | null;
+  specification?: string | null;
   imageUrl?: string | null;
   qty: number;
   amount?: number | null;
@@ -354,6 +360,8 @@ function groupOrderItemsByProduct<T extends {
     {
       itemCode: string;
       itemName: string;
+      nickname?: string | null;
+      specification?: string | null;
       imageUrl?: string | null;
       totalQty: number;
       totalAmount: number;
@@ -377,6 +385,8 @@ function groupOrderItemsByProduct<T extends {
     grouped.set(item.itemCode, {
       itemCode: item.itemCode,
       itemName: item.itemName || item.itemCode,
+      nickname: item.nickname ?? null,
+      specification: item.specification ?? null,
       imageUrl: item.imageUrl ?? null,
       totalQty: item.qty,
       totalAmount: lineAmount,
@@ -458,6 +468,8 @@ export default function SalesOrderDetailScreen() {
           nextDetail?.items.map((item) => ({
             itemCode: item.itemCode,
             itemName: item.itemName,
+            nickname: item.nickname ?? null,
+            specification: item.specification ?? null,
             qty: item.qty ?? 1,
             rate: item.rate,
             amount: item.amount,
@@ -596,6 +608,8 @@ export default function SalesOrderDetailScreen() {
               stockUom: productDetail?.stockUom ?? null,
               uomConversions: productDetail?.uomConversions ?? [],
               warehouseStockDetails: productDetail?.warehouseStockDetails ?? [],
+              nickname: productDetail?.nickname ?? null,
+              specification: productDetail?.specification ?? null,
               wholesaleDefaultUom: productDetail?.wholesaleDefaultUom ?? null,
               retailDefaultUom: productDetail?.retailDefaultUom ?? null,
               salesProfiles: productDetail?.salesProfiles ?? [],
@@ -649,6 +663,8 @@ export default function SalesOrderDetailScreen() {
             uomConversions: item.uomConversions?.length ? item.uomConversions : config.uomConversions ?? [],
             warehouseStockQty: matchedWarehouseStock?.qty ?? item.warehouseStockQty ?? null,
             warehouseStockUom: item.warehouseStockUom ?? config.stockUom ?? null,
+            nickname: item.nickname ?? config.nickname ?? null,
+            specification: item.specification ?? config.specification ?? null,
             wholesaleDefaultUom: item.wholesaleDefaultUom ?? config.wholesaleDefaultUom ?? null,
             retailDefaultUom: item.retailDefaultUom ?? config.retailDefaultUom ?? null,
             salesProfiles: item.salesProfiles?.length ? item.salesProfiles : config.salesProfiles ?? [],
@@ -992,6 +1008,8 @@ export default function SalesOrderDetailScreen() {
         draftKey: [item.itemCode, item.warehouse ?? ''].join('::'),
         itemCode: item.itemCode,
         itemName: item.itemName,
+        nickname: item.nickname ?? null,
+        specification: item.specification ?? null,
         imageUrl: item.imageUrl,
         qty: item.qty,
         price: item.rate,
@@ -1062,6 +1080,8 @@ export default function SalesOrderDetailScreen() {
       detail?.items.map((item) => ({
         itemCode: item.itemCode,
         itemName: item.itemName,
+        nickname: item.nickname ?? null,
+        specification: item.specification ?? null,
         qty: item.qty ?? 1,
         rate: item.rate,
         amount: item.amount,
@@ -1089,6 +1109,8 @@ export default function SalesOrderDetailScreen() {
       detail?.items.map((item) => ({
         itemCode: item.itemCode,
         itemName: item.itemName,
+        nickname: item.nickname ?? null,
+        specification: item.specification ?? null,
         qty: item.qty ?? 1,
         rate: item.rate,
         amount: item.amount,
@@ -1403,6 +1425,8 @@ export default function SalesOrderDetailScreen() {
         (sourceDetail ?? detail)?.items.map((item) => ({
           itemCode: item.itemCode,
           itemName: item.itemName,
+          nickname: item.nickname ?? null,
+          specification: item.specification ?? null,
           qty: item.qty ?? 1,
           rate: item.rate,
           amount: item.amount,
@@ -1959,6 +1983,8 @@ export default function SalesOrderDetailScreen() {
                   imageUrl={group.rows[0]?.item.imageUrl}
                   itemCode={group.itemCode}
                   itemName={group.itemName}
+                  nickname={group.nickname ?? null}
+                  specification={group.specification ?? null}
                   key={group.itemCode}
                   groupedSummaryLabel={`共 ${group.rows.length} 个仓库条目，合计 ${buildQuantityComposition(group.rows.map(({ item }) => item))}`}
                   groupedLines={group.rows.map(({ item, index }) => {

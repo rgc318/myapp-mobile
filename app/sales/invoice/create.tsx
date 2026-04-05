@@ -87,6 +87,7 @@ function groupOrderItems(items: SalesOrderDetailV2['items']) {
     {
       itemCode: string;
       itemName: string;
+      specification?: string | null;
       totalAmount: number;
       rows: SalesOrderDetailV2['items'];
     }
@@ -103,6 +104,7 @@ function groupOrderItems(items: SalesOrderDetailV2['items']) {
     grouped.set(item.itemCode, {
       itemCode: item.itemCode,
       itemName: item.itemName || item.itemCode,
+      specification: item.specification ?? null,
       totalAmount: item.amount ?? 0,
       rows: [item],
     });
@@ -929,6 +931,11 @@ function InvoiceSourceSummary({ detail }: { detail: SalesOrderDetailV2 }) {
               <ThemedText style={styles.previewItemName} type="defaultSemiBold">
                 {item.itemName}
               </ThemedText>
+              {item.specification ? (
+                <ThemedText style={styles.previewItemSpec} type="defaultSemiBold">
+                  规格 {item.specification}
+                </ThemedText>
+              ) : null}
               <ThemedText style={styles.previewItemMeta}>{`编码 ${item.itemCode}`}</ThemedText>
               <ThemedText style={styles.previewItemSummary} type="defaultSemiBold">
                 {`合计 ${buildQuantityComposition(item.rows)}`}
@@ -1446,6 +1453,10 @@ const styles = StyleSheet.create({
   previewItemName: {
     color: '#0F172A',
     fontSize: 16,
+  },
+  previewItemSpec: {
+    color: '#2563EB',
+    fontSize: 12,
   },
   previewItemMeta: {
     color: '#64748B',

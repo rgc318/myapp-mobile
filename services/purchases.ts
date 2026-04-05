@@ -156,6 +156,8 @@ export type PurchaseOrderDetail = {
     purchaseOrderItem: string;
     itemCode: string;
     itemName: string;
+    nickname?: string | null;
+    specification?: string | null;
     qty: number | null;
     receivedQty: number | null;
     rate: number | null;
@@ -187,6 +189,8 @@ export type PurchaseReceiptDetail = {
   items: {
     itemCode: string;
     itemName: string;
+    nickname?: string | null;
+    specification?: string | null;
     qty: number | null;
     rate: number | null;
     amount: number | null;
@@ -217,6 +221,8 @@ export type PurchaseInvoiceDetail = {
   items: {
     itemCode: string;
     itemName: string;
+    nickname?: string | null;
+    specification?: string | null;
     qty: number | null;
     rate: number | null;
     amount: number | null;
@@ -1152,6 +1158,18 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
                 : '',
           itemCode: typeof row.item_code === 'string' ? row.item_code : '',
           itemName: typeof row.item_name === 'string' ? row.item_name : '',
+          nickname:
+            typeof row.nickname === 'string'
+              ? row.nickname
+              : typeof row.custom_nickname === 'string'
+                ? row.custom_nickname
+                : null,
+          specification:
+            typeof row.specification === 'string'
+              ? row.specification
+              : typeof row.custom_specification === 'string'
+                ? row.custom_specification
+                : null,
           qty: toOptionalNumber(row.qty),
           receivedQty: toOptionalNumber(row.received_qty),
           rate: toOptionalNumber(row.rate),
@@ -1244,6 +1262,18 @@ export async function fetchPurchaseReceiptDetail(receiptName: string): Promise<P
         return {
           itemCode: typeof row.item_code === 'string' ? row.item_code : '',
           itemName: typeof row.item_name === 'string' ? row.item_name : '',
+          nickname:
+            typeof row.nickname === 'string'
+              ? row.nickname
+              : typeof row.custom_nickname === 'string'
+                ? row.custom_nickname
+                : null,
+          specification:
+            typeof row.specification === 'string'
+              ? row.specification
+              : typeof row.custom_specification === 'string'
+                ? row.custom_specification
+                : null,
           qty: toOptionalNumber(row.qty),
           rate: toOptionalNumber(row.rate),
           amount: toOptionalNumber(row.amount),
@@ -1322,6 +1352,18 @@ export async function fetchPurchaseInvoiceDetail(invoiceName: string): Promise<P
         return {
           itemCode: typeof row.item_code === 'string' ? row.item_code : '',
           itemName: typeof row.item_name === 'string' ? row.item_name : '',
+          nickname:
+            typeof row.nickname === 'string'
+              ? row.nickname
+              : typeof row.custom_nickname === 'string'
+                ? row.custom_nickname
+                : null,
+          specification:
+            typeof row.specification === 'string'
+              ? row.specification
+              : typeof row.custom_specification === 'string'
+                ? row.custom_specification
+                : null,
           qty: toOptionalNumber(row.qty),
           rate: toOptionalNumber(row.rate),
           amount: toOptionalNumber(row.amount),

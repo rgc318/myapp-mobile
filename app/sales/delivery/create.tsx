@@ -61,6 +61,8 @@ function buildDeliveryErrorMessage(message: string) {
 function groupItemsByProduct<T extends {
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   imageUrl?: string | null;
   qty: number | null;
   amount: number | null;
@@ -73,6 +75,8 @@ function groupItemsByProduct<T extends {
     {
       itemCode: string;
       itemName: string;
+      nickname?: string | null;
+      specification?: string | null;
       imageUrl?: string | null;
       totalAmount: number;
       rows: T[];
@@ -90,6 +94,8 @@ function groupItemsByProduct<T extends {
     grouped.set(item.itemCode, {
       itemCode: item.itemCode,
       itemName: item.itemName || item.itemCode,
+      nickname: item.nickname ?? null,
+      specification: item.specification ?? null,
       imageUrl: item.imageUrl ?? null,
       totalAmount: item.amount ?? 0,
       rows: [item],
@@ -133,8 +139,16 @@ function GroupedDeliveryItems({
                     </ThemedText>
                   </View>
                   <ThemedText style={styles.deliveryGroupTitle} type="defaultSemiBold">
-                    {group.itemName}
+                    {group.nickname?.trim() || group.itemName}
                   </ThemedText>
+                  {group.nickname && group.itemName && group.nickname !== group.itemName ? (
+                    <ThemedText style={styles.deliveryGroupAlias}>{group.itemName}</ThemedText>
+                  ) : null}
+                  {group.specification ? (
+                    <ThemedText style={styles.deliveryGroupSpec} type="defaultSemiBold">
+                      规格 {group.specification}
+                    </ThemedText>
+                  ) : null}
                 </View>
                 <View style={styles.deliveryGroupAmountBlock}>
                   <ThemedText style={styles.deliveryGroupAmountLabel} type="defaultSemiBold">
@@ -1248,6 +1262,16 @@ const styles = StyleSheet.create({
   deliveryGroupMeta: {
     color: '#64748B',
     fontSize: 14,
+  },
+  deliveryGroupAlias: {
+    color: '#64748B',
+    fontSize: 13,
+    marginTop: -2,
+  },
+  deliveryGroupSpec: {
+    color: '#2563EB',
+    fontSize: 13,
+    marginTop: -4,
   },
   deliveryGroupSummary: {
     color: '#2563EB',

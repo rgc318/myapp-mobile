@@ -44,17 +44,34 @@ function ProductCard({ item, onOpen }: { item: ProductListItem; onOpen: (code: s
   const shortCode = item.itemCode.length > 22 ? `${item.itemCode.slice(0, 22)}...` : item.itemCode;
   const stockUnit = formatDisplayUom(item.stockUom);
   const warehouseCount = item.warehouseStockDetails.length || 0;
+  const primaryTitle = item.itemName || item.itemCode;
+  const nicknameText = item.nickname?.trim() || '';
+  const specificationText = item.specification?.trim() || '';
 
   return (
     <Pressable onPress={() => onOpen(item.itemCode)} style={[styles.card, { backgroundColor: surface, borderColor }]}>
       <View style={styles.cardHeader}>
         <View style={styles.cardTitleWrap}>
           <ThemedText numberOfLines={2} style={styles.cardTitle} type="defaultSemiBold">
-            {item.itemName || item.itemCode}
+            {primaryTitle}
           </ThemedText>
-          {item.specification ? (
-            <ThemedText numberOfLines={1} style={styles.cardMeta}>
-              规格: {item.specification}
+          {nicknameText || specificationText ? (
+            <ThemedText numberOfLines={1} style={styles.cardSubtitle}>
+              {nicknameText ? (
+                <ThemedText style={styles.cardNicknameText} type="default">
+                  昵称 {nicknameText}
+                </ThemedText>
+              ) : null}
+              {nicknameText && specificationText ? (
+                <ThemedText style={styles.cardSubtitleDivider} type="default">
+                  {' · '}
+                </ThemedText>
+              ) : null}
+              {specificationText ? (
+                <ThemedText style={styles.cardSpecificationText} type="defaultSemiBold">
+                  规格 {specificationText}
+                </ThemedText>
+              ) : null}
             </ThemedText>
           ) : null}
           <ThemedText numberOfLines={1} style={styles.cardMeta}>
@@ -493,10 +510,24 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
     minWidth: 0,
+    paddingRight: 8,
   },
   cardTitle: {
     fontSize: 24,
     lineHeight: 30,
+  },
+  cardSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  cardNicknameText: {
+    color: '#526277',
+  },
+  cardSubtitleDivider: {
+    color: '#94A3B8',
+  },
+  cardSpecificationText: {
+    color: '#315EAF',
   },
   cardMeta: {
     color: '#64748B',
@@ -504,6 +535,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   statusChip: {
+    flexShrink: 0,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,

@@ -42,6 +42,8 @@ type EditablePurchaseOrderItem = {
   id: string;
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   qty: string;
   price: string;
   warehouse: string;
@@ -389,6 +391,8 @@ function buildEditableItemsFromDetail(detail: PurchaseOrderDetail | null) {
     id: `${item.purchaseOrderItem || item.itemCode}-${index}`,
     itemCode: item.itemCode,
     itemName: item.itemName || item.itemCode,
+    nickname: item.nickname ?? null,
+    specification: item.specification ?? null,
     qty: typeof item.qty === 'number' ? String(item.qty) : '',
     price: typeof item.rate === 'number' ? String(item.rate) : '',
     warehouse: item.warehouse || '',
@@ -511,6 +515,8 @@ export default function PurchaseOrderEditScreen() {
                 id: item.id,
                 itemCode: item.itemCode,
                 itemName: item.itemName || item.itemCode,
+                nickname: item.nickname ?? null,
+                specification: item.specification ?? null,
                 qty: item.qty,
                 price: item.price,
                 warehouse: item.warehouse || '',
@@ -642,6 +648,8 @@ export default function PurchaseOrderEditScreen() {
         id: item.id,
         itemCode: item.itemCode,
         itemName: item.itemName,
+        nickname: item.nickname ?? null,
+        specification: item.specification ?? null,
         imageUrl: item.imageUrl || null,
         qty: item.qty,
         price: item.price,
@@ -792,6 +800,8 @@ export default function PurchaseOrderEditScreen() {
             allUoms: item.allUoms?.length ? item.allUoms : product.allUoms,
             uomConversions: item.uomConversions?.length ? item.uomConversions : product.uomConversions,
             warehouseStockDetails: item.warehouseStockDetails?.length ? item.warehouseStockDetails : product.warehouseStockDetails,
+            nickname: item.nickname ?? product.nickname ?? null,
+            specification: item.specification ?? product.specification ?? null,
           };
         }),
       );

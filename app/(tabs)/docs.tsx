@@ -886,6 +886,11 @@ function ProductBubbleChartSection({
                     {formatMoney(row.amount)}
                   </ThemedText>
                 </View>
+                {row.specification ? (
+                  <ThemedText numberOfLines={1} style={styles.productBarSpec} type="defaultSemiBold">
+                    规格 {row.specification}
+                  </ThemedText>
+                ) : null}
                 <View style={styles.productBarTrack}>
                   <View
                     style={[
@@ -3340,6 +3345,11 @@ const styles = StyleSheet.create({
   },
   productBarAmount: {
     fontSize: 14,
+  },
+  productBarSpec: {
+    color: '#2563EB',
+    fontSize: 12,
+    marginTop: -2,
   },
   productBarTrack: {
     backgroundColor: '#E2E8F0',

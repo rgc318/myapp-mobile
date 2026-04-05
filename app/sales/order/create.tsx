@@ -111,6 +111,8 @@ function groupDraftItemsByProduct(items: SalesOrderDraftItem[]) {
     {
       itemCode: string;
       itemName: string;
+      nickname?: string | null;
+      specification?: string | null;
       totalQty: number;
       totalAmount: number;
       rows: SalesOrderDraftItem[];
@@ -129,6 +131,8 @@ function groupDraftItemsByProduct(items: SalesOrderDraftItem[]) {
     grouped.set(item.itemCode, {
       itemCode: item.itemCode,
       itemName: item.itemName || item.itemCode,
+      nickname: item.nickname ?? null,
+      specification: item.specification ?? null,
       totalQty: item.qty,
       totalAmount: (item.price ?? 0) * item.qty,
       rows: [item],
@@ -1099,6 +1103,8 @@ export default function SalesOrderCreateScreen() {
                     imageUrl={group.rows[0]?.imageUrl}
                     itemCode={group.itemCode}
                     itemName={group.itemName}
+                    nickname={group.nickname ?? null}
+                    specification={group.specification ?? null}
                     key={group.itemCode}
                     groupedSummaryLabel={`共 ${group.rows.length} 个仓库条目，合计 ${buildQuantityComposition(group.rows)}`}
                     groupedLines={group.rows.map((item) => {

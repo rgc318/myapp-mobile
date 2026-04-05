@@ -30,6 +30,22 @@ function formatFactor(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
 }
 
+function normalizeComparableText(value: string | null | undefined) {
+  return (value ?? '').trim();
+}
+
+function areOptionalNumbersEqual(left: number | null | undefined, right: number | null | undefined) {
+  if (left == null && right == null) {
+    return true;
+  }
+
+  if (left == null || right == null) {
+    return false;
+  }
+
+  return Math.abs(left - right) < 0.000001;
+}
+
 function formatQty(value: number | null | undefined) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '0';
@@ -516,22 +532,12 @@ export default function ProductDetailScreen() {
     }
 
     const trimmedWarehouse = selectedWarehouse.trim();
-    if (!trimmedWarehouse) {
-      setWarehouseError('请先选择一个要调整库存的仓库。');
-      return;
-    }
 
     try {
       setIsSaving(true);
       setWarehouseError('');
       setItemGroupError('');
       setBrandError('');
-
-      const warehouseExists = await checkLinkOptionExists('Warehouse', trimmedWarehouse);
-      if (!warehouseExists) {
-        setWarehouseError('仓库不存在，请从候选项中选择有效仓库。');
-        return;
-      }
 
       const trimmedItemGroup = draftItemGroup.trim();
       if (trimmedItemGroup) {
@@ -551,73 +557,199 @@ export default function ProductDetailScreen() {
         }
       }
 
+      const trimmedName = draftName.trim() || detail.itemName;
+      const trimmedNickname = draftNickname.trim();
+      const trimmedSpecification = draftSpecification.trim();
+      const trimmedDescription = draftDescription.trim();
+      const trimmedImageUrl = draftImageUrl.trim();
       const trimmedRetailUom = draftRetailDefaultUom.trim();
-      if (!trimmedRetailUom) {
-        throw new Error('请先选择零售成交单位。');
-      }
-
+      const trimmedWholesaleUom = draftWholesaleDefaultUom.trim();
       const trimmedStockUom = draftStockUom.trim();
-      if (!trimmedStockUom) {
-        throw new Error('请先选择库存基准单位。');
-      }
-
+      const trimmedWarehouseStockUom = draftWarehouseStockUom.trim() || trimmedStockUom;
+      const standardRateValue = toNumberOrNull(draftStandardRate);
+      const wholesaleRateValue = toNumberOrNull(draftWholesaleRate);
+      const retailRateValue = toNumberOrNull(draftRetailRate);
+      const buyingRateValue = toNumberOrNull(draftBuyingRate);
       const wholesaleFactor = toNumberOrNull(draftWholesaleConversionFactor);
-      if (wholesaleNeedsFactor && (wholesaleFactor == null || wholesaleFactor <= 0)) {
-        throw new Error('请填写有效的批发单位换算系数。');
-      }
-
       const retailFactor = toNumberOrNull(draftRetailConversionFactor);
-      if (retailNeedsFactor && (retailFactor == null || retailFactor <= 0)) {
-        throw new Error('请填写有效的零售单位换算系数。');
+      const conversionMap = new Map(detail.uomConversions.map((row) => [row.uom, row.conversionFactor]));
+      const currentWholesaleFactor =
+        detail.wholesaleDefaultUom && detail.wholesaleDefaultUom === detail.stockUom
+          ? 1
+          : (conversionMap.get(detail.wholesaleDefaultUom || '') ?? null);
+      const currentRetailFactor =
+        detail.retailDefaultUom && detail.retailDefaultUom === detail.stockUom
+          ? 1
+          : (conversionMap.get(detail.retailDefaultUom || '') ?? null);
+
+      const baseInfoChanged =
+        normalizeComparableText(trimmedName) !== normalizeComparableText(detail.itemName) ||
+        normalizeComparableText(trimmedItemGroup) !== normalizeComparableText(detail.itemGroup) ||
+        normalizeComparableText(trimmedBrand) !== normalizeComparableText(detail.brand) ||
+        normalizeComparableText(draftBarcode) !== normalizeComparableText(detail.barcode) ||
+        normalizeComparableText(trimmedNickname) !== normalizeComparableText(detail.nickname) ||
+        normalizeComparableText(trimmedSpecification) !== normalizeComparableText(detail.specification) ||
+        normalizeComparableText(trimmedDescription) !== normalizeComparableText(detail.description) ||
+        normalizeComparableText(trimmedImageUrl) !== normalizeComparableText(detail.imageUrl);
+
+      const standardRateChanged = !areOptionalNumbersEqual(
+        standardRateValue,
+        detail.priceSummary?.standardSellingRate ?? null,
+      );
+      const wholesaleRateChanged = !areOptionalNumbersEqual(
+        wholesaleRateValue,
+        detail.priceSummary?.wholesaleRate ?? null,
+      );
+      const retailRateChanged = !areOptionalNumbersEqual(
+        retailRateValue,
+        detail.priceSummary?.retailRate ?? null,
+      );
+      const buyingRateChanged = !areOptionalNumbersEqual(
+        buyingRateValue,
+        detail.priceSummary?.standardBuyingRate ?? null,
+      );
+
+      const stockUomChanged =
+        normalizeComparableText(trimmedStockUom) !== normalizeComparableText(detail.stockUom);
+      const wholesaleUomChanged =
+        normalizeComparableText(trimmedWholesaleUom) !== normalizeComparableText(detail.wholesaleDefaultUom);
+      const retailUomChanged =
+        normalizeComparableText(trimmedRetailUom) !== normalizeComparableText(detail.retailDefaultUom);
+      const wholesaleFactorChanged =
+        normalizeComparableText(draftWholesaleConversionFactor) !== normalizeComparableText(formatFactor(currentWholesaleFactor));
+      const retailFactorChanged =
+        normalizeComparableText(draftRetailConversionFactor) !== normalizeComparableText(formatFactor(currentRetailFactor));
+
+      const wholesaleConfigTouched =
+        wholesaleRateChanged ||
+        wholesaleUomChanged ||
+        wholesaleFactorChanged ||
+        (stockUomChanged && Boolean(trimmedWholesaleUom || detail.wholesaleDefaultUom));
+      const retailConfigTouched =
+        retailRateChanged ||
+        retailUomChanged ||
+        retailFactorChanged ||
+        (stockUomChanged && Boolean(trimmedRetailUom || detail.retailDefaultUom));
+
+      const salesConfigChanged =
+        stockUomChanged ||
+        wholesaleUomChanged ||
+        retailUomChanged ||
+        wholesaleFactorChanged ||
+        retailFactorChanged;
+
+      const warehouseStockQtyValue = toNumberOrNull(draftWarehouseStockQty);
+      const inventoryQtyChanged = !areOptionalNumbersEqual(warehouseStockQtyValue, selectedWarehouseQty);
+      const inventoryUomChanged =
+        normalizeComparableText(trimmedWarehouseStockUom) !== normalizeComparableText(currentDisplayStockUom);
+      const inventoryChanged = inventoryQtyChanged || (warehouseStockQtyValue != null && inventoryUomChanged);
+
+      if (!baseInfoChanged && !standardRateChanged && !wholesaleRateChanged && !retailRateChanged && !buyingRateChanged && !salesConfigChanged && !inventoryChanged) {
+        showSuccess('没有检测到需要保存的修改');
+        setIsEditing(false);
+        return;
       }
 
-      const uomConversions = [
-        { uom: trimmedStockUom, conversionFactor: 1 },
-        ...(wholesaleUomDisplay
-          ? [
-              {
-                uom: wholesaleUomDisplay,
-                conversionFactor: wholesaleUomDisplay === trimmedStockUom ? 1 : (wholesaleFactor as number),
-              },
-            ]
-          : []),
-        ...(retailUomDisplay
-          ? [
-              {
-                uom: retailUomDisplay,
-                conversionFactor:
-                  retailUomDisplay === trimmedStockUom
-                    ? 1
-                    : stockSyncMode === 'wholesale'
-                      ? 1 / (retailFactor as number)
-                      : (retailFactor as number),
-              },
-            ]
-          : []),
-      ].filter((entry, index, array) => array.findIndex((row) => row.uom === entry.uom) === index);
+      if ((salesConfigChanged || inventoryChanged) && !trimmedStockUom) {
+        throw new Error('你正在修改单位或库存配置，请先选择库存基准单位。');
+      }
 
-      const saved = await saveProductBasicInfo({
+      if (retailConfigTouched && !trimmedRetailUom) {
+        throw new Error('你正在修改零售规则，请先选择零售成交单位。');
+      }
+
+      if (wholesaleConfigTouched && !trimmedWholesaleUom) {
+        throw new Error('你正在修改批发规则，请先选择批发成交单位。');
+      }
+
+      if (wholesaleConfigTouched && wholesaleNeedsFactor && (wholesaleFactor == null || wholesaleFactor <= 0)) {
+        throw new Error('你正在修改批发规则，请填写有效的批发单位换算系数。');
+      }
+
+      if (retailConfigTouched && retailNeedsFactor && (retailFactor == null || retailFactor <= 0)) {
+        throw new Error('你正在修改零售规则，请填写有效的零售单位换算系数。');
+      }
+
+      if (inventoryChanged) {
+        if (!trimmedWarehouse) {
+          setWarehouseError('你正在调整库存，请先选择一个要调整库存的仓库。');
+          return;
+        }
+
+        const warehouseExists = await checkLinkOptionExists('Warehouse', trimmedWarehouse);
+        if (!warehouseExists) {
+          setWarehouseError('仓库不存在，请从候选项中选择有效仓库。');
+          return;
+        }
+      }
+
+      const payload: Parameters<typeof saveProductBasicInfo>[0] = {
         itemCode: detail.itemCode,
-        itemName: draftName.trim() || detail.itemName,
-        itemGroup: trimmedItemGroup || undefined,
-        brand: trimmedBrand || undefined,
-        barcode: draftBarcode.trim() || undefined,
-        stockUom: trimmedStockUom,
-        uomConversions,
-        nickname: draftNickname.trim() || undefined,
-        specification: draftSpecification.trim() || undefined,
-        description: draftDescription.trim() || undefined,
-        imageUrl: draftImageUrl.trim() || undefined,
-        standardRate: toNumberOrNull(draftStandardRate),
-        wholesaleRate: toNumberOrNull(draftWholesaleRate),
-        retailRate: toNumberOrNull(draftRetailRate),
-        standardBuyingRate: toNumberOrNull(draftBuyingRate),
-        wholesaleDefaultUom: draftWholesaleDefaultUom.trim() || undefined,
-        retailDefaultUom: draftRetailDefaultUom.trim() || undefined,
-        warehouse: trimmedWarehouse,
-        warehouseStockQty: toNumberOrNull(draftWarehouseStockQty),
-        warehouseStockUom: draftWarehouseStockUom.trim() || trimmedStockUom,
-      });
+      };
+
+      if (baseInfoChanged) {
+        payload.itemName = trimmedName;
+        payload.itemGroup = trimmedItemGroup || undefined;
+        payload.brand = trimmedBrand || undefined;
+        payload.barcode = draftBarcode.trim() || undefined;
+        payload.nickname = trimmedNickname || undefined;
+        payload.specification = trimmedSpecification || undefined;
+        payload.description = trimmedDescription || undefined;
+        payload.imageUrl = trimmedImageUrl || undefined;
+      }
+
+      if (standardRateChanged) {
+        payload.standardRate = standardRateValue;
+      }
+      if (wholesaleRateChanged) {
+        payload.wholesaleRate = wholesaleRateValue;
+      }
+      if (retailRateChanged) {
+        payload.retailRate = retailRateValue;
+      }
+      if (buyingRateChanged) {
+        payload.standardBuyingRate = buyingRateValue;
+      }
+
+      if (salesConfigChanged) {
+        const uomConversions = [
+          { uom: trimmedStockUom, conversionFactor: 1 },
+          ...(trimmedWholesaleUom
+            ? [
+                {
+                  uom: trimmedWholesaleUom,
+                  conversionFactor: trimmedWholesaleUom === trimmedStockUom ? 1 : (wholesaleFactor as number),
+                },
+              ]
+            : []),
+          ...(trimmedRetailUom
+            ? [
+                {
+                  uom: trimmedRetailUom,
+                  conversionFactor:
+                    trimmedRetailUom === trimmedStockUom
+                      ? 1
+                      : stockSyncMode === 'wholesale'
+                        ? 1 / (retailFactor as number)
+                        : (retailFactor as number),
+                },
+              ]
+            : []),
+        ].filter((entry, index, array) => array.findIndex((row) => row.uom === entry.uom) === index);
+
+        payload.stockUom = trimmedStockUom;
+        payload.uomConversions = uomConversions;
+        payload.wholesaleDefaultUom = trimmedWholesaleUom || undefined;
+        payload.retailDefaultUom = trimmedRetailUom || undefined;
+      }
+
+      if (inventoryChanged) {
+        payload.warehouse = trimmedWarehouse;
+        payload.warehouseStockQty = warehouseStockQtyValue;
+        payload.warehouseStockUom = trimmedWarehouseStockUom || trimmedStockUom;
+      }
+
+      const saved = await saveProductBasicInfo(payload);
 
       if (!saved) {
         throw new Error('商品更新失败');

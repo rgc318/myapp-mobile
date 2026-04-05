@@ -9,6 +9,8 @@ export type SalesOrderDraftItem = {
   draftKey: string;
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   imageUrl?: string | null;
   qty: number;
   price: number | null;
@@ -62,6 +64,8 @@ function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
     draftKey: canonicalDraftKey,
     itemCode,
     itemName: typeof item.itemName === 'string' ? item.itemName : itemCode,
+    nickname: typeof item.nickname === 'string' ? item.nickname : null,
+    specification: typeof item.specification === 'string' ? item.specification : null,
     imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
     qty: typeof item.qty === 'number' && Number.isFinite(item.qty) ? item.qty : 1,
     price: typeof item.price === 'number' && Number.isFinite(item.price) ? item.price : null,
@@ -278,6 +282,8 @@ export function addItemToSalesOrderDraft(
     draftKey,
     itemCode: item.itemCode,
     itemName: item.itemName,
+    nickname: item.nickname ?? null,
+    specification: item.specification ?? null,
     imageUrl: item.imageUrl ?? null,
     qty: 1,
     price: defaults.price,

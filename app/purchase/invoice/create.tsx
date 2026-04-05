@@ -26,6 +26,8 @@ import {
 type InvoiceItemLine = {
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   qty: number | null;
   rate: number | null;
   amount: number | null;
@@ -37,6 +39,8 @@ type InvoiceItemGroup = {
   key: string;
   itemCode: string;
   itemName: string;
+  nickname?: string | null;
+  specification?: string | null;
   uom: string;
   totalQty: number;
   totalAmount: number;
@@ -107,6 +111,8 @@ function groupInvoiceItems(items: InvoiceItemLine[]) {
           key: groupKey,
           itemCode: item.itemCode || '未编码',
           itemName: item.itemName || item.itemCode || '未命名商品',
+          nickname: item.nickname ?? null,
+          specification: item.specification ?? null,
           uom: item.uom || '',
           totalQty: qtyValue,
           totalAmount: amountValue,
@@ -588,8 +594,16 @@ export default function PurchaseInvoiceCreateScreen() {
                       <View style={styles.compactGroupHeader}>
                         <View style={styles.compactGroupTitleWrap}>
                           <ThemedText style={styles.compactGroupTitle} type="defaultSemiBold">
-                            {group.itemName}
+                            {group.nickname?.trim() || group.itemName}
                           </ThemedText>
+                          {group.nickname && group.itemName && group.nickname !== group.itemName ? (
+                            <ThemedText style={styles.itemAlias}>{group.itemName}</ThemedText>
+                          ) : null}
+                          {group.specification ? (
+                            <ThemedText style={styles.itemSpec} type="defaultSemiBold">
+                              规格 {group.specification}
+                            </ThemedText>
+                          ) : null}
                           <ThemedText style={styles.itemMeta}>
                             编码 {group.itemCode}
                             {group.lines.length > 1 ? ` · ${group.lines.length} 条仓库行` : ''}
@@ -719,8 +733,16 @@ export default function PurchaseInvoiceCreateScreen() {
                       <View style={styles.compactGroupHeader}>
                         <View style={styles.compactGroupTitleWrap}>
                           <ThemedText style={styles.compactGroupTitle} type="defaultSemiBold">
-                            {group.itemName}
+                            {group.nickname?.trim() || group.itemName}
                           </ThemedText>
+                          {group.nickname && group.itemName && group.nickname !== group.itemName ? (
+                            <ThemedText style={styles.itemAlias}>{group.itemName}</ThemedText>
+                          ) : null}
+                          {group.specification ? (
+                            <ThemedText style={styles.itemSpec} type="defaultSemiBold">
+                              规格 {group.specification}
+                            </ThemedText>
+                          ) : null}
                           <ThemedText style={styles.itemMeta}>
                             编码 {group.itemCode}
                             {group.lines.length > 1 ? ` · ${group.lines.length} 条仓库行` : ''}
@@ -1008,6 +1030,14 @@ const styles = StyleSheet.create({
   compactGroupTitle: {
     fontSize: 17,
     lineHeight: 23,
+  },
+  itemAlias: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  itemSpec: {
+    color: '#2563EB',
+    fontSize: 12,
   },
   compactAmountWrap: {
     alignItems: 'flex-end',

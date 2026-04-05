@@ -76,6 +76,7 @@ export type BusinessTrendRow = {
 export type BusinessProductSummaryRow = {
   itemKey: string;
   itemName: string;
+  specification?: string | null;
   qty: number;
   amount: number;
 };
@@ -207,6 +208,12 @@ function mapProductSummaryRow(entry: unknown): BusinessProductSummaryRow | null 
   return {
     itemKey,
     itemName: typeof row.item_name === 'string' && row.item_name ? row.item_name : itemKey,
+    specification:
+      typeof row.specification === 'string'
+        ? row.specification
+        : typeof row.custom_specification === 'string'
+          ? row.custom_specification
+          : null,
     qty: toNumber(row.qty),
     amount: toNumber(row.amount),
   };

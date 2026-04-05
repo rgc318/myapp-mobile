@@ -71,6 +71,8 @@ export type SalesOrderDetailV2 = {
   items: {
     itemCode: string;
     itemName: string;
+    nickname?: string | null;
+    specification?: string | null;
     qty: number | null;
     rate: number | null;
     amount: number | null;
@@ -143,6 +145,8 @@ export type DeliveryNoteDetailV2 = {
   items: {
     itemCode: string;
     itemName: string;
+    nickname?: string | null;
+    specification?: string | null;
     qty: number | null;
     rate: number | null;
     amount: number | null;
@@ -179,6 +183,8 @@ export type SalesInvoiceDetailV2 = {
   items: {
     itemCode: string;
     itemName: string;
+    nickname?: string | null;
+    specification?: string | null;
     qty: number | null;
     rate: number | null;
     amount: number | null;
@@ -434,6 +440,18 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),
+      nickname:
+        typeof item.nickname === 'string'
+          ? item.nickname
+          : typeof item.custom_nickname === 'string'
+            ? item.custom_nickname
+            : null,
+      specification:
+        typeof item.specification === 'string'
+          ? item.specification
+          : typeof item.custom_specification === 'string'
+            ? item.custom_specification
+            : null,
       qty:
         typeof item.qty === 'number' ? item.qty : item.qty ? Number(item.qty) || null : null,
       rate:
@@ -633,6 +651,18 @@ export async function getDeliveryNoteDetailV2(
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),
+      nickname:
+        typeof item.nickname === 'string'
+          ? item.nickname
+          : typeof item.custom_nickname === 'string'
+            ? item.custom_nickname
+            : null,
+      specification:
+        typeof item.specification === 'string'
+          ? item.specification
+          : typeof item.custom_specification === 'string'
+            ? item.custom_specification
+            : null,
       qty: toOptionalNumber(item.qty),
       rate: toOptionalNumber(item.rate),
       amount: toOptionalNumber(item.amount),
@@ -698,6 +728,18 @@ export async function getSalesInvoiceDetailV2(
     items: items.map((item: Record<string, unknown>) => ({
       itemCode: String(item.item_code ?? ''),
       itemName: String(item.item_name ?? item.item_code ?? ''),
+      nickname:
+        typeof item.nickname === 'string'
+          ? item.nickname
+          : typeof item.custom_nickname === 'string'
+            ? item.custom_nickname
+            : null,
+      specification:
+        typeof item.specification === 'string'
+          ? item.specification
+          : typeof item.custom_specification === 'string'
+            ? item.custom_specification
+            : null,
       qty: toOptionalNumber(item.qty),
       rate: toOptionalNumber(item.rate),
       amount: toOptionalNumber(item.amount),

@@ -25,6 +25,7 @@ function groupInvoiceItems(
     {
       itemCode: string;
       itemName: string;
+      specification?: string | null;
       totalAmount: number;
       rows: SalesInvoiceDetailV2['items'];
     }
@@ -41,6 +42,7 @@ function groupInvoiceItems(
     grouped.set(item.itemCode, {
       itemCode: item.itemCode,
       itemName: item.itemName,
+      specification: item.specification ?? null,
       totalAmount: item.amount ?? 0,
       rows: [item],
     });
@@ -156,6 +158,11 @@ export function SalesInvoiceSheet({ detail }: { detail: SalesInvoiceDetailV2 }) 
             <ThemedText style={styles.itemName} type="defaultSemiBold">
               {item.itemName}
             </ThemedText>
+            {item.specification ? (
+              <ThemedText style={styles.itemSpec} type="defaultSemiBold">
+                规格 {item.specification}
+              </ThemedText>
+            ) : null}
             <ThemedText style={styles.itemMeta}>{item.itemCode}</ThemedText>
             {item.rows.length > 1 ? (
               <ThemedText style={styles.itemSummary} type="defaultSemiBold">
@@ -326,6 +333,10 @@ const styles = StyleSheet.create({
   itemName: {
     color: '#0F172A',
     fontSize: 14,
+  },
+  itemSpec: {
+    color: '#2563EB',
+    fontSize: 12,
   },
   itemMeta: {
     color: '#64748B',

@@ -68,6 +68,8 @@ function groupDraftItemsByProduct(draftItems: SalesOrderDraftItem[]) {
     {
       itemCode: string;
       itemName: string;
+      nickname?: string | null;
+      specification?: string | null;
       imageUrl?: string | null;
       totalQty: number;
       totalAmount: number;
@@ -87,6 +89,8 @@ function groupDraftItemsByProduct(draftItems: SalesOrderDraftItem[]) {
     grouped.set(item.itemCode, {
       itemCode: item.itemCode,
       itemName: item.itemName || item.itemCode,
+      nickname: item.nickname ?? null,
+      specification: item.specification ?? null,
       imageUrl: item.imageUrl ?? null,
       totalQty: item.qty,
       totalAmount: (item.price ?? 0) * item.qty,
@@ -130,6 +134,19 @@ function formatWarehouseStockLabel(item: ProductSearchItem, warehouse: string | 
   return `${qty} ${uom ? formatDisplayUom(uom) : ''}`.trim();
 }
 
+function getPrimaryProductLabel(item: Pick<ProductSearchItem, 'nickname' | 'itemName' | 'itemCode'>) {
+  return item.nickname?.trim() || item.itemName?.trim() || item.itemCode;
+}
+
+function getSecondaryProductLabel(item: Pick<ProductSearchItem, 'nickname' | 'itemName'>) {
+  const nickname = item.nickname?.trim();
+  const itemName = item.itemName?.trim();
+  if (!nickname || !itemName || nickname === itemName) {
+    return '';
+  }
+  return itemName;
+}
+
 function ResultRow({
   item,
   selectedQty,
@@ -155,6 +172,8 @@ function ResultRow({
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const primaryLabel = getPrimaryProductLabel(item);
+  const secondaryLabel = getSecondaryProductLabel(item);
   const selectedWarehouseName = selectedWarehouse || item.warehouse || '未指定仓库';
   const selectedWarehouseStockText = formatWarehouseStockLabel(item, selectedWarehouse || item.warehouse);
   const showTotalSelectedHint = totalSelectedQty > 0 && totalSelectedQty !== selectedQty;
@@ -174,9 +193,21 @@ function ResultRow({
           <View style={styles.resultIdentity}>
             <View style={styles.resultTitleRow}>
               <ThemedText numberOfLines={1} style={styles.resultTitle} type="defaultSemiBold">
-                {item.itemName || item.itemCode}
+                {primaryLabel}
               </ThemedText>
+              {item.specification ? (
+                <View style={[styles.badge, { backgroundColor: surfaceMuted }]}>
+                  <ThemedText numberOfLines={1} style={[styles.badgeText, { color: tintColor }]} type="defaultSemiBold">
+                    {item.specification}
+                  </ThemedText>
+                </View>
+              ) : null}
             </View>
+            {secondaryLabel ? (
+              <ThemedText numberOfLines={1} style={styles.resultNicknameSubline}>
+                {secondaryLabel}
+              </ThemedText>
+            ) : null}
 
             <ThemedText numberOfLines={1} style={styles.resultWarehouseHeadline} type="defaultSemiBold">
               当前仓库 {selectedWarehouseName}
@@ -386,12 +417,24 @@ function DraftProductGroup({
         <View style={styles.draftGroupMain}>
           <View style={styles.draftItemTitleRow}>
             <ThemedText numberOfLines={1} style={styles.draftItemTitle} type="defaultSemiBold">
-              {group.itemName}
+              {group.nickname?.trim() || group.itemName}
             </ThemedText>
+            {group.specification ? (
+              <View style={[styles.badge, { backgroundColor: surfaceMuted }]}>
+                <ThemedText numberOfLines={1} style={[styles.badgeText, { color: tintColor }]} type="defaultSemiBold">
+                  {group.specification}
+                </ThemedText>
+              </View>
+            ) : null}
             <ThemedText style={styles.draftItemPrice} type="defaultSemiBold">
               ¥ {group.totalAmount.toFixed(2)}
             </ThemedText>
           </View>
+          {group.nickname && group.itemName && group.nickname !== group.itemName ? (
+            <ThemedText numberOfLines={1} style={styles.resultNicknameSubline}>
+              {group.itemName}
+            </ThemedText>
+          ) : null}
           <View style={styles.draftItemMetaRow}>
             <ThemedText numberOfLines={1} style={styles.draftItemMeta}>
               编码 {group.itemCode}
@@ -683,6 +726,8 @@ export default function ProductSearchScreen() {
       {
         itemCode: item.itemCode,
         itemName: item.itemName,
+        nickname: item.nickname ?? null,
+        specification: item.specification ?? null,
         imageUrl: item.imageUrl ?? null,
         price: item.price,
         stockQty: null,
@@ -1394,6 +1439,11 @@ const styles = StyleSheet.create({
   resultWarehouseHeadline: {
     color: '#0F172A',
     fontSize: 15,
+  },
+  resultNicknameSubline: {
+    color: '#64748B',
+    fontSize: 12,
+    marginTop: -1,
   },
   badge: {
     borderRadius: 999,
