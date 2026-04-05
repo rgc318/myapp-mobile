@@ -234,7 +234,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 620,
     overflow: 'hidden',
-    padding: 3,
+    paddingBottom: 8,
+    paddingLeft: 3,
+    paddingRight: 6,
+    paddingTop: 3,
   },
   pdfViewport: {
     backgroundColor: '#EEF3F9',

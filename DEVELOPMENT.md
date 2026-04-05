@@ -6423,6 +6423,72 @@ Practical rule:
 - active selection may strengthen the border, but should not switch the base card back to a gray neutral state
 - this rule exists because sales and purchase are parallel workbenches and should not drift into separate visual languages for the same workflow meanings
 
+## Formal PDF Viewer Consolidation (2026-04-06)
+
+This round reduced repeated PDF-viewer shells and aligned the last few document-detail layout issues discovered during manual device testing.
+
+### What Changed
+
+- the six document-specific PDF viewer routes now share one common screen shell:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/print/formal-pdf-viewer-screen.tsx`
+- each route-level file now acts as a thin wrapper that only supplies:
+  - `doctype`
+  - `docname`
+  - page title
+  - template label
+- the low-level PDF canvas and toolbar remain in:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/print/formal-pdf-stage.tsx`
+
+### Why This Was Needed
+
+- the earlier implementation duplicated the same viewer logic across:
+  - sales invoice
+  - purchase invoice
+  - sales order
+  - purchase order
+  - delivery note
+  - purchase receipt
+- this made small fixes unnecessarily repetitive
+  - footer spacing
+  - scroll-indicator visibility
+  - system-print/share behavior
+  - stage header layout
+
+### Current Viewer Structure
+
+- route wrappers:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/invoice/pdf-viewer.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/invoice/pdf-viewer.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/pdf-viewer.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/pdf-viewer.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/pdf-viewer.tsx`
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/receipt/pdf-viewer.tsx`
+- shared screen shell:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/print/formal-pdf-viewer-screen.tsx`
+- shared PDF stage:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/print/formal-pdf-stage.tsx`
+
+### Layout Fixes Included In The Same Round
+
+- sales-order detail page now restores the vertical scroll indicator and reserves more bottom space for the fixed action bar:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/order/[orderName].tsx`
+- delivery-note detail footer now uses the same `2 + 1` action hierarchy already proven on the purchase side:
+  - first row: `查看订单` + `打印预览`
+  - second row: full-width `查看发票` or `前往开票`
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+- all formal PDF viewer screens now reserve extra bottom space above the fixed footer
+- the shared PDF stage adds clearer right/bottom gutter space so scroll indicators are easier to perceive on device
+
+### Current Design Rule
+
+- a document-specific route may still exist for router clarity
+- but the actual PDF-viewing experience should be implemented once in a shared screen shell
+- future print-preview adjustments should be made in:
+  - `formal-pdf-viewer-screen.tsx`
+  - `formal-pdf-stage.tsx`
+- not by forking new full-page viewer copies per document
+
 ### Web vs Native Preview Behavior
 
 - web preview uses the browser PDF viewer through an embedded frame

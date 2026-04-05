@@ -1718,7 +1718,7 @@ export default function SalesOrderDetailScreen() {
         title="销售单详情"
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.heroGlowBlue} />
           <View style={styles.heroGlowAmber} />
@@ -2378,7 +2378,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     gap: 14,
-    paddingBottom: 112,
+    paddingBottom: 156,
     paddingHorizontal: 16,
     paddingTop: 8,
   },

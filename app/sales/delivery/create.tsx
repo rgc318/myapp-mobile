@@ -576,13 +576,6 @@ export default function SalesDeliveryCreateScreen() {
               </ThemedText>
             ) : null}
             <View style={styles.footerActionRow}>
-              <Pressable
-                onPress={openPrintPreview}
-                style={[styles.footerActionButton, styles.actionButton, styles.secondaryActionButton]}>
-                <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
-                  打印预览
-                </ThemedText>
-              </Pressable>
               {detail.salesOrders[0] ? (
                 <Pressable
                   onPress={() =>
@@ -593,39 +586,45 @@ export default function SalesDeliveryCreateScreen() {
                   }
                   style={[styles.footerActionButton, styles.actionButton, styles.secondaryActionButton]}>
                   <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
-                    返回订单
+                    查看订单
                   </ThemedText>
                 </Pressable>
               ) : null}
-
-              {detail.salesInvoices[0] ? (
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/sales/invoice/create',
-                      params: { salesInvoice: detail.salesInvoices[0] },
-                    })
-                  }
-                  style={[styles.footerActionButton, styles.actionButton]}>
-                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
-                    查看发票
-                  </ThemedText>
-                </Pressable>
-              ) : detail.salesOrders[0] && !isCancelledDetail ? (
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: '/sales/invoice/create',
-                      params: { sourceName: detail.salesOrders[0] },
-                    })
-                  }
-                  style={[styles.footerActionButton, styles.actionButton]}>
-                  <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
-                    前往开票
-                  </ThemedText>
-                </Pressable>
-              ) : null}
+              <Pressable
+                onPress={openPrintPreview}
+                style={[styles.footerActionButton, styles.actionButton, styles.secondaryActionButton]}>
+                <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                  打印预览
+                </ThemedText>
+              </Pressable>
             </View>
+            {detail.salesInvoices[0] ? (
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/sales/invoice/create',
+                    params: { salesInvoice: detail.salesInvoices[0] },
+                  })
+                }
+                style={styles.primaryFooterButton}>
+                <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                  查看发票
+                </ThemedText>
+              </Pressable>
+            ) : detail.salesOrders[0] && !isCancelledDetail ? (
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/sales/invoice/create',
+                    params: { sourceName: detail.salesOrders[0] },
+                  })
+                }
+                style={styles.primaryFooterButton}>
+                <ThemedText style={styles.actionButtonText} type="defaultSemiBold">
+                  前往开票
+                </ThemedText>
+              </Pressable>
+            ) : null}
           </View>
         ) : null
       }>
@@ -699,13 +698,17 @@ export default function SalesDeliveryCreateScreen() {
             <ThemedText style={styles.sectionTitle} type="subtitle">
               关联单据
             </ThemedText>
-            <View style={styles.row}>
-              <ThemedText style={styles.rowLabel}>来源订单</ThemedText>
-              <ThemedText style={styles.rowValue}>{detail.salesOrders.join('、') || '未关联'}</ThemedText>
+            <View style={styles.linkedDocRow}>
+              <View style={styles.linkedDocCopy}>
+                <ThemedText style={styles.rowLabel}>来源订单</ThemedText>
+                <ThemedText style={styles.linkedDocValue}>{detail.salesOrders.join('、') || '未关联'}</ThemedText>
+              </View>
             </View>
-            <View style={styles.row}>
-              <ThemedText style={styles.rowLabel}>销售发票</ThemedText>
-              <ThemedText style={styles.rowValue}>{detail.salesInvoices.join('、') || '暂未开票'}</ThemedText>
+            <View style={styles.linkedDocRow}>
+              <View style={styles.linkedDocCopy}>
+                <ThemedText style={styles.rowLabel}>销售发票</ThemedText>
+                <ThemedText style={styles.linkedDocValue}>{detail.salesInvoices.join('、') || '暂未开票'}</ThemedText>
+              </View>
             </View>
           </View>
 
@@ -1062,6 +1065,13 @@ const styles = StyleSheet.create({
   footerActionButton: {
     flex: 1,
   },
+  primaryFooterButton: {
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
   disabledActionButton: {
     backgroundColor: '#93C5FD',
   },
@@ -1209,6 +1219,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
+  },
+  linkedDocRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  linkedDocCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  linkedDocValue: {
+    color: '#0F172A',
+    fontSize: 15,
+  },
+  inlineLinkButton: {
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 34,
+    minWidth: 82,
+    paddingHorizontal: 12,
+  },
+  inlineLinkText: {
+    color: '#1D4ED8',
+    fontSize: 13,
   },
   rowBlock: {
     gap: 8,
