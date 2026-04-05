@@ -594,11 +594,8 @@ export default function PurchaseInvoiceCreateScreen() {
                       <View style={styles.compactGroupHeader}>
                         <View style={styles.compactGroupTitleWrap}>
                           <ThemedText style={styles.compactGroupTitle} type="defaultSemiBold">
-                            {group.nickname?.trim() || group.itemName}
+                            {group.itemName}
                           </ThemedText>
-                          {group.nickname && group.itemName && group.nickname !== group.itemName ? (
-                            <ThemedText style={styles.itemAlias}>{group.itemName}</ThemedText>
-                          ) : null}
                           {group.specification ? (
                             <ThemedText style={styles.itemSpec} type="defaultSemiBold">
                               规格 {group.specification}
@@ -733,11 +730,8 @@ export default function PurchaseInvoiceCreateScreen() {
                       <View style={styles.compactGroupHeader}>
                         <View style={styles.compactGroupTitleWrap}>
                           <ThemedText style={styles.compactGroupTitle} type="defaultSemiBold">
-                            {group.nickname?.trim() || group.itemName}
+                            {group.itemName}
                           </ThemedText>
-                          {group.nickname && group.itemName && group.nickname !== group.itemName ? (
-                            <ThemedText style={styles.itemAlias}>{group.itemName}</ThemedText>
-                          ) : null}
                           {group.specification ? (
                             <ThemedText style={styles.itemSpec} type="defaultSemiBold">
                               规格 {group.specification}
@@ -1031,13 +1025,10 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 23,
   },
-  itemAlias: {
-    color: '#64748B',
-    fontSize: 12,
-  },
   itemSpec: {
-    color: '#2563EB',
+    color: '#475569',
     fontSize: 12,
+    lineHeight: 18,
   },
   compactAmountWrap: {
     alignItems: 'flex-end',

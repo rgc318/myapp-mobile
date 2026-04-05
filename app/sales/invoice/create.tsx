@@ -8,6 +8,7 @@ import { SalesInvoiceSheet } from '@/components/sales-invoice-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { getPaymentResultHandoff } from '@/lib/payment-result-handoff';
+import { formatDisplayUom } from '@/lib/display-uom';
 import { buildQuantityComposition } from '@/lib/uom-display';
 import { useFeedback } from '@/providers/feedback-provider';
 import { createSalesInvoice } from '@/services/gateway';
@@ -111,6 +112,28 @@ function groupOrderItems(items: SalesOrderDetailV2['items']) {
   });
 
   return Array.from(grouped.values());
+}
+
+function buildGroupedInvoiceRateSummary(
+  items: SalesOrderDetailV2['items'],
+  currency: string,
+) {
+  const uniqueRates = Array.from(
+    new Set(
+      items
+        .map((item) => (typeof item.rate === 'number' && Number.isFinite(item.rate) ? item.rate : null))
+        .filter((value): value is number => value !== null),
+    ),
+  );
+  const uniqueUoms = Array.from(
+    new Set(items.map((item) => (typeof item.uom === 'string' ? item.uom.trim() : '')).filter(Boolean)),
+  );
+
+  if (uniqueRates.length === 1 && uniqueUoms.length === 1) {
+    return `${formatCurrency(uniqueRates[0], currency)} / ${formatDisplayUom(uniqueUoms[0])}`;
+  }
+
+  return '多单价/单位';
 }
 
 export default function SalesInvoiceCreateScreen() {
@@ -923,32 +946,45 @@ function InvoiceSourceSummary({ detail }: { detail: SalesOrderDetailV2 }) {
           <ThemedText style={styles.previewGoodsHint}>按商品聚合展示，仓库信息不作为发票主视图展示。</ThemedText>
         </View>
 
+        <View style={styles.previewTableHeader}>
+          <ThemedText style={[styles.previewTableCell, styles.previewTableCellName]} type="defaultSemiBold">
+            商品
+          </ThemedText>
+          <ThemedText style={[styles.previewTableCell, styles.previewTableCellSpec]} type="defaultSemiBold">
+            规格
+          </ThemedText>
+          <ThemedText style={[styles.previewTableCell, styles.previewTableCellQty]} type="defaultSemiBold">
+            数量
+          </ThemedText>
+          <ThemedText style={[styles.previewTableCell, styles.previewTableCellRate]} type="defaultSemiBold">
+            单价
+          </ThemedText>
+          <ThemedText style={[styles.previewTableCell, styles.previewTableCellAmount]} type="defaultSemiBold">
+            金额
+          </ThemedText>
+        </View>
+
         {groupedItems.map((item, index) => (
           <View
             key={`${item.itemCode}-${index}`}
             style={[styles.previewItemRow, index > 0 ? styles.previewItemDivider : null]}>
-            <View style={styles.previewItemMain}>
+            <View style={[styles.previewTableCell, styles.previewTableCellName]}>
               <ThemedText style={styles.previewItemName} type="defaultSemiBold">
                 {item.itemName}
               </ThemedText>
-              {item.specification ? (
-                <ThemedText style={styles.previewItemSpec} type="defaultSemiBold">
-                  规格 {item.specification}
-                </ThemedText>
-              ) : null}
-              <ThemedText style={styles.previewItemMeta}>{`编码 ${item.itemCode}`}</ThemedText>
-              <ThemedText style={styles.previewItemSummary} type="defaultSemiBold">
-                {`合计 ${buildQuantityComposition(item.rows)}`}
-              </ThemedText>
             </View>
-            <View style={styles.previewItemAmountBlock}>
-              <ThemedText style={styles.previewItemAmountLabel} type="defaultSemiBold">
-                商品总价
-              </ThemedText>
-              <ThemedText style={styles.previewItemAmount} type="defaultSemiBold">
-                {formatCurrency(item.totalAmount, detail.currency)}
-              </ThemedText>
+            <View style={[styles.previewTableCell, styles.previewTableCellSpec]}>
+              <ThemedText style={styles.previewItemSpec}>{item.specification || '—'}</ThemedText>
             </View>
+            <ThemedText style={[styles.previewTableCell, styles.previewTableCellQty]} type="defaultSemiBold">
+              {`合计 ${buildQuantityComposition(item.rows)}`}
+            </ThemedText>
+            <ThemedText style={[styles.previewTableCell, styles.previewTableCellRate]}>
+              {buildGroupedInvoiceRateSummary(item.rows, detail.currency)}
+            </ThemedText>
+            <ThemedText style={[styles.previewTableCell, styles.previewTableCellAmount, styles.previewItemAmount]} type="defaultSemiBold">
+              {formatCurrency(item.totalAmount, detail.currency)}
+            </ThemedText>
           </View>
         ))}
       </View>
@@ -1430,11 +1466,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  previewTableHeader: {
+    backgroundColor: '#F1F5F9',
+    flexDirection: 'row',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
   previewItemRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
@@ -1442,39 +1482,39 @@ const styles = StyleSheet.create({
     borderTopColor: '#E2E8F0',
     borderTopWidth: 1,
   },
-  previewItemMain: {
+  previewTableCell: {
+    color: '#334155',
     flex: 1,
-    gap: 4,
+    fontSize: 12,
   },
-  previewItemAmountBlock: {
-    alignItems: 'flex-end',
-    gap: 4,
+  previewTableCellName: {
+    flex: 1.9,
+  },
+  previewTableCellSpec: {
+    flex: 1.2,
+  },
+  previewTableCellQty: {
+    flex: 1.2,
+  },
+  previewTableCellRate: {
+    flex: 1.1,
+  },
+  previewTableCellAmount: {
+    flex: 1.2,
+    textAlign: 'right',
   },
   previewItemName: {
     color: '#0F172A',
-    fontSize: 16,
+    fontSize: 14,
   },
   previewItemSpec: {
-    color: '#2563EB',
+    color: '#475569',
     fontSize: 12,
-  },
-  previewItemMeta: {
-    color: '#64748B',
-    fontSize: 13,
-  },
-  previewItemSummary: {
-    color: '#2563EB',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  previewItemAmountLabel: {
-    color: '#64748B',
-    fontSize: 12,
+    lineHeight: 18,
   },
   previewItemAmount: {
     color: '#B45309',
-    fontSize: 18,
-    paddingTop: 2,
+    fontSize: 14,
     textAlign: 'right',
   },
   positiveValue: {

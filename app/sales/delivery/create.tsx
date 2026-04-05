@@ -139,10 +139,10 @@ function GroupedDeliveryItems({
                     </ThemedText>
                   </View>
                   <ThemedText style={styles.deliveryGroupTitle} type="defaultSemiBold">
-                    {group.nickname?.trim() || group.itemName}
+                    {group.itemName}
                   </ThemedText>
                   {group.nickname && group.itemName && group.nickname !== group.itemName ? (
-                    <ThemedText style={styles.deliveryGroupAlias}>{group.itemName}</ThemedText>
+                    <ThemedText style={styles.deliveryGroupAlias}>{`内部简称 ${group.nickname}`}</ThemedText>
                   ) : null}
                   {group.specification ? (
                     <ThemedText style={styles.deliveryGroupSpec} type="defaultSemiBold">
@@ -1266,11 +1266,13 @@ const styles = StyleSheet.create({
   deliveryGroupAlias: {
     color: '#64748B',
     fontSize: 13,
+    lineHeight: 18,
     marginTop: -2,
   },
   deliveryGroupSpec: {
-    color: '#2563EB',
+    color: '#475569',
     fontSize: 13,
+    lineHeight: 18,
     marginTop: -4,
   },
   deliveryGroupSummary: {

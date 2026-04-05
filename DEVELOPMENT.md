@@ -1448,6 +1448,34 @@ This round focused on turning the product detail page from a basic CRUD form int
 3. evaluate product-spec / variant support for size-capacity scenarios such as `500ml / 750ml / 1L`
 4. continue integrating ERPNext item master capabilities such as reorder, batch, and expiry controls
 
+## Invoice Product Identity Rules (2026-04-05)
+
+This round clarified the difference between internal product-recognition UI and customer-facing invoice UI.
+
+### Rules
+
+- internal search / order-entry pages may prioritize `nickname` to reduce operator mistakes
+- customer-facing sales invoices must not use `nickname` as the main product label
+- sales-invoice detail and print-preview pages must show:
+  - `itemName` as the product column
+  - `specification` as its own standalone column
+  - quantity / rate / amount as separate commercial columns
+- sales invoices should not expose internal `itemCode` in the main printable goods table
+
+### Why This Matters
+
+- `nickname` is an internal convenience field, not a formal customer document field
+- showing `specification` as a sub-line under product name is not sufficient for invoice verification
+- when `itemCode` is visually similar to `itemName`, exposing both makes the document look duplicated or incorrect
+- a standalone `规格` column keeps invoice review and printed PDF verification aligned with the intended business rule
+
+### Current Mobile Behavior
+
+- product search, purchase item search, sales-order item groups, and purchase-order item groups now use stronger identity hierarchy for `nickname / itemName / specification`
+- sales-invoice detail and preview now treat `specification` as a dedicated table column instead of a secondary line under the product name
+- sales-invoice detail and preview no longer show internal product codes in the main goods table
+- delivery and purchase-invoice pages were also moved back toward formal-name-first presentation so customer-facing and semi-formal pages no longer over-prioritize nickname styling
+
 ## Frontend Alignment Summary (2026-03-18)
 
 This round completed the main frontend migration for product detail and sales-order detail editing on top of the new backend v2 interfaces.

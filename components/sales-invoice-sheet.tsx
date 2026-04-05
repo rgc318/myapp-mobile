@@ -141,6 +141,9 @@ export function SalesInvoiceSheet({ detail }: { detail: SalesInvoiceDetailV2 }) 
         <ThemedText style={[styles.tableCell, styles.tableCellName]} type="defaultSemiBold">
           商品
         </ThemedText>
+        <ThemedText style={[styles.tableCell, styles.tableCellSpec]} type="defaultSemiBold">
+          规格
+        </ThemedText>
         <ThemedText style={styles.tableCell} type="defaultSemiBold">
           数量
         </ThemedText>
@@ -158,32 +161,21 @@ export function SalesInvoiceSheet({ detail }: { detail: SalesInvoiceDetailV2 }) 
             <ThemedText style={styles.itemName} type="defaultSemiBold">
               {item.itemName}
             </ThemedText>
-            {item.specification ? (
-              <ThemedText style={styles.itemSpec} type="defaultSemiBold">
-                规格 {item.specification}
-              </ThemedText>
-            ) : null}
-            <ThemedText style={styles.itemMeta}>{item.itemCode}</ThemedText>
-            {item.rows.length > 1 ? (
-              <ThemedText style={styles.itemSummary} type="defaultSemiBold">
-                {`合计 ${buildQuantityComposition(item.rows)}`}
-              </ThemedText>
-            ) : null}
           </View>
-          <ThemedText style={styles.tableCell}>
+          <View style={[styles.tableCell, styles.tableCellSpec]}>
+            <ThemedText style={styles.itemSpec}>
+              {item.specification || '—'}
+            </ThemedText>
+          </View>
+          <ThemedText style={[styles.tableCell, styles.tableCellQty]}>
             {item.rows.length > 1
-              ? buildQuantityComposition(item.rows)
+              ? `合计 ${buildQuantityComposition(item.rows)}`
               : `${item.rows[0]?.qty ?? '—'} ${item.rows[0]?.uom ? formatDisplayUom(item.rows[0].uom) : ''}`}
           </ThemedText>
-          <ThemedText style={styles.tableCell}>{buildInvoiceRateSummary(item.rows, detail.currency)}</ThemedText>
-          <View style={[styles.tableCell, styles.tableCellAmount, styles.tableAmountBlock]}>
-            <ThemedText style={styles.tableAmountLabel} type="defaultSemiBold">
-              商品总价
-            </ThemedText>
-            <ThemedText style={styles.tableAmountValue}>
-              {formatCurrency(item.totalAmount, detail.currency)}
-            </ThemedText>
-          </View>
+          <ThemedText style={[styles.tableCell, styles.tableCellRate]}>{buildInvoiceRateSummary(item.rows, detail.currency)}</ThemedText>
+          <ThemedText style={[styles.tableCell, styles.tableCellAmount, styles.tableAmountValue]}>
+            {formatCurrency(item.totalAmount, detail.currency)}
+          </ThemedText>
         </View>
       ))}
 
@@ -313,18 +305,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   tableCellName: {
-    flex: 2.2,
+    flex: 1.9,
+  },
+  tableCellSpec: {
+    flex: 1.25,
+  },
+  tableCellQty: {
+    flex: 1.15,
+  },
+  tableCellRate: {
+    flex: 1.1,
   },
   tableCellAmount: {
+    flex: 1.15,
     textAlign: 'right',
-  },
-  tableAmountBlock: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  tableAmountLabel: {
-    color: '#64748B',
-    fontSize: 11,
   },
   tableAmountValue: {
     color: '#111827',
@@ -335,18 +329,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   itemSpec: {
-    color: '#2563EB',
+    color: '#475569',
     fontSize: 12,
-  },
-  itemMeta: {
-    color: '#64748B',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  itemSummary: {
-    color: '#2563EB',
-    fontSize: 12,
-    marginTop: 6,
+    lineHeight: 18,
   },
   sheetFooter: {
     flexDirection: 'row',
