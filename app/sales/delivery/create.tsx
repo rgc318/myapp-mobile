@@ -386,6 +386,18 @@ export default function SalesDeliveryCreateScreen() {
     }
   }
 
+  function openPrintPreview() {
+    if (!detail?.name) {
+      showInfo('当前发货单详情尚未加载完成。');
+      return;
+    }
+
+    router.push({
+      pathname: '/sales/delivery/preview',
+      params: { deliveryNote: detail.name },
+    });
+  }
+
   const isCancelledDetail = detail?.documentStatus === 'cancelled';
 
   if (!deliveryNote) {
@@ -564,6 +576,13 @@ export default function SalesDeliveryCreateScreen() {
               </ThemedText>
             ) : null}
             <View style={styles.footerActionRow}>
+              <Pressable
+                onPress={openPrintPreview}
+                style={[styles.footerActionButton, styles.actionButton, styles.secondaryActionButton]}>
+                <ThemedText style={styles.secondaryActionText} type="defaultSemiBold">
+                  打印预览
+                </ThemedText>
+              </Pressable>
               {detail.salesOrders[0] ? (
                 <Pressable
                   onPress={() =>

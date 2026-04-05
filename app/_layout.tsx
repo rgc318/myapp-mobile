@@ -61,6 +61,8 @@ function RootNavigation() {
         <Stack.Screen name="system-info" options={{ headerShown: false }} />
         <Stack.Screen name="sales/order/create" options={{ headerShown: false }} />
         <Stack.Screen name="sales/order/[orderName]" options={{ headerShown: false }} />
+        <Stack.Screen name="sales/delivery/preview" options={{ headerShown: false }} />
+        <Stack.Screen name="sales/delivery/pdf-viewer" options={{ headerShown: false }} />
         <Stack.Screen name="sales/invoice/preview" options={{ headerShown: false }} />
         <Stack.Screen name="sales/invoice/pdf-viewer" options={{ headerShown: false }} />
         <Stack.Screen name="purchase/invoice/preview" options={{ headerShown: false }} />

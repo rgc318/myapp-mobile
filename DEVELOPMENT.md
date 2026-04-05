@@ -5663,6 +5663,36 @@ After reviewing real field scenarios, return has been explicitly lowered in prio
   - the shared return screen shell may remain in code for later reactivation
   - but tabs / workbench / order-detail should not actively expose return as a primary operator action right now
 
+## Delivery Note Print Preview (2026-04-06)
+
+Sales delivery notes now follow the same formal print-preview flow as invoices.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/_layout.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/preview.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/sales/delivery/pdf-viewer.tsx`
+
+### What Changed
+
+- delivery-note detail page now exposes a `打印预览` entry in the footer
+- the preview route immediately forwards into the formal PDF viewer
+- the viewer reuses the existing formal-print pipeline:
+  - preview metadata
+  - PDF render
+  - system print / share actions
+
+### Presentation Rules
+
+- delivery note is treated as a warehouse execution document
+- customer information and item rows should be visually emphasized over secondary notes
+- item display priority follows:
+  - `（nickname）itemName` when nickname exists
+  - `itemName` when nickname is absent
+- specification remains an independent table column
+- financial-style `预览并打印` wording is not reused here; the page keeps a single `打印预览` entry
+
 ### Implication For Next Work
 
 - do not spend the next major frontend iteration on advanced return scenarios
