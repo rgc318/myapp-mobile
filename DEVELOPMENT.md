@@ -258,6 +258,54 @@ This round aligned the mobile product module with the new backend `custom_specif
 
 ### Validation Outcome
 
+## Item Image Upload Boundary (2026-04-06)
+
+This round established the first migration-friendly image-upload boundary without committing the app to a permanent storage vendor too early.
+
+### Current Rule
+
+- product business data still uses the standard backend field `Item.image`
+- frontend should upload image binaries through:
+  - `myapp.api.gateway.upload_item_image`
+- when replacing an existing product image, frontend should prefer:
+  - `myapp.api.gateway.replace_item_image`
+- upload response returns a stable `file_url`
+- product create/update flows should keep writing that returned URL into the existing `image` field
+- replace flow now includes guarded cleanup for the previous managed image file when it is safe to remove
+
+### Why This Boundary Exists
+
+- current implementation uses Frappe `File` storage first
+- future storage can switch behind the same backend media service boundary
+- mobile product pages should not need storage-provider-specific logic such as MinIO / OSS / S3 branching
+
+### Frontend Service Entry
+
+- shared mobile upload service:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/media.ts`
+
+### Backend Service Entry
+
+- backend media service:
+  - `/home/rgc318/python-project/frappe_docker/apps/myapp/myapp/services/media_service.py`
+
+## UOM Display Alignment (Temporary Next Step)
+
+After the image-upload chain was connected, the next temporary cleanup target is the unit module.
+
+### Why This Is Needed
+
+- current frontend still relies partly on local English-to-Chinese UOM fallback mapping
+- this causes mixed Chinese / English unit display across product, order, and master-data pages
+
+### Current Direction
+
+- treat this as a temporary consistency-improvement round first
+- prioritize backend display-field alignment before doing broader master-data remodeling
+- first target:
+  - UOM master-data pages
+  - product module unit display
+
 ## Barcode Scanning Phase 1 (2026-04-06)
 
 This round landed the first local-only barcode workflow in mobile and intentionally did not connect any external product-information provider yet.

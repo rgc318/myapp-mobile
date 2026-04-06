@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { ItemImageField } from '@/components/item-image-field';
 import { ProductTextField as DetailField } from '@/components/product-form-controls';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -162,6 +163,19 @@ export default function ProductDetailScreen() {
     setStockSyncMode(nextStockSyncMode);
     setDraftWarehouseStockUom(next.stockUom || next.retailDefaultUom || next.wholesaleDefaultUom || '');
   };
+
+  const applyImageUrl = useCallback((nextImageUrl: string) => {
+    setDraftImageUrl(nextImageUrl);
+    setDetail((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        imageUrl: nextImageUrl,
+      };
+    });
+  }, []);
 
   const warehouseOptions = useMemo(() => {
     const values = new Set<string>();
@@ -1522,7 +1536,7 @@ export default function ProductDetailScreen() {
                   <DetailField label="主条码" onChangeText={setDraftBarcode} placeholder="输入商品主条码" value={draftBarcode} />
                   <DetailField label="商品昵称" onChangeText={setDraftNickname} placeholder="输入商品昵称" value={draftNickname} />
                   <DetailField label="规格" onChangeText={setDraftSpecification} placeholder="输入规格，如 500ml / 大号 / A4" value={draftSpecification} />
-                  <DetailField label="图片地址" onChangeText={setDraftImageUrl} placeholder="输入商品图片 URL" value={draftImageUrl} />
+                  <ItemImageField itemCode={detail.itemCode} onChange={applyImageUrl} value={draftImageUrl} />
                   <DetailField label="描述" multiline onChangeText={setDraftDescription} placeholder="输入商品说明" value={draftDescription} />
                 </View>
               ) : (

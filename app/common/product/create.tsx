@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { ItemImageField } from '@/components/item-image-field';
 import { ProductPickerSheet, ProductSelectorField, ProductTextField } from '@/components/product-form-controls';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -657,7 +658,7 @@ export default function ProductCreateScreen() {
               <ProductTextField label="主条码" onChangeText={setBarcode} placeholder="输入商品主条码" value={barcode} />
               <ProductTextField label="商品昵称" onChangeText={setNickname} placeholder="如常用简称或别名" value={nickname} />
               <ProductTextField label="规格" onChangeText={setSpecification} placeholder="如 500ml / 大号 / A4" value={specification} />
-              <ProductTextField label="图片地址" onChangeText={setImageUrl} placeholder="输入商品图片 URL" value={imageUrl} />
+              <ItemImageField onChange={setImageUrl} value={imageUrl} />
               {createMode === 'detailed' ? (
                 <>
                   <ProductTextField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />
