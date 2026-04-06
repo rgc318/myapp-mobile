@@ -1,28 +1,14 @@
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
-type CameraPermission = {
-  canAskAgain?: boolean;
-  granted?: boolean;
-};
-
 type BarcodeScanResultLike = {
   data?: string | null;
-};
-
-type CameraModuleLike = {
-  CameraView?: React.ComponentType<{
-    barcodeScannerSettings?: { barcodeTypes?: string[] };
-    onBarcodeScanned?: ((result: BarcodeScanResultLike) => void) | undefined;
-    style?: object;
-  }>;
-  getCameraPermissionsAsync?: () => Promise<CameraPermission>;
-  requestCameraPermissionsAsync?: () => Promise<CameraPermission>;
 };
 
 type BarcodeScannerSheetProps = {
@@ -35,14 +21,6 @@ type BarcodeScannerSheetProps = {
 
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'code93', 'codabar', 'itf14', 'qr'] as const;
 
-let cameraModule: CameraModuleLike | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  cameraModule = require('expo-camera') as CameraModuleLike;
-} catch {
-  cameraModule = null;
-}
-
 export function BarcodeScannerSheet({
   description = '将条码放入取景框内，扫到后会自动搜索并加入采购单。',
   onClose,
@@ -50,22 +28,37 @@ export function BarcodeScannerSheet({
   title = '扫码添加',
   visible,
 }: BarcodeScannerSheetProps) {
-  const [permission, setPermission] = useState<CameraPermission | null>(null);
+  const [permission, requestPermissionAsync, getPermissionAsync] = useCameraPermissions();
   const [isHandlingScan, setIsHandlingScan] = useState(false);
+  const [hasRequestedPermission, setHasRequestedPermission] = useState(false);
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
-  const CameraView = cameraModule?.CameraView ?? null;
-  const hasNativeCameraModule = Boolean(CameraView && cameraModule);
+  const hasNativeCameraModule = Boolean(CameraView);
 
-  async function requestPermission() {
-    if (!cameraModule?.requestCameraPermissionsAsync) {
+  const syncPermissionState = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      return;
+    }
+    return getPermissionAsync();
+  }, [getPermissionAsync]);
+
+  async function handlePermissionRequest() {
+    if (Platform.OS === 'web') {
       return;
     }
 
-    const nextPermission = await cameraModule.requestCameraPermissionsAsync();
-    setPermission(nextPermission);
+    setHasRequestedPermission(true);
+    await requestPermissionAsync();
+  }
+
+  async function openSettings() {
+    try {
+      await Linking.openSettings();
+    } catch {
+      // ignore
+    }
   }
 
   useEffect(() => {
@@ -76,19 +69,13 @@ export function BarcodeScannerSheet({
         return;
       }
 
-      const nextPermission = cameraModule?.getCameraPermissionsAsync
-        ? await cameraModule.getCameraPermissionsAsync()
-        : null;
+      const nextPermission = await syncPermissionState();
       if (!active) {
         return;
       }
-      setPermission(nextPermission);
 
       if (!nextPermission?.granted && nextPermission?.canAskAgain !== false) {
-        const requestedPermission = await cameraModule?.requestCameraPermissionsAsync?.();
-        if (active) {
-          setPermission(requestedPermission ?? nextPermission);
-        }
+        await requestPermissionAsync();
       }
     }
 
@@ -96,11 +83,28 @@ export function BarcodeScannerSheet({
     return () => {
       active = false;
     };
-  }, [hasNativeCameraModule, visible]);
+  }, [hasNativeCameraModule, requestPermissionAsync, syncPermissionState, visible]);
+
+  useEffect(() => {
+    if (!visible || Platform.OS === 'web' || !hasNativeCameraModule) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void syncPermissionState();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [hasNativeCameraModule, syncPermissionState, visible]);
 
   useEffect(() => {
     if (!visible) {
       setIsHandlingScan(false);
+      setHasRequestedPermission(false);
     }
   }, [visible]);
 
@@ -115,17 +119,32 @@ export function BarcodeScannerSheet({
     await onScanned(data);
   };
 
-  const renderPlaceholder = (titleText: string, bodyText: string, allowPermissionRequest = false) => (
+  const renderPlaceholder = (
+    titleText: string,
+    bodyText: string,
+    options?: {
+      allowPermissionRequest?: boolean;
+      allowOpenSettings?: boolean;
+      permissionButtonLabel?: string;
+    },
+  ) => (
     <View style={[styles.placeholderCard, { backgroundColor: surfaceMuted, borderColor }]}>
       <IconSymbol color={tintColor} name="barcode.viewfinder" size={28} />
       <ThemedText style={styles.placeholderTitle} type="defaultSemiBold">
         {titleText}
       </ThemedText>
       <ThemedText style={styles.placeholderText}>{bodyText}</ThemedText>
-      {allowPermissionRequest ? (
-        <Pressable onPress={() => void requestPermission()} style={[styles.permissionButton, { backgroundColor: tintColor }]}>
+      {options?.allowPermissionRequest ? (
+        <Pressable onPress={() => void handlePermissionRequest()} style={[styles.permissionButton, { backgroundColor: tintColor }]}>
           <ThemedText style={styles.permissionButtonText} type="defaultSemiBold">
-            继续授权
+            {options.permissionButtonLabel || '继续授权'}
+          </ThemedText>
+        </Pressable>
+      ) : null}
+      {options?.allowOpenSettings ? (
+        <Pressable onPress={() => void openSettings()} style={[styles.settingsButton, { backgroundColor: surface, borderColor }]}>
+          <ThemedText style={[styles.settingsButtonText, { color: tintColor }]} type="defaultSemiBold">
+            去系统设置
           </ThemedText>
         </Pressable>
       ) : null}
@@ -165,7 +184,18 @@ export function BarcodeScannerSheet({
     }
 
     const canAskPermission = permission == null || permission.canAskAgain !== false;
-    return renderPlaceholder('需要相机权限', '允许访问相机后，才能直接扫码把商品加入采购单。', canAskPermission);
+    const hasExplicitlyDenied = hasRequestedPermission && permission?.granted !== true;
+    return renderPlaceholder(
+      '需要相机权限',
+      hasExplicitlyDenied
+        ? '当前未获得相机权限。你可以再次请求授权；如果系统不再弹窗，请前往系统设置手动开启相机权限。'
+        : '允许访问相机后，才能直接扫码搜索商品。',
+      {
+        allowPermissionRequest: canAskPermission,
+        allowOpenSettings: hasExplicitlyDenied || permission?.canAskAgain === false,
+        permissionButtonLabel: hasExplicitlyDenied ? '再次请求授权' : '继续授权',
+      },
+    );
   };
 
   return (
@@ -298,6 +328,19 @@ const styles = StyleSheet.create({
   },
   permissionButtonText: {
     color: '#FFFFFF',
+    fontSize: 14,
+  },
+  settingsButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 8,
+    minHeight: 44,
+    minWidth: 112,
+    paddingHorizontal: 18,
+  },
+  settingsButtonText: {
     fontSize: 14,
   },
 });

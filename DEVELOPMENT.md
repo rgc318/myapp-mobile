@@ -258,6 +258,76 @@ This round aligned the mobile product module with the new backend `custom_specif
 
 ### Validation Outcome
 
+## Barcode Scanning Phase 1 (2026-04-06)
+
+This round landed the first local-only barcode workflow in mobile and intentionally did not connect any external product-information provider yet.
+
+### Scope
+
+- scanning currently resolves against local product data only
+- if a barcode is not found locally, the app does not call external services
+- unknown barcode flow currently falls back to product creation with the barcode prefilled
+
+### Camera / Runtime Notes
+
+- `expo-camera` is already part of the mobile project and is the current scanner foundation
+- a dedicated internal camera diagnostic screen exists at:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/camera-test.tsx`
+- this diagnostic page is kept as an internal troubleshooting tool and is not exposed on the home page for normal users
+
+### Interaction Rules
+
+- product management page
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/products.tsx`
+  - scan success should behave like a fast search
+  - when a barcode is matched, the scanned value is applied to the search query and matching rows stay in the current list
+  - product management should not auto-jump into product detail after a successful scan
+
+- product search page in lookup mode
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+  - scan success should keep the user in the current result context
+  - when a barcode is matched, results remain visible in the current page for confirmation
+
+- product search page in sales-order mode
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+  - order-entry flow remains efficiency-first
+  - when a barcode uniquely matches one product, the item can still be added directly into the draft order
+
+### Feedback Pattern
+
+- barcode not found
+  - do not jump immediately to product creation
+  - show a centered confirmation dialog first
+  - let the user choose whether to continue to product creation
+
+- barcode matched in lookup-style pages
+  - show a centered success dialog
+  - the dialog should explain that results have already been filtered below
+  - user confirms and continues in the current page context
+
+- centered dialogs are now the preferred pattern for barcode-result feedback
+  - this is more explicit than transient toast-only feedback
+  - it also avoids abrupt navigation after a scan
+
+### Product Creation Prefill
+
+- product creation page supports route-prefill for scan-related fallback
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+- current prefill-ready fields include:
+  - barcode
+  - item name
+  - brand
+  - specification
+
+### Current Limitation
+
+- external barcode enrichment is intentionally not enabled in this phase
+- the formal multi-provider design remains documented on the backend side, but mobile currently only depends on local product lookup behavior
+
 - backend regression now confirms:
   - specification CRUD works
   - specification search works

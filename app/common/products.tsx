@@ -1,13 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
+import { BarcodeScannerSheet } from '@/components/barcode-scanner-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { useFeedback } from '@/providers/feedback-provider';
+import { searchCatalogProducts } from '@/services/products';
 import { fetchProducts, type ProductListItem } from '@/services/products';
 
 function formatPriceLine(value: number | null | undefined, uom?: string | null) {
@@ -152,6 +154,10 @@ export default function ProductsScreen() {
   const [items, setItems] = useState<ProductListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [pendingScannedBarcode, setPendingScannedBarcode] = useState('');
+  const [matchedScannedBarcode, setMatchedScannedBarcode] = useState('');
+  const [matchedScannedCount, setMatchedScannedCount] = useState(0);
 
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
@@ -184,6 +190,38 @@ export default function ProductsScreen() {
   useEffect(() => {
     void loadItems();
   }, [loadItems]);
+
+  const handleBarcodeMatched = async (scannedValue: string) => {
+    const normalized = scannedValue.trim();
+    if (!normalized) {
+      return;
+    }
+
+    setShowScanner(false);
+
+    try {
+      const matchedItems = await searchCatalogProducts(normalized, {
+        limit: 20,
+      });
+
+      if (!matchedItems.length) {
+        setPendingScannedBarcode(normalized);
+        return;
+      }
+
+      const exactMatchedItems = matchedItems.filter(
+        (item) => item.barcode?.trim() === normalized || item.itemCode?.trim() === normalized,
+      );
+      const targetItem =
+        exactMatchedItems.length === 1 ? exactMatchedItems[0] : matchedItems.length === 1 ? matchedItems[0] : null;
+
+      setQuery(normalized);
+      setMatchedScannedBarcode(normalized);
+      setMatchedScannedCount(targetItem ? 1 : matchedItems.length);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : '扫码搜索商品失败');
+    }
+  };
 
   const summary = useMemo(
     () => ({
@@ -248,15 +286,23 @@ export default function ProductsScreen() {
             </Pressable>
           </View>
 
-          <View style={[styles.searchBar, { backgroundColor: surfaceMuted, borderColor }]}>
-            <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
-            <TextInput
-              onChangeText={setQuery}
-              placeholder="搜索商品名称、编码、昵称、规格"
-              placeholderTextColor="rgba(31,42,55,0.42)"
-              style={styles.searchInput}
-              value={query}
-            />
+          <View style={styles.searchRow}>
+            <View style={[styles.searchBar, styles.searchBarExpanded, { backgroundColor: surfaceMuted, borderColor }]}>
+              <IconSymbol color={tintColor} name="magnifyingglass" size={18} />
+              <TextInput
+                onChangeText={setQuery}
+                placeholder="搜索商品名称、编码、昵称、规格"
+                placeholderTextColor="rgba(31,42,55,0.42)"
+                style={styles.searchInput}
+                value={query}
+              />
+            </View>
+            <Pressable onPress={() => setShowScanner(true)} style={[styles.scanEntryButton, { backgroundColor: surfaceMuted, borderColor }]}>
+              <IconSymbol color={tintColor} name="barcode.viewfinder" size={18} />
+              <ThemedText style={styles.scanEntryLabel} type="defaultSemiBold">
+                扫码
+              </ThemedText>
+            </Pressable>
           </View>
 
           <View style={styles.segmentedWrap}>
@@ -322,6 +368,90 @@ export default function ProductsScreen() {
             ))}
           </View>
         )}
+
+        <BarcodeScannerSheet
+          description="将商品条码放入取景框内，扫到后会自动搜索；若未命中商品，会先提示你是否新建商品。"
+          onClose={() => setShowScanner(false)}
+          onScanned={handleBarcodeMatched}
+          title="扫码搜索商品"
+          visible={showScanner}
+        />
+
+        <Modal animationType="fade" onRequestClose={() => setPendingScannedBarcode('')} transparent visible={Boolean(pendingScannedBarcode)}>
+          <View style={styles.centerDialogBackdrop}>
+            <View style={[styles.centerDialogCard, { backgroundColor: surface, borderColor }]}>
+              <View style={[styles.centerDialogIconWrap, { backgroundColor: surfaceMuted }]}>
+                <IconSymbol color={tintColor} name="barcode.viewfinder" size={22} />
+              </View>
+              <ThemedText style={styles.centerDialogTitle} type="defaultSemiBold">
+                未找到对应商品
+              </ThemedText>
+              <ThemedText style={styles.centerDialogText}>
+                条码 {pendingScannedBarcode || '—'} 目前还没有对应商品资料。你可以继续新建商品，并自动带入这条码。
+              </ThemedText>
+              <View style={styles.centerDialogActions}>
+                <Pressable
+                  onPress={() => setPendingScannedBarcode('')}
+                  style={[styles.centerDialogButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                  <ThemedText style={[styles.centerDialogButtonText, { color: '#475569' }]} type="defaultSemiBold">
+                    先取消
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const barcode = pendingScannedBarcode;
+                    setPendingScannedBarcode('');
+                    router.push({
+                      pathname: '/common/product/create',
+                      params: { barcode },
+                    });
+                  }}
+                  style={[styles.centerDialogButton, { backgroundColor: tintColor, borderColor: tintColor }]}>
+                  <ThemedText style={[styles.centerDialogButtonText, { color: '#FFFFFF' }]} type="defaultSemiBold">
+                    去新建商品
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          animationType="fade"
+          onRequestClose={() => {
+            setMatchedScannedBarcode('');
+            setMatchedScannedCount(0);
+          }}
+          transparent
+          visible={Boolean(matchedScannedBarcode)}>
+          <View style={styles.centerDialogBackdrop}>
+            <View style={[styles.centerDialogCard, { backgroundColor: surface, borderColor }]}>
+              <View style={[styles.centerDialogIconWrap, { backgroundColor: 'rgba(37,99,235,0.10)' }]}>
+                <IconSymbol color={tintColor} name="checkmark.circle.fill" size={22} />
+              </View>
+              <ThemedText style={styles.centerDialogTitle} type="defaultSemiBold">
+                已找到对应商品
+              </ThemedText>
+              <ThemedText style={styles.centerDialogText}>
+                已按条码 {matchedScannedBarcode || '—'} 筛出
+                {matchedScannedCount > 0 ? ` ${matchedScannedCount} ` : ' '}
+                条商品结果，你可以直接在下方列表继续确认。
+              </ThemedText>
+              <View style={styles.centerDialogSingleAction}>
+                <Pressable
+                  onPress={() => {
+                    setMatchedScannedBarcode('');
+                    setMatchedScannedCount(0);
+                  }}
+                  style={[styles.centerDialogPrimaryButton, { backgroundColor: tintColor, borderColor: tintColor }]}>
+                  <ThemedText style={[styles.centerDialogButtonText, { color: '#FFFFFF' }]} type="defaultSemiBold">
+                    查看结果
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </AppShell>
   );
@@ -453,10 +583,30 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 12,
   },
+  searchBarExpanded: {
+    flex: 1,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   searchInput: {
     flex: 1,
     fontSize: 14,
     paddingVertical: 10,
+  },
+  scanEntryButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: 14,
+  },
+  scanEntryLabel: {
+    fontSize: 13,
   },
   segmentedWrap: {
     flexDirection: 'row',
@@ -608,5 +758,69 @@ const styles = StyleSheet.create({
   emptyHint: {
     color: '#64748B',
     textAlign: 'center',
+  },
+  centerDialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15,23,42,0.36)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  centerDialogCard: {
+    alignItems: 'center',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 12,
+    maxWidth: 420,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    width: '100%',
+  },
+  centerDialogIconWrap: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
+  },
+  centerDialogTitle: {
+    fontSize: 20,
+  },
+  centerDialogText: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  centerDialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    width: '100%',
+  },
+  centerDialogSingleAction: {
+    marginTop: 4,
+    width: '100%',
+  },
+  centerDialogButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingHorizontal: 12,
+  },
+  centerDialogPrimaryButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingHorizontal: 12,
+    width: '100%',
+  },
+  centerDialogButtonText: {
+    fontSize: 14,
   },
 });

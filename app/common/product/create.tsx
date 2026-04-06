@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -33,6 +33,12 @@ function SectionHeader({ title, hint }: { title: string; hint: string }) {
 
 export default function ProductCreateScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    barcode?: string;
+    itemName?: string;
+    specification?: string;
+    brand?: string;
+  }>();
   const { showError, showSuccess } = useFeedback();
   const tintColor = useThemeColor({}, 'tint');
   const surface = useThemeColor({}, 'surface');
@@ -67,6 +73,21 @@ export default function ProductCreateScreen() {
   const [uomPickerTarget, setUomPickerTarget] = useState<'stock' | 'wholesale' | 'retail' | null>(null);
   const [uomPickerQuery, setUomPickerQuery] = useState('');
   const [uomOptions, setUomOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (typeof params.itemName === 'string' && params.itemName.trim()) {
+      setItemName((current) => current || params.itemName!.trim());
+    }
+    if (typeof params.brand === 'string' && params.brand.trim()) {
+      setBrand((current) => current || params.brand!.trim());
+    }
+    if (typeof params.barcode === 'string' && params.barcode.trim()) {
+      setBarcode((current) => current || params.barcode!.trim());
+    }
+    if (typeof params.specification === 'string' && params.specification.trim()) {
+      setSpecification((current) => current || params.specification!.trim());
+    }
+  }, [params.barcode, params.brand, params.itemName, params.specification]);
 
   useEffect(() => {
     if (!masterPickerVisible || !masterPickerTarget) {

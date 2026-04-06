@@ -57,6 +57,7 @@ function RootNavigation() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="account-info" options={{ headerShown: false }} />
+        <Stack.Screen name="camera-test" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="system-info" options={{ headerShown: false }} />
         <Stack.Screen name="sales/order/create" options={{ headerShown: false }} />
