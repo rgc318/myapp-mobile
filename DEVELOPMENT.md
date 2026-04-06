@@ -6604,3 +6604,63 @@ This round reduced repeated PDF-viewer shells and aligned the last few document-
 
 - the main implementation design now lives in:
   - `/home/rgc318/python-project/frappe_docker/apps/myapp/PRINTING_TECH_DESIGN.zh-CN.md`
+
+## Product Create + Barcode Flow Simplification (2026-04-06)
+
+This round focused on making product creation practical on mobile while keeping barcode-driven entry and unit conversion behavior stable.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/products.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/item-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/product-form-controls.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/product-uom-sync.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/products.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+
+### What Changed
+
+- product creation is now mobile-first instead of full-desktop-form-first:
+  - added `简化版 / 详细版`
+  - simplified top copy and removed redundant helper text
+  - moved `价格与成交单位` above `库存初始化`
+  - added collapse/expand support for the major cards so users can preview the full form quickly
+- creation now aligns with the backend atomic product-create capability:
+  - the create screen submits product master data and initial stock in one `create_product_v2` call
+  - `入库仓库` and `初始库存数量` are collected directly on the create screen
+  - product-management, sales-search, and purchase-search entry points now pass a suggested warehouse into the create screen
+- simple-mode unit entry was reworked for touch-first use:
+  - keeps `以批发为基准 / 以零售为基准`
+  - uses a single bridge layout: `批发单位 - 系数 - 零售单位`
+  - `默认采购价` now explicitly shows the current base unit in the label
+- create/detail unit conversion logic was unified:
+  - added shared helper `/lib/product-uom-sync.ts`
+  - create and detail screens now use the same rules for:
+    - inferring sync mode
+    - converting backend storage factors into UI-facing factors
+    - building `uomConversions` for submission
+- product detail edit flow was corrected around warehouse and conversion state:
+  - detail screen now honors the warehouse passed from product creation, even when initial stock quantity is `0`
+  - conversion summary cards and edit inputs now share the same display semantics instead of maintaining separate ad-hoc logic
+- barcode flow feedback was made less abrupt:
+  - barcode miss no longer jumps directly into product creation
+  - product-management and lookup-style search now show centered dialogs for:
+    - not found
+    - hidden by current filters
+    - matched candidates
+  - product-management barcode hits now behave like a search result instead of forcing an immediate detail-page navigation
+- order-mode warehouse behavior was tightened:
+  - searching may still happen across all warehouses
+  - but adding to an order now requires a concrete warehouse
+  - fake `未指定仓库` warehouse options were removed from warehouse selection
+  - sales search now defaults to `全部仓库`
+
+### Current Design Rule
+
+- barcode search in management pages should feel like search, not forced navigation
+- mobile product creation should optimize for speed first, then allow deeper editing
+- unit-conversion storage semantics may remain ERPNext-compatible, but displayed factors must always be converted back into business-facing wording before users see them
+- order entry may search broadly, but order insertion must land on a real warehouse

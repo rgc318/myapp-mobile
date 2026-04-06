@@ -282,6 +282,11 @@ export default function PurchaseOrderItemSearchScreen() {
   const [draftItems, setDraftItems] = useState<PurchaseOrderDraftItem[]>(() => getPurchaseOrderDraft(draftScope));
   const [showDraftSheet, setShowDraftSheet] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [pendingScannedBarcode, setPendingScannedBarcode] = useState('');
+  const [hiddenByFilterBarcode, setHiddenByFilterBarcode] = useState('');
+  const [hiddenByFilterCount, setHiddenByFilterCount] = useState(0);
+  const [matchedScannedBarcode, setMatchedScannedBarcode] = useState('');
+  const [matchedScannedCount, setMatchedScannedCount] = useState(0);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -346,39 +351,58 @@ export default function PurchaseOrderItemSearchScreen() {
     });
   };
 
-  const handleSearch = async (rawQuery?: string) => {
+  const runProductSearch = async (rawQuery: string, nextWarehouseFilter: string, nextInStockOnly: boolean) => {
+    const nextQuery = rawQuery.trim();
+    return nextQuery
+      ? await searchCatalogProducts(nextQuery, {
+          company: nextWarehouseFilter.trim() ? undefined : company || undefined,
+          warehouse: nextWarehouseFilter.trim() || undefined,
+          inStockOnly: nextInStockOnly,
+          limit: 20,
+        })
+      : (
+          await fetchProducts({
+            company: nextWarehouseFilter.trim() ? undefined : company || undefined,
+            warehouse: nextWarehouseFilter.trim() || undefined,
+            limit: 40,
+          })
+        ).filter((item) => {
+          if (!nextInStockOnly) {
+            return true;
+          }
+
+          const qty =
+            nextWarehouseFilter.trim()
+              ? (item.warehouseStockDetails?.find((row) => row.warehouse === nextWarehouseFilter.trim())?.qty ??
+                item.stockQty ??
+                0)
+              : (item.globalTotalQty ?? item.totalQty ?? item.stockQty ?? 0);
+          return qty > 0;
+        });
+  };
+
+  const handleSearch = async (
+    rawQuery?: string,
+    overrides?: {
+      inStockOnly?: boolean;
+      warehouseFilter?: string;
+    },
+  ) => {
     const nextQuery = (rawQuery ?? query).trim();
+    const effectiveWarehouseFilter = overrides?.warehouseFilter ?? warehouseFilter;
+    const effectiveInStockOnly = overrides?.inStockOnly ?? inStockOnly;
     let items: ProductSearchItem[] = [];
 
     try {
       setIsLoading(true);
       setQuery(nextQuery);
-      items = nextQuery
-        ? await searchCatalogProducts(nextQuery, {
-            company: warehouseFilter.trim() ? undefined : company || undefined,
-            warehouse: warehouseFilter.trim() || undefined,
-            inStockOnly,
-            limit: 20,
-          })
-        : (
-            await fetchProducts({
-              company: warehouseFilter.trim() ? undefined : company || undefined,
-              warehouse: warehouseFilter.trim() || undefined,
-              limit: 40,
-            })
-          ).filter((item) => {
-            if (!inStockOnly) {
-              return true;
-            }
-
-            const qty =
-              warehouseFilter.trim()
-                ? (item.warehouseStockDetails?.find((row) => row.warehouse === warehouseFilter.trim())?.qty ??
-                  item.stockQty ??
-                  0)
-                : (item.globalTotalQty ?? item.totalQty ?? item.stockQty ?? 0);
-            return qty > 0;
-          });
+      if (overrides?.warehouseFilter !== undefined) {
+        setWarehouseFilter(overrides.warehouseFilter);
+      }
+      if (overrides?.inStockOnly !== undefined) {
+        setInStockOnly(overrides.inStockOnly);
+      }
+      items = await runProductSearch(nextQuery, effectiveWarehouseFilter, effectiveInStockOnly);
       setResults(items);
       setSelectedWarehouseMap(
         items.reduce<Record<string, string>>((acc, item) => {
@@ -394,7 +418,7 @@ export default function PurchaseOrderItemSearchScreen() {
       );
       setMessage(
         items.length
-          ? `${nextQuery ? `找到 ${items.length} 个商品` : `已载入 ${items.length} 个商品`}${warehouseFilter.trim() ? ` · 查看仓 ${warehouseFilter.trim()}` : ' · 全部仓库'}${inStockOnly ? ' · 仅看有库存' : ''}${nextQuery ? '' : ' · 可继续输入关键词缩小范围'}`
+          ? `${nextQuery ? `找到 ${items.length} 个商品` : `已载入 ${items.length} 个商品`}${effectiveWarehouseFilter.trim() ? ` · 查看仓 ${effectiveWarehouseFilter.trim()}` : ' · 全部仓库'}${effectiveInStockOnly ? ' · 仅看有库存' : ''}${nextQuery ? '' : ' · 可继续输入关键词缩小范围'}`
           : '没有找到匹配商品。',
       );
     } catch (error) {
@@ -486,8 +510,15 @@ export default function PurchaseOrderItemSearchScreen() {
     setShowScanner(false);
     const items = await handleSearch(normalized);
     if (!items.length) {
+      const unfilteredItems = await runProductSearch(normalized, '', false);
+      if (unfilteredItems.length) {
+        setHiddenByFilterBarcode(normalized);
+        setHiddenByFilterCount(unfilteredItems.length);
+        setMessage(`条码 ${normalized} 对应的商品存在，但被当前筛选条件隐藏了。`);
+        return;
+      }
       setMessage(`未找到条码 ${normalized} 对应的商品。`);
-      showError(`未找到条码 ${normalized}`);
+      setPendingScannedBarcode(normalized);
       return;
     }
 
@@ -498,7 +529,8 @@ export default function PurchaseOrderItemSearchScreen() {
 
     if (!targetItem) {
       setMessage(`已按条码 ${normalized} 搜到 ${items.length} 个商品，请继续确认要加入的商品。`);
-      showSuccess(`已按条码 ${normalized} 搜索`);
+      setMatchedScannedBarcode(normalized);
+      setMatchedScannedCount(items.length);
       return;
     }
 
@@ -690,6 +722,135 @@ export default function PurchaseOrderItemSearchScreen() {
         title="扫码添加采购商品"
         visible={showScanner}
       />
+
+      <Modal animationType="fade" onRequestClose={() => setPendingScannedBarcode('')} transparent visible={Boolean(pendingScannedBarcode)}>
+        <View style={styles.centerDialogBackdrop}>
+          <View style={[styles.centerDialogCard, { backgroundColor: surface, borderColor }]}>
+            <View style={[styles.centerDialogIconWrap, { backgroundColor: surfaceMuted }]}>
+              <IconSymbol color={tintColor} name="barcode.viewfinder" size={22} />
+            </View>
+            <ThemedText style={styles.centerDialogTitle} type="defaultSemiBold">
+              未找到对应商品
+            </ThemedText>
+            <ThemedText style={styles.centerDialogText}>
+              条码 {pendingScannedBarcode || '—'} 还没有录入到商品库。你可以稍后去商品管理新建，或者继续修改关键词再搜索。
+            </ThemedText>
+            <View style={styles.centerDialogActions}>
+              <Pressable
+                onPress={() => setPendingScannedBarcode('')}
+                style={[styles.centerDialogButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                <ThemedText style={[styles.centerDialogButtonText, { color: '#475569' }]} type="defaultSemiBold">
+                  继续搜索
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const barcode = pendingScannedBarcode;
+                  const suggestedWarehouse = warehouseFilter.trim() || defaultWarehouse || undefined;
+                  setPendingScannedBarcode('');
+                  router.push({
+                    pathname: '/common/product/create',
+                    params: {
+                      barcode,
+                      defaultWarehouse: suggestedWarehouse,
+                    },
+                  });
+                }}
+                style={[styles.centerDialogButton, { backgroundColor: tintColor, borderColor: tintColor }]}>
+                <ThemedText style={[styles.centerDialogButtonText, { color: '#FFFFFF' }]} type="defaultSemiBold">
+                  去新建商品
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => {
+          setHiddenByFilterBarcode('');
+          setHiddenByFilterCount(0);
+        }}
+        transparent
+        visible={Boolean(hiddenByFilterBarcode)}>
+        <View style={styles.centerDialogBackdrop}>
+          <View style={[styles.centerDialogCard, { backgroundColor: surface, borderColor }]}>
+            <View style={[styles.centerDialogIconWrap, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
+              <IconSymbol color="#D97706" name="line.3.horizontal.decrease.circle.fill" size={22} />
+            </View>
+            <ThemedText style={styles.centerDialogTitle} type="defaultSemiBold">
+              商品被筛选条件隐藏
+            </ThemedText>
+            <ThemedText style={styles.centerDialogText}>
+              条码 {hiddenByFilterBarcode || '—'} 实际有
+              {hiddenByFilterCount > 0 ? ` ${hiddenByFilterCount} ` : ' '}
+              条商品记录，但它们被当前仓库或“仅看有库存”条件过滤掉了。
+            </ThemedText>
+            <View style={styles.centerDialogActions}>
+              <Pressable
+                onPress={() => {
+                  setHiddenByFilterBarcode('');
+                  setHiddenByFilterCount(0);
+                }}
+                style={[styles.centerDialogButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                <ThemedText style={[styles.centerDialogButtonText, { color: '#475569' }]} type="defaultSemiBold">
+                  保持当前筛选
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const barcode = hiddenByFilterBarcode;
+                  setHiddenByFilterBarcode('');
+                  setHiddenByFilterCount(0);
+                  void handleSearch(barcode, { inStockOnly: false, warehouseFilter: '' });
+                }}
+                style={[styles.centerDialogButton, { backgroundColor: tintColor, borderColor: tintColor }]}>
+                <ThemedText style={[styles.centerDialogButtonText, { color: '#FFFFFF' }]} type="defaultSemiBold">
+                  查看全部结果
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => {
+          setMatchedScannedBarcode('');
+          setMatchedScannedCount(0);
+        }}
+        transparent
+        visible={Boolean(matchedScannedBarcode)}>
+        <View style={styles.centerDialogBackdrop}>
+          <View style={[styles.centerDialogCard, { backgroundColor: surface, borderColor }]}>
+            <View style={[styles.centerDialogIconWrap, { backgroundColor: 'rgba(37,99,235,0.10)' }]}>
+              <IconSymbol color={tintColor} name="checkmark.circle.fill" size={22} />
+            </View>
+            <ThemedText style={styles.centerDialogTitle} type="defaultSemiBold">
+              已找到候选商品
+            </ThemedText>
+            <ThemedText style={styles.centerDialogText}>
+              已按条码 {matchedScannedBarcode || '—'} 筛出
+              {matchedScannedCount > 0 ? ` ${matchedScannedCount} ` : ' '}
+              条候选商品，请在当前列表里确认后再加入采购单。
+            </ThemedText>
+            <View style={styles.centerDialogSingleAction}>
+              <Pressable
+                onPress={() => {
+                  setMatchedScannedBarcode('');
+                  setMatchedScannedCount(0);
+                }}
+                style={[styles.centerDialogPrimaryButton, { backgroundColor: tintColor, borderColor: tintColor }]}>
+                <ThemedText style={[styles.centerDialogButtonText, { color: '#FFFFFF' }]} type="defaultSemiBold">
+                  查看结果
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         animationType="slide"
@@ -1106,6 +1267,70 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 8,
     padding: 16,
+  },
+  centerDialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15,23,42,0.36)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  centerDialogCard: {
+    alignItems: 'center',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 12,
+    maxWidth: 420,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    width: '100%',
+  },
+  centerDialogIconWrap: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
+  },
+  centerDialogTitle: {
+    fontSize: 20,
+  },
+  centerDialogText: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  centerDialogActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    width: '100%',
+  },
+  centerDialogSingleAction: {
+    marginTop: 4,
+    width: '100%',
+  },
+  centerDialogButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingHorizontal: 12,
+  },
+  centerDialogPrimaryButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingHorizontal: 12,
+    width: '100%',
+  },
+  centerDialogButtonText: {
+    fontSize: 14,
   },
   bottomSpacer: {
     height: 20,

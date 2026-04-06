@@ -65,6 +65,9 @@ export type CreateProductPayload = {
   wholesaleDefaultUom?: string | null;
   retailDefaultUom?: string | null;
   openingUom?: string | null;
+  warehouse?: string | null;
+  warehouseStockQty?: number | null;
+  warehouseStockUom?: string | null;
 };
 
 export type SaveProductPayload = {
@@ -427,6 +430,9 @@ export async function createProduct(payload: CreateProductPayload) {
       wholesale_default_uom: payload.wholesaleDefaultUom,
       retail_default_uom: payload.retailDefaultUom,
       opening_uom: payload.openingUom,
+      warehouse: payload.warehouse,
+      warehouse_stock_qty: payload.warehouseStockQty,
+      warehouse_stock_uom: payload.warehouseStockUom,
     },
   );
 

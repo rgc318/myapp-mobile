@@ -8,6 +8,7 @@ import { ProductTextField as DetailField } from '@/components/product-form-contr
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { buildProductUomConversions, formatFactorInput, resolveDisplayConversionFactors, type StockSyncMode } from '@/lib/product-uom-sync';
 import { useFeedback } from '@/providers/feedback-provider';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
 import { fetchProductDetail, saveProductBasicInfo, setProductDisabled, type ProductDetail } from '@/services/products';
@@ -24,10 +25,6 @@ function toNumberOrNull(value: string) {
   }
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function formatFactor(value: number | null | undefined) {
-  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
 }
 
 function normalizeComparableText(value: string | null | undefined) {
@@ -73,7 +70,7 @@ function isSelectableWarehouse(value: string) {
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { showError, showSuccess } = useFeedback();
-  const { itemCode } = useLocalSearchParams<{ itemCode?: string }>();
+  const { itemCode, warehouse: initialWarehouse } = useLocalSearchParams<{ itemCode?: string; warehouse?: string }>();
   const productCode = typeof itemCode === 'string' ? itemCode : '';
 
   const surface = useThemeColor({}, 'surface');
@@ -121,7 +118,7 @@ export default function ProductDetailScreen() {
   const [draftRetailDefaultUom, setDraftRetailDefaultUom] = useState('');
   const [draftWholesaleConversionFactor, setDraftWholesaleConversionFactor] = useState('');
   const [draftRetailConversionFactor, setDraftRetailConversionFactor] = useState('');
-  const [stockSyncMode, setStockSyncMode] = useState<'manual' | 'wholesale' | 'retail'>('manual');
+  const [stockSyncMode, setStockSyncMode] = useState<StockSyncMode>('manual');
   const [draftWarehouseStockQty, setDraftWarehouseStockQty] = useState('');
   const [draftWarehouseStockUom, setDraftWarehouseStockUom] = useState('');
 
@@ -142,25 +139,20 @@ export default function ProductDetailScreen() {
     setDraftWholesaleDefaultUom(next.wholesaleDefaultUom || '');
     setDraftRetailDefaultUom(next.retailDefaultUom || '');
 
-    const conversionMap = new Map(next.uomConversions.map((row) => [row.uom, row.conversionFactor]));
-    const wholesaleFactor =
-      next.wholesaleDefaultUom && next.wholesaleDefaultUom === next.stockUom
-        ? 1
-        : conversionMap.get(next.wholesaleDefaultUom || '') ?? null;
+    const {
+      stockSyncMode: nextStockSyncMode,
+      wholesaleFactor,
+      retailFactor,
+    } = resolveDisplayConversionFactors({
+      stockUom: next.stockUom,
+      wholesaleDefaultUom: next.wholesaleDefaultUom,
+      retailDefaultUom: next.retailDefaultUom,
+      uomConversions: next.uomConversions,
+    });
 
-    setDraftWholesaleConversionFactor(formatFactor(wholesaleFactor));
-    const retailFactor =
-      next.retailDefaultUom && next.retailDefaultUom === next.stockUom
-        ? 1
-        : conversionMap.get(next.retailDefaultUom || '') ?? null;
-    setDraftRetailConversionFactor(formatFactor(retailFactor));
-    if (next.stockUom && next.stockUom === next.wholesaleDefaultUom) {
-      setStockSyncMode('wholesale');
-    } else if (next.stockUom && next.stockUom === next.retailDefaultUom) {
-      setStockSyncMode('retail');
-    } else {
-      setStockSyncMode('manual');
-    }
+    setDraftWholesaleConversionFactor(formatFactorInput(wholesaleFactor));
+    setDraftRetailConversionFactor(formatFactorInput(retailFactor));
+    setStockSyncMode(nextStockSyncMode);
     setDraftWarehouseStockUom(next.stockUom || next.retailDefaultUom || next.wholesaleDefaultUom || '');
   };
 
@@ -386,6 +378,29 @@ export default function ProductDetailScreen() {
   const wholesaleNeedsFactor = Boolean(wholesaleUomDisplay && stockUomDisplay && wholesaleUomDisplay !== stockUomDisplay);
   const retailNeedsFactor = Boolean(retailUomDisplay && stockUomDisplay && retailUomDisplay !== stockUomDisplay);
 
+  const wholesaleSummaryText = useMemo(() => {
+    if (!ruleWholesaleUom) {
+      return '未配置';
+    }
+    if (!wholesaleNeedsFactor) {
+      return `${formatDisplayUom(ruleWholesaleUom)}（与库存基准一致）`;
+    }
+    return `1 ${formatDisplayUom(ruleWholesaleUom)} = ${draftWholesaleConversionFactor || '未配置'} ${formatDisplayUom(ruleStockUom)}`;
+  }, [draftWholesaleConversionFactor, ruleStockUom, ruleWholesaleUom, wholesaleNeedsFactor]);
+
+  const retailSummaryText = useMemo(() => {
+    if (!ruleRetailUom) {
+      return '未配置';
+    }
+    if (!retailNeedsFactor) {
+      return `${formatDisplayUom(ruleRetailUom)}（与库存基准一致）`;
+    }
+    if (stockSyncMode === 'wholesale') {
+      return `1 ${formatDisplayUom(ruleStockUom)} = ${draftRetailConversionFactor || '未配置'} ${formatDisplayUom(ruleRetailUom)}`;
+    }
+    return `1 ${formatDisplayUom(ruleRetailUom)} = ${draftRetailConversionFactor || '未配置'} ${formatDisplayUom(ruleStockUom)}`;
+  }, [draftRetailConversionFactor, retailNeedsFactor, ruleRetailUom, ruleStockUom, stockSyncMode]);
+
   const uomConversionRows = useMemo(() => {
     if (!detail) {
       return [];
@@ -415,7 +430,9 @@ export default function ProductDetailScreen() {
 
     try {
       setIsLoading(true);
-      const next = await fetchProductDetail(productCode);
+      const next = await fetchProductDetail(productCode, {
+        warehouse: typeof initialWarehouse === 'string' ? initialWarehouse : undefined,
+      });
       if (!next) {
         throw new Error('未找到商品详情');
       }
@@ -426,7 +443,7 @@ export default function ProductDetailScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [productCode, showError]);
+  }, [initialWarehouse, productCode, showError]);
 
   useEffect(() => {
     void loadDetail();
@@ -513,6 +530,7 @@ export default function ProductDetailScreen() {
     }
 
     const nextWarehouse =
+      (typeof initialWarehouse === 'string' && initialWarehouse.trim() ? initialWarehouse.trim() : '') ||
       warehouseOptions.find((warehouse) => warehouse === selectedWarehouse) ||
       detail.warehouse ||
       warehouseOptions[0] ||
@@ -524,7 +542,7 @@ export default function ProductDetailScreen() {
     }
 
     setDraftWarehouseStockQty(selectedWarehouseQty != null ? String(selectedWarehouseQty) : '');
-  }, [detail, selectedWarehouse, selectedWarehouseQty, warehouseOptions]);
+  }, [detail, initialWarehouse, selectedWarehouse, selectedWarehouseQty, warehouseOptions]);
 
   const handleSave = async () => {
     if (!detail) {
@@ -572,15 +590,15 @@ export default function ProductDetailScreen() {
       const buyingRateValue = toNumberOrNull(draftBuyingRate);
       const wholesaleFactor = toNumberOrNull(draftWholesaleConversionFactor);
       const retailFactor = toNumberOrNull(draftRetailConversionFactor);
-      const conversionMap = new Map(detail.uomConversions.map((row) => [row.uom, row.conversionFactor]));
-      const currentWholesaleFactor =
-        detail.wholesaleDefaultUom && detail.wholesaleDefaultUom === detail.stockUom
-          ? 1
-          : (conversionMap.get(detail.wholesaleDefaultUom || '') ?? null);
-      const currentRetailFactor =
-        detail.retailDefaultUom && detail.retailDefaultUom === detail.stockUom
-          ? 1
-          : (conversionMap.get(detail.retailDefaultUom || '') ?? null);
+      const {
+        wholesaleFactor: currentWholesaleFactor,
+        retailFactor: currentRetailFactor,
+      } = resolveDisplayConversionFactors({
+        stockUom: detail.stockUom,
+        wholesaleDefaultUom: detail.wholesaleDefaultUom,
+        retailDefaultUom: detail.retailDefaultUom,
+        uomConversions: detail.uomConversions,
+      });
 
       const baseInfoChanged =
         normalizeComparableText(trimmedName) !== normalizeComparableText(detail.itemName) ||
@@ -616,9 +634,9 @@ export default function ProductDetailScreen() {
       const retailUomChanged =
         normalizeComparableText(trimmedRetailUom) !== normalizeComparableText(detail.retailDefaultUom);
       const wholesaleFactorChanged =
-        normalizeComparableText(draftWholesaleConversionFactor) !== normalizeComparableText(formatFactor(currentWholesaleFactor));
+        normalizeComparableText(draftWholesaleConversionFactor) !== normalizeComparableText(formatFactorInput(currentWholesaleFactor));
       const retailFactorChanged =
-        normalizeComparableText(draftRetailConversionFactor) !== normalizeComparableText(formatFactor(currentRetailFactor));
+        normalizeComparableText(draftRetailConversionFactor) !== normalizeComparableText(formatFactorInput(currentRetailFactor));
 
       const wholesaleConfigTouched =
         wholesaleRateChanged ||
@@ -712,30 +730,14 @@ export default function ProductDetailScreen() {
       }
 
       if (salesConfigChanged) {
-        const uomConversions = [
-          { uom: trimmedStockUom, conversionFactor: 1 },
-          ...(trimmedWholesaleUom
-            ? [
-                {
-                  uom: trimmedWholesaleUom,
-                  conversionFactor: trimmedWholesaleUom === trimmedStockUom ? 1 : (wholesaleFactor as number),
-                },
-              ]
-            : []),
-          ...(trimmedRetailUom
-            ? [
-                {
-                  uom: trimmedRetailUom,
-                  conversionFactor:
-                    trimmedRetailUom === trimmedStockUom
-                      ? 1
-                      : stockSyncMode === 'wholesale'
-                        ? 1 / (retailFactor as number)
-                        : (retailFactor as number),
-                },
-              ]
-            : []),
-        ].filter((entry, index, array) => array.findIndex((row) => row.uom === entry.uom) === index);
+        const uomConversions = buildProductUomConversions({
+          stockUom: trimmedStockUom,
+          wholesaleDefaultUom: trimmedWholesaleUom || undefined,
+          retailDefaultUom: trimmedRetailUom || undefined,
+          wholesaleFactor,
+          retailFactor,
+          stockSyncMode,
+        });
 
         payload.stockUom = trimmedStockUom;
         payload.uomConversions = uomConversions;
@@ -1157,21 +1159,13 @@ export default function ProductDetailScreen() {
                     <View style={styles.unitFlowCenter}>
                       <ThemedText style={styles.unitFlowLabel}>批发默认</ThemedText>
                       <ThemedText style={styles.unitFlowValue} type="defaultSemiBold">
-                        {ruleWholesaleUom
-                          ? wholesaleNeedsFactor
-                            ? `1 ${formatDisplayUom(ruleWholesaleUom)} = ${draftWholesaleConversionFactor || '未配置'} ${formatDisplayUom(ruleStockUom)}`
-                            : `${formatDisplayUom(ruleWholesaleUom)}（与库存基准一致）`
-                          : '未配置'}
+                        {wholesaleSummaryText}
                       </ThemedText>
                     </View>
                     <View style={styles.unitFlowCell}>
                       <ThemedText style={styles.unitFlowLabel}>零售默认</ThemedText>
                       <ThemedText style={styles.unitFlowValue} type="defaultSemiBold">
-                        {ruleRetailUom
-                          ? retailNeedsFactor
-                            ? `1 ${formatDisplayUom(ruleRetailUom)} = ${draftRetailConversionFactor || '未配置'} ${formatDisplayUom(ruleStockUom)}`
-                            : `${formatDisplayUom(ruleRetailUom)}（与库存基准一致）`
-                          : '未配置'}
+                        {retailSummaryText}
                       </ThemedText>
                     </View>
                   </View>

@@ -1,4 +1,4 @@
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardTypeOptions, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -12,6 +12,7 @@ export function ProductTextField({
   labelColor,
   required = false,
   editable = true,
+  keyboardType,
 }: {
   label: string;
   value: string;
@@ -21,6 +22,7 @@ export function ProductTextField({
   labelColor?: string;
   required?: boolean;
   editable?: boolean;
+  keyboardType?: KeyboardTypeOptions;
 }) {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
@@ -42,6 +44,7 @@ export function ProductTextField({
       ) : null}
       <TextInput
         editable={editable}
+        keyboardType={keyboardType}
         multiline={multiline}
         numberOfLines={multiline ? 4 : 1}
         onChangeText={onChangeText}

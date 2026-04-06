@@ -175,8 +175,12 @@ function ResultRow({
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const primaryLabel = getPrimaryProductLabel(item);
   const secondaryLabel = getSecondaryProductLabel(item);
-  const selectedWarehouseName = selectedWarehouse || item.warehouse || '未指定仓库';
-  const selectedWarehouseStockText = formatWarehouseStockLabel(item, selectedWarehouse || item.warehouse);
+  const resolvedWarehouse = selectedWarehouse || item.warehouse || '';
+  const hasResolvedWarehouse = Boolean(resolvedWarehouse);
+  const selectedWarehouseName = hasResolvedWarehouse ? resolvedWarehouse : '尚未选择仓库';
+  const selectedWarehouseStockText = hasResolvedWarehouse
+    ? formatWarehouseStockLabel(item, resolvedWarehouse)
+    : '请先选仓';
   const showTotalSelectedHint = totalSelectedQty > 0 && totalSelectedQty !== selectedQty;
 
   return (
@@ -251,7 +255,7 @@ function ResultRow({
               ) : (
                 <Pressable onPress={(event) => { event.stopPropagation(); onAdd(item); }} style={[styles.addButton, { backgroundColor: tintColor }]}>
                   <ThemedText style={styles.addButtonText} type="defaultSemiBold">
-                    {'加入当前仓'}
+                    {hasResolvedWarehouse ? '加入当前仓' : '选择仓库'}
                   </ThemedText>
                 </Pressable>
               )}
@@ -289,7 +293,7 @@ function ResultRow({
 
         {isOrderMode ? (
           <ThemedText style={styles.actionCurrentValue} numberOfLines={1} type="defaultSemiBold">
-            当前仓已加 {selectedQty}
+            {hasResolvedWarehouse ? `当前仓已加 ${selectedQty}` : '请先选择仓库后再加入'}
           </ThemedText>
         ) : null}
 
@@ -304,7 +308,7 @@ function ResultRow({
           <Pressable
             onPress={(event) => {
               event.stopPropagation();
-              onSelectWarehouse(item, selectedWarehouse || item.warehouse || '');
+              onSelectWarehouse(item, resolvedWarehouse);
             }}
             style={[styles.warehouseSelectorButton, { backgroundColor: surfaceMuted, borderColor }]}>
             <View style={styles.warehouseSelectorCopy}>
@@ -468,7 +472,7 @@ export default function ProductSearchScreen() {
   const preferences = getAppPreferences();
   const { showError, showSuccess } = useFeedback();
   const [query, setQuery] = useState('');
-  const [warehouseFilter, setWarehouseFilter] = useState(preferences.defaultWarehouse || '');
+  const [warehouseFilter, setWarehouseFilter] = useState('');
   const [inStockOnly, setInStockOnly] = useState(true);
   const [results, setResults] = useState<ProductSearchItem[]>([]);
   const [selectedWarehouseMap, setSelectedWarehouseMap] = useState<Record<string, string>>({});
@@ -497,6 +501,8 @@ export default function ProductSearchScreen() {
   const [showDraftSheet, setShowDraftSheet] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [pendingScannedBarcode, setPendingScannedBarcode] = useState('');
+  const [hiddenByFilterBarcode, setHiddenByFilterBarcode] = useState('');
+  const [hiddenByFilterCount, setHiddenByFilterCount] = useState(0);
   const [matchedScannedBarcode, setMatchedScannedBarcode] = useState('');
   const [matchedScannedCount, setMatchedScannedCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -524,11 +530,54 @@ export default function ProductSearchScreen() {
     [draftItems],
   );
   const loadWarehouseOptions = async (text: string) => {
-    return searchLinkOptions('Warehouse', text, ['warehouse_name']);
+    const options = await searchLinkOptions('Warehouse', text, ['warehouse_name']);
+    return [
+      {
+        label: '全部仓库',
+        value: '',
+        description: '不限制仓库，搜索全部仓库商品',
+      },
+      ...options,
+    ];
   };
 
-  const handleSearch = async (rawQuery?: string) => {
+  const runProductSearch = async (rawQuery: string, nextWarehouseFilter: string, nextInStockOnly: boolean) => {
+    const nextQuery = rawQuery.trim();
+    return nextQuery
+      ? await searchCatalogProducts(nextQuery, {
+          company: preferences.defaultCompany || undefined,
+          warehouse: nextWarehouseFilter.trim() || undefined,
+          inStockOnly: nextInStockOnly,
+          limit: 20,
+        })
+      : (
+          await fetchProducts({
+            company: preferences.defaultCompany || undefined,
+            warehouse: nextWarehouseFilter.trim() || undefined,
+            limit: 100,
+          })
+        ).filter((item) => {
+          if (!nextInStockOnly) {
+            return true;
+          }
+          const qty =
+            nextWarehouseFilter.trim()
+              ? (item.warehouseStockQty ?? item.stockQty ?? 0)
+              : (item.totalQty ?? item.stockQty ?? 0);
+          return qty > 0;
+        });
+  };
+
+  const handleSearch = async (
+    rawQuery?: string,
+    overrides?: {
+      inStockOnly?: boolean;
+      warehouseFilter?: string;
+    },
+  ) => {
     const nextQuery = (rawQuery ?? query).trim();
+    const effectiveWarehouseFilter = overrides?.warehouseFilter ?? warehouseFilter;
+    const effectiveInStockOnly = overrides?.inStockOnly ?? inStockOnly;
 
     if (!nextQuery && !isOrderMode) {
       setMessage('\u8bf7\u8f93\u5165\u5546\u54c1\u7f16\u7801\u3001\u6761\u7801\u6216\u5173\u952e\u8bcd\u3002');
@@ -539,37 +588,22 @@ export default function ProductSearchScreen() {
     try {
       setIsLoading(true);
       setQuery(nextQuery);
-      const items = nextQuery
-        ? await searchCatalogProducts(nextQuery, {
-            company: preferences.defaultCompany || undefined,
-            warehouse: warehouseFilter.trim() || undefined,
-            inStockOnly,
-            limit: 20,
-          })
-        : (
-            await fetchProducts({
-              company: preferences.defaultCompany || undefined,
-              warehouse: warehouseFilter.trim() || undefined,
-              limit: 100,
-            })
-          ).filter((item) => {
-            if (!inStockOnly) {
-              return true;
-            }
-            const qty =
-              warehouseFilter.trim()
-                ? (item.warehouseStockQty ?? item.stockQty ?? 0)
-                : (item.totalQty ?? item.stockQty ?? 0);
-            return qty > 0;
-          });
+      if (overrides?.warehouseFilter !== undefined) {
+        setWarehouseFilter(overrides.warehouseFilter);
+      }
+      if (overrides?.inStockOnly !== undefined) {
+        setInStockOnly(overrides.inStockOnly);
+      }
+      const items = await runProductSearch(nextQuery, effectiveWarehouseFilter, effectiveInStockOnly);
       setSelectedWarehouseMap(
         items.reduce<Record<string, string>>((acc, item) => {
           const preferredWarehouse =
-            (warehouseFilter.trim() &&
-            item.warehouseStockDetails?.some((row) => row.warehouse === warehouseFilter.trim())
-              ? warehouseFilter.trim()
+            (effectiveWarehouseFilter.trim() &&
+            item.warehouseStockDetails?.some((row) => row.warehouse === effectiveWarehouseFilter.trim())
+              ? effectiveWarehouseFilter.trim()
               : item.warehouse) ||
             item.warehouseStockDetails?.[0]?.warehouse ||
+            preferences.defaultWarehouse ||
             '';
           if (preferredWarehouse) {
             acc[item.itemCode] = preferredWarehouse;
@@ -580,7 +614,7 @@ export default function ProductSearchScreen() {
       setResults(items);
       setMessage(
         items.length
-          ? `${nextQuery ? `找到 ${items.length} 个商品` : `已载入 ${items.length} 个商品`}${warehouseFilter.trim() ? ` · 仓库 ${warehouseFilter.trim()}` : ''}${inStockOnly ? ' · 仅看有库存' : ''}`
+          ? `${nextQuery ? `找到 ${items.length} 个商品` : `已载入 ${items.length} 个商品`}${effectiveWarehouseFilter.trim() ? ` · 仓库 ${effectiveWarehouseFilter.trim()}` : ' · 全部仓库'}${effectiveInStockOnly ? ' · 仅看有库存' : ''}`
           : '\u6ca1\u6709\u627e\u5230\u5339\u914d\u5546\u54c1\u3002',
       );
       return items;
@@ -601,6 +635,11 @@ export default function ProductSearchScreen() {
 
   const handleAdd = (item: ProductSearchItem) => {
     const selectedWarehouse = selectedWarehouseMap[item.itemCode] ?? item.warehouse ?? null;
+    if (!selectedWarehouse) {
+      setWarehousePickerItem(item);
+      setMessage(`请先为 ${item.itemName || item.itemCode} 选择仓库，再加入订单。`);
+      return;
+    }
     const selectedWarehouseQty =
       item.warehouseStockDetails?.find((row) => row.warehouse === selectedWarehouse)?.qty ?? item.stockQty;
     const nextItem = {
@@ -674,6 +713,13 @@ export default function ProductSearchScreen() {
     setShowScanner(false);
     const items = await handleSearch(normalized);
     if (!items.length) {
+      const unfilteredItems = await runProductSearch(normalized, '', false);
+      if (unfilteredItems.length) {
+        setHiddenByFilterBarcode(normalized);
+        setHiddenByFilterCount(unfilteredItems.length);
+        setMessage(`条码 ${normalized} 对应的商品存在，但被当前筛选条件隐藏了。`);
+        return;
+      }
       setMessage(`未找到条码 ${normalized} 对应的商品。`);
       setPendingScannedBarcode(normalized);
       return;
@@ -979,15 +1025,68 @@ export default function ProductSearchScreen() {
               <Pressable
                 onPress={() => {
                   const barcode = pendingScannedBarcode;
+                  const suggestedWarehouse = warehouseFilter.trim() || preferences.defaultWarehouse || undefined;
                   setPendingScannedBarcode('');
                   router.push({
                     pathname: '/common/product/create',
-                    params: { barcode },
+                    params: {
+                      barcode,
+                      defaultWarehouse: suggestedWarehouse,
+                    },
                   });
                 }}
                 style={[styles.centerDialogButton, { backgroundColor: tintColor, borderColor: tintColor }]}>
                 <ThemedText style={[styles.centerDialogButtonText, { color: '#FFFFFF' }]} type="defaultSemiBold">
                   去新建商品
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => {
+          setHiddenByFilterBarcode('');
+          setHiddenByFilterCount(0);
+        }}
+        transparent
+        visible={Boolean(hiddenByFilterBarcode)}>
+        <View style={styles.centerDialogBackdrop}>
+          <View style={[styles.centerDialogCard, { backgroundColor: surface, borderColor }]}>
+            <View style={[styles.centerDialogIconWrap, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
+              <IconSymbol color="#D97706" name="line.3.horizontal.decrease.circle.fill" size={22} />
+            </View>
+            <ThemedText style={styles.centerDialogTitle} type="defaultSemiBold">
+              商品被筛选条件隐藏
+            </ThemedText>
+            <ThemedText style={styles.centerDialogText}>
+              条码 {hiddenByFilterBarcode || '—'} 实际有
+              {hiddenByFilterCount > 0 ? ` ${hiddenByFilterCount} ` : ' '}
+              条商品记录，但它们被当前仓库或“仅看有库存”条件过滤掉了。
+            </ThemedText>
+            <View style={styles.centerDialogActions}>
+              <Pressable
+                onPress={() => {
+                  setHiddenByFilterBarcode('');
+                  setHiddenByFilterCount(0);
+                }}
+                style={[styles.centerDialogButton, { backgroundColor: surfaceMuted, borderColor }]}>
+                <ThemedText style={[styles.centerDialogButtonText, { color: '#475569' }]} type="defaultSemiBold">
+                  保持当前筛选
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const barcode = hiddenByFilterBarcode;
+                  setHiddenByFilterBarcode('');
+                  setHiddenByFilterCount(0);
+                  void handleSearch(barcode, { inStockOnly: false, warehouseFilter: '' });
+                }}
+                style={[styles.centerDialogButton, { backgroundColor: tintColor, borderColor: tintColor }]}>
+                <ThemedText style={[styles.centerDialogButtonText, { color: '#FFFFFF' }]} type="defaultSemiBold">
+                  查看全部结果
                 </ThemedText>
               </Pressable>
             </View>
@@ -1230,74 +1329,98 @@ export default function ProductSearchScreen() {
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.sheetList} style={styles.sheetScroll}>
-              {(warehousePickerItem?.warehouseStockDetails?.length
+            {(() => {
+              const fallbackWarehouse =
+                (warehousePickerItem
+                  ? selectedWarehouseMap[warehousePickerItem.itemCode] || warehousePickerItem.warehouse || preferences.defaultWarehouse || ''
+                  : '') || '';
+              const warehouseOptions = warehousePickerItem?.warehouseStockDetails?.length
                 ? warehousePickerItem.warehouseStockDetails
-                : [
-                    {
-                      warehouse: warehousePickerItem?.warehouse || '未指定仓库',
-                      company: null,
-                      qty: warehousePickerItem?.stockQty ?? 0,
-                    },
-                  ]
-              ).map((stockRow) => {
-                const active =
-                  stockRow.warehouse ===
-                  (selectedWarehouseMap[warehousePickerItem?.itemCode ?? ''] ?? warehousePickerItem?.warehouse);
-                const warehouseAddedQty = warehousePickerItem
-                  ? getDraftQtyForWarehouse(warehousePickerItem.itemCode, stockRow.warehouse, draftItems)
-                  : 0;
-
-                return (
-                  <Pressable
-                    key={`${warehousePickerItem?.itemCode}-${stockRow.warehouse}`}
-                    onPress={() => {
-                      if (warehousePickerItem) {
-                        setSelectedWarehouseMap((current) => ({
-                          ...current,
-                          [warehousePickerItem.itemCode]: stockRow.warehouse,
-                        }));
-                      }
-                      setWarehousePickerItem(null);
-                    }}
-                    style={[
-                      styles.modalWarehouseOption,
+                : fallbackWarehouse
+                  ? [
                       {
-                        backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted,
-                        borderColor,
+                        warehouse: fallbackWarehouse,
+                        company: null,
+                        qty: warehousePickerItem?.stockQty ?? 0,
                       },
-                    ]}>
-                    <View style={styles.modalWarehouseCopy}>
-                      <ThemedText numberOfLines={1} type="defaultSemiBold">
-                        {stockRow.warehouse}
-                      </ThemedText>
-                      <ThemedText style={styles.modalWarehouseMeta}>
-                        库存 {stockRow.qty}{' '}
-                        {warehousePickerItem?.stockUom || warehousePickerItem?.uom
-                          ? formatDisplayUom(warehousePickerItem?.stockUom || warehousePickerItem?.uom || '')
-                          : ''}
-                      </ThemedText>
-                      {stockRow.company ? (
-                        <ThemedText style={styles.modalWarehouseMeta}>{stockRow.company}</ThemedText>
-                      ) : null}
-                    </View>
-                    <View style={styles.modalWarehouseAside}>
-                      <View style={styles.modalWarehouseQtyBlock}>
-                        <ThemedText style={styles.modalWarehouseQtyLabel}>已加</ThemedText>
-                        <ThemedText style={[styles.modalWarehouseQtyValue, { color: tintColor }]} type="defaultSemiBold">
-                          {warehouseAddedQty}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.modalWarehouseActionBlock}>
-                        <ThemedText style={[styles.modalWarehouseAction, { color: tintColor }]} type="defaultSemiBold">
-                          {active ? '当前' : '选择'}
-                        </ThemedText>
-                      </View>
-                    </View>
-                  </Pressable>
+                    ]
+                  : [];
+
+              if (!warehouseOptions.length) {
+                return (
+                  <View style={styles.emptyDraftState}>
+                    <ThemedText type="defaultSemiBold">当前没有可用仓库</ThemedText>
+                    <ThemedText style={styles.metaText}>
+                      请先在订单页或系统设置中指定默认仓库，再回来添加这个商品。
+                    </ThemedText>
+                  </View>
                 );
-              })}
-            </ScrollView>
+              }
+
+              return (
+                <ScrollView contentContainerStyle={styles.sheetList} style={styles.sheetScroll}>
+                  {warehouseOptions.map((stockRow) => {
+                    const active =
+                      stockRow.warehouse ===
+                      (selectedWarehouseMap[warehousePickerItem?.itemCode ?? ''] ??
+                        warehousePickerItem?.warehouse ??
+                        preferences.defaultWarehouse);
+                    const warehouseAddedQty = warehousePickerItem
+                      ? getDraftQtyForWarehouse(warehousePickerItem.itemCode, stockRow.warehouse, draftItems)
+                      : 0;
+
+                    return (
+                      <Pressable
+                        key={`${warehousePickerItem?.itemCode}-${stockRow.warehouse}`}
+                        onPress={() => {
+                          if (warehousePickerItem) {
+                            setSelectedWarehouseMap((current) => ({
+                              ...current,
+                              [warehousePickerItem.itemCode]: stockRow.warehouse,
+                            }));
+                          }
+                          setWarehousePickerItem(null);
+                        }}
+                        style={[
+                          styles.modalWarehouseOption,
+                          {
+                            backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted,
+                            borderColor,
+                          },
+                        ]}>
+                        <View style={styles.modalWarehouseCopy}>
+                          <ThemedText numberOfLines={1} type="defaultSemiBold">
+                            {stockRow.warehouse}
+                          </ThemedText>
+                          <ThemedText style={styles.modalWarehouseMeta}>
+                            库存 {stockRow.qty}{' '}
+                            {warehousePickerItem?.stockUom || warehousePickerItem?.uom
+                              ? formatDisplayUom(warehousePickerItem?.stockUom || warehousePickerItem?.uom || '')
+                              : ''}
+                          </ThemedText>
+                          {stockRow.company ? (
+                            <ThemedText style={styles.modalWarehouseMeta}>{stockRow.company}</ThemedText>
+                          ) : null}
+                        </View>
+                        <View style={styles.modalWarehouseAside}>
+                          <View style={styles.modalWarehouseQtyBlock}>
+                            <ThemedText style={styles.modalWarehouseQtyLabel}>已加</ThemedText>
+                            <ThemedText style={[styles.modalWarehouseQtyValue, { color: tintColor }]} type="defaultSemiBold">
+                              {warehouseAddedQty}
+                            </ThemedText>
+                          </View>
+                          <View style={styles.modalWarehouseActionBlock}>
+                            <ThemedText style={[styles.modalWarehouseAction, { color: tintColor }]} type="defaultSemiBold">
+                              {active ? '当前' : '选择'}
+                            </ThemedText>
+                          </View>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              );
+            })()}
           </View>
         </View>
       </Modal>

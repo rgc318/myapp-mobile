@@ -407,6 +407,8 @@ export async function searchWarehouses(query: string, company?: string) {
   const trimmedCompany = company?.trim();
   const filters: unknown[] = [];
 
+  filters.push(['is_group', '=', 0]);
+
   if (trimmedQuery) {
     filters.push(['name', 'like', `%${trimmedQuery}%`]);
   }

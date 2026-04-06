@@ -6,9 +6,12 @@ import { AppShell } from '@/components/app-shell';
 import { ProductPickerSheet, ProductSelectorField, ProductTextField } from '@/components/product-form-controls';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getAppPreferences } from '@/lib/app-preferences';
 import { formatDisplayUom } from '@/lib/display-uom';
+import { buildProductUomConversions, type StockSyncMode } from '@/lib/product-uom-sync';
 import { useFeedback } from '@/providers/feedback-provider';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
+import { searchWarehouses } from '@/services/purchases';
 import { createProduct } from '@/services/products';
 
 function toNumberOrNull(value: string) {
@@ -20,13 +23,43 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function SectionHeader({ title, hint }: { title: string; hint: string }) {
+function sanitizeDecimalInput(value: string) {
+  const normalized = value.replace(/[^\d.]/g, '');
+  const [integerPart, ...rest] = normalized.split('.');
+  if (!rest.length) {
+    return normalized;
+  }
+  return `${integerPart}.${rest.join('')}`;
+}
+
+function SectionHeader({
+  title,
+  hint,
+  collapsed = false,
+  summary,
+  onToggle,
+}: {
+  title: string;
+  hint: string;
+  collapsed?: boolean;
+  summary?: string;
+  onToggle?: () => void;
+}) {
   return (
     <View style={styles.sectionHeader}>
-      <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-        {title}
-      </ThemedText>
-      <ThemedText style={styles.sectionHint}>{hint}</ThemedText>
+      <View style={styles.sectionHeaderTop}>
+        <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+          {title}
+        </ThemedText>
+        {onToggle ? (
+          <Pressable onPress={onToggle} style={styles.sectionToggleChip}>
+            <ThemedText style={styles.sectionToggleChipText} type="defaultSemiBold">
+              {collapsed ? '展开' : '收起'}
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
+      <ThemedText style={styles.sectionHint}>{collapsed ? summary || hint : hint}</ThemedText>
     </View>
   );
 }
@@ -38,8 +71,10 @@ export default function ProductCreateScreen() {
     itemName?: string;
     specification?: string;
     brand?: string;
+    defaultWarehouse?: string;
   }>();
   const { showError, showSuccess } = useFeedback();
+  const preferences = getAppPreferences();
   const tintColor = useThemeColor({}, 'tint');
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
@@ -59,35 +94,66 @@ export default function ProductCreateScreen() {
   const [retailDefaultUom, setRetailDefaultUom] = useState('Nos');
   const [wholesaleConversionFactor, setWholesaleConversionFactor] = useState('12');
   const [retailConversionFactor, setRetailConversionFactor] = useState('1');
-  const [stockSyncMode, setStockSyncMode] = useState<'manual' | 'wholesale' | 'retail'>('wholesale');
+  const [stockSyncMode, setStockSyncMode] = useState<StockSyncMode>('wholesale');
   const [standardRate, setStandardRate] = useState('');
   const [wholesaleRate, setWholesaleRate] = useState('');
   const [retailRate, setRetailRate] = useState('');
   const [standardBuyingRate, setStandardBuyingRate] = useState('');
+  const [openingWarehouse, setOpeningWarehouse] = useState(
+    typeof params.defaultWarehouse === 'string' && params.defaultWarehouse.trim()
+      ? params.defaultWarehouse.trim()
+      : preferences.defaultWarehouse,
+  );
+  const [openingQty, setOpeningQty] = useState('0');
   const [isSaving, setIsSaving] = useState(false);
   const [masterPickerVisible, setMasterPickerVisible] = useState(false);
   const [masterPickerTarget, setMasterPickerTarget] = useState<'itemGroup' | 'brand' | null>(null);
   const [masterPickerQuery, setMasterPickerQuery] = useState('');
   const [masterPickerOptions, setMasterPickerOptions] = useState<string[]>([]);
+  const [warehousePickerVisible, setWarehousePickerVisible] = useState(false);
+  const [warehousePickerQuery, setWarehousePickerQuery] = useState('');
+  const [warehouseOptions, setWarehouseOptions] = useState<string[]>([]);
   const [uomPickerVisible, setUomPickerVisible] = useState(false);
   const [uomPickerTarget, setUomPickerTarget] = useState<'stock' | 'wholesale' | 'retail' | null>(null);
   const [uomPickerQuery, setUomPickerQuery] = useState('');
   const [uomOptions, setUomOptions] = useState<string[]>([]);
+  const [createMode, setCreateMode] = useState<'simple' | 'detailed'>('simple');
+  const [baseCollapsed, setBaseCollapsed] = useState(false);
+  const [pricingCollapsed, setPricingCollapsed] = useState(false);
+  const [inventoryCollapsed, setInventoryCollapsed] = useState(false);
 
   useEffect(() => {
-    if (typeof params.itemName === 'string' && params.itemName.trim()) {
-      setItemName((current) => current || params.itemName!.trim());
-    }
-    if (typeof params.brand === 'string' && params.brand.trim()) {
-      setBrand((current) => current || params.brand!.trim());
-    }
-    if (typeof params.barcode === 'string' && params.barcode.trim()) {
-      setBarcode((current) => current || params.barcode!.trim());
-    }
-    if (typeof params.specification === 'string' && params.specification.trim()) {
-      setSpecification((current) => current || params.specification!.trim());
-    }
-  }, [params.barcode, params.brand, params.itemName, params.specification]);
+    const nextDefaultWarehouse =
+      typeof params.defaultWarehouse === 'string' && params.defaultWarehouse.trim()
+        ? params.defaultWarehouse.trim()
+        : preferences.defaultWarehouse;
+
+    setItemName(typeof params.itemName === 'string' && params.itemName.trim() ? params.itemName.trim() : '');
+    setItemCode('');
+    setItemGroup('');
+    setBrand(typeof params.brand === 'string' && params.brand.trim() ? params.brand.trim() : '');
+    setBarcode(typeof params.barcode === 'string' && params.barcode.trim() ? params.barcode.trim() : '');
+    setNickname('');
+    setSpecification(typeof params.specification === 'string' && params.specification.trim() ? params.specification.trim() : '');
+    setDescription('');
+    setImageUrl('');
+    setStockUom('Box');
+    setWholesaleDefaultUom('Box');
+    setRetailDefaultUom('Nos');
+    setWholesaleConversionFactor('12');
+    setRetailConversionFactor('1');
+    setStockSyncMode('wholesale');
+    setStandardRate('');
+    setWholesaleRate('');
+    setRetailRate('');
+    setStandardBuyingRate('');
+    setOpeningWarehouse(nextDefaultWarehouse);
+    setOpeningQty('0');
+    setCreateMode('simple');
+    setBaseCollapsed(false);
+    setPricingCollapsed(false);
+    setInventoryCollapsed(false);
+  }, [params.barcode, params.brand, params.defaultWarehouse, params.itemName, params.specification, preferences.defaultWarehouse]);
 
   useEffect(() => {
     if (!masterPickerVisible || !masterPickerTarget) {
@@ -122,6 +188,37 @@ export default function ProductCreateScreen() {
   }, [masterPickerQuery, masterPickerTarget, masterPickerVisible]);
 
   useEffect(() => {
+    if (!warehousePickerVisible) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadWarehouses() {
+      try {
+        const options = await searchWarehouses(warehousePickerQuery);
+        if (!cancelled) {
+          setWarehouseOptions(
+            options
+              .map((option) => option.value.trim())
+              .filter(Boolean),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setWarehouseOptions([]);
+        }
+      }
+    }
+
+    void loadWarehouses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [warehousePickerQuery, warehousePickerVisible]);
+
+  useEffect(() => {
     if (!uomPickerVisible) {
       return;
     }
@@ -152,6 +249,27 @@ export default function ProductCreateScreen() {
     };
   }, [uomPickerQuery, uomPickerVisible]);
 
+  useEffect(() => {
+    if (createMode !== 'simple') {
+      return;
+    }
+
+    if (stockSyncMode === 'manual') {
+      setStockSyncMode('wholesale');
+    }
+    if (stockSyncMode === 'retail' && retailDefaultUom.trim()) {
+      setStockUom(retailDefaultUom.trim());
+      setRetailConversionFactor('1');
+      setWholesaleConversionFactor((current) => current || '1');
+      return;
+    }
+    if (wholesaleDefaultUom.trim()) {
+      setStockUom(wholesaleDefaultUom.trim());
+      setWholesaleConversionFactor('1');
+      setRetailConversionFactor((current) => current || '1');
+    }
+  }, [createMode, retailDefaultUom, stockSyncMode, wholesaleDefaultUom]);
+
   const handleCreate = async () => {
     if (!itemName.trim()) {
       showError('请先填写商品名称。');
@@ -160,6 +278,8 @@ export default function ProductCreateScreen() {
 
     const trimmedItemGroup = itemGroup.trim();
     const trimmedBrand = brand.trim();
+    const trimmedOpeningWarehouse = openingWarehouse.trim();
+    const parsedOpeningQty = toNumberOrNull(openingQty) ?? 0;
 
     if (trimmedItemGroup) {
       const itemGroupExists = await checkLinkOptionExists('Item Group', trimmedItemGroup);
@@ -177,20 +297,49 @@ export default function ProductCreateScreen() {
       }
     }
 
+    if (!trimmedOpeningWarehouse) {
+      showError('请先选择入库仓库。');
+      return;
+    }
+
+    const warehouseExists = await checkLinkOptionExists('Warehouse', trimmedOpeningWarehouse);
+    if (!warehouseExists) {
+      showError('入库仓库不存在，请从候选项中选择。');
+      return;
+    }
+
+    if (parsedOpeningQty < 0) {
+      showError('初始库存数量不能为负数。');
+      return;
+    }
+
     try {
       setIsSaving(true);
-      const trimmedStockUom = stockUom.trim();
+      const effectiveSyncMode: StockSyncMode =
+        createMode === 'simple'
+          ? stockSyncMode === 'retail'
+            ? 'retail'
+            : 'wholesale'
+          : stockSyncMode;
+      const trimmedWholesaleUom = wholesaleDefaultUom.trim();
+      const trimmedRetailUom = retailDefaultUom.trim();
+      const trimmedStockUom = createMode === 'simple'
+        ? effectiveSyncMode === 'retail'
+          ? (trimmedRetailUom || stockUom.trim())
+          : (trimmedWholesaleUom || stockUom.trim())
+        : stockUom.trim();
       if (!trimmedStockUom) {
         throw new Error('请先填写库存基准单位。');
       }
 
-      const trimmedRetailUom = retailDefaultUom.trim();
       if (!trimmedRetailUom) {
         throw new Error('请先填写零售默认成交单位。');
       }
 
-      const trimmedWholesaleUom = wholesaleDefaultUom.trim();
       const wholesaleFactor = toNumberOrNull(wholesaleConversionFactor);
+      if (createMode === 'simple' && !trimmedWholesaleUom) {
+        throw new Error('请先填写批发单位。');
+      }
       if (
         trimmedWholesaleUom &&
         trimmedWholesaleUom !== trimmedStockUom &&
@@ -221,44 +370,34 @@ export default function ProductCreateScreen() {
         stockUom: trimmedStockUom,
         wholesaleDefaultUom: trimmedWholesaleUom || undefined,
         retailDefaultUom: trimmedRetailUom,
-        uomConversions: [
-          { uom: trimmedStockUom, conversionFactor: 1 },
-          ...(trimmedWholesaleUom
-            ? [
-                {
-                  uom: trimmedWholesaleUom,
-                  conversionFactor: trimmedWholesaleUom === trimmedStockUom ? 1 : (wholesaleFactor as number),
-                },
-              ]
-            : []),
-          ...(trimmedRetailUom
-            ? [
-                {
-                  uom: trimmedRetailUom,
-                  conversionFactor:
-                    trimmedRetailUom === trimmedStockUom
-                      ? 1
-                      : stockSyncMode === 'wholesale'
-                        ? 1 / (retailFactor as number)
-                        : (retailFactor as number),
-                },
-              ]
-            : []),
-        ].filter((entry, index, array) => array.findIndex((row) => row.uom === entry.uom) === index),
-        standardRate: toNumberOrNull(standardRate),
+        uomConversions: buildProductUomConversions({
+          stockUom: trimmedStockUom,
+          wholesaleDefaultUom: trimmedWholesaleUom || undefined,
+          retailDefaultUom: trimmedRetailUom,
+          wholesaleFactor,
+          retailFactor,
+          stockSyncMode: effectiveSyncMode,
+        }),
+        standardRate:
+          createMode === 'simple'
+            ? toNumberOrNull(wholesaleRate)
+            : toNumberOrNull(standardRate),
         wholesaleRate: toNumberOrNull(wholesaleRate),
         retailRate: toNumberOrNull(retailRate),
         standardBuyingRate: toNumberOrNull(standardBuyingRate),
+        warehouse: trimmedOpeningWarehouse,
+        warehouseStockQty: parsedOpeningQty,
+        warehouseStockUom: trimmedStockUom,
       });
 
       if (!created) {
         throw new Error('商品创建失败');
       }
 
-      showSuccess(`商品 ${created.itemName} 已创建`);
+      showSuccess(`商品 ${created.itemName} 已创建，并已完成库存初始化`);
       router.replace({
         pathname: '/common/product/[itemCode]',
-        params: { itemCode: created.itemCode },
+        params: { itemCode: created.itemCode, warehouse: trimmedOpeningWarehouse },
       });
     } catch (error) {
       showError(error instanceof Error ? error.message : '创建商品失败');
@@ -291,6 +430,12 @@ export default function ProductCreateScreen() {
     setUomPickerTarget(target);
     setUomPickerQuery('');
     setUomPickerVisible(true);
+  };
+
+  const handleSelectWarehouse = (value: string) => {
+    setOpeningWarehouse(value);
+    setWarehousePickerVisible(false);
+    setWarehousePickerQuery('');
   };
 
   const handleSelectUom = (value: string) => {
@@ -361,10 +506,51 @@ export default function ProductCreateScreen() {
       : '';
   const completion = [
     itemName.trim(),
-    stockUom.trim(),
+    createMode === 'simple' ? wholesaleDefaultUom.trim() : stockUom.trim(),
     wholesaleRate.trim() || retailRate.trim() || standardRate.trim(),
     wholesaleDefaultUom.trim() || retailDefaultUom.trim(),
   ].filter(Boolean).length;
+  const baseSummary = [
+    itemName.trim() || '未填名称',
+    nickname.trim() ? `昵称 ${nickname.trim()}` : null,
+    specification.trim() ? `规格 ${specification.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const pricingSummary = [
+    createMode === 'simple'
+      ? stockSyncMode === 'retail'
+        ? '以零售为基准'
+        : '以批发为基准'
+      : stockSyncMode === 'manual'
+        ? '手动指定'
+        : stockSyncMode === 'retail'
+          ? '与零售同步'
+          : '与批发同步',
+    wholesaleDefaultUom.trim() ? `批 ${formatDisplayUom(wholesaleDefaultUom)}` : null,
+    retailDefaultUom.trim() ? `零 ${formatDisplayUom(retailDefaultUom)}` : null,
+    wholesaleRate.trim() ? `批 ¥${wholesaleRate.trim()}` : null,
+    retailRate.trim() ? `零 ¥${retailRate.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const inventorySummary = [
+    openingWarehouse.trim() || '未选仓库',
+    `库存 ${openingQty.trim() || '0'} ${formatDisplayUom(stockUom)}`,
+  ].join(' · ');
+  const purchasingBaseUomLabel =
+    createMode === 'simple'
+      ? stockSyncMode === 'retail'
+        ? retailDefaultUom.trim() || stockUom.trim()
+        : wholesaleDefaultUom.trim() || stockUom.trim()
+      : stockUom.trim();
+  const handleOpeningQtyChange = (value: string) => setOpeningQty(sanitizeDecimalInput(value));
+  const handleWholesaleFactorChange = (value: string) => setWholesaleConversionFactor(sanitizeDecimalInput(value));
+  const handleRetailFactorChange = (value: string) => setRetailConversionFactor(sanitizeDecimalInput(value));
+  const handleStandardRateChange = (value: string) => setStandardRate(sanitizeDecimalInput(value));
+  const handleWholesaleRateChange = (value: string) => setWholesaleRate(sanitizeDecimalInput(value));
+  const handleRetailRateChange = (value: string) => setRetailRate(sanitizeDecimalInput(value));
+  const handleBuyingRateChange = (value: string) => setStandardBuyingRate(sanitizeDecimalInput(value));
 
   return (
     <AppShell
@@ -398,7 +584,7 @@ export default function ProductCreateScreen() {
               <ThemedText style={styles.heroTitle} type="title">
                 新建商品档案
               </ThemedText>
-              <ThemedText style={styles.heroDescription}>补齐基础资料、单位换算与价格配置后，可直接用于销售、采购和库存流程。</ThemedText>
+              <ThemedText style={styles.heroDescription}>先快速建档，再按需要补完整信息。</ThemedText>
             </View>
             <View style={[styles.heroBadge, { backgroundColor: surfaceMuted }]}>
               <ThemedText style={styles.heroBadgeLabel}>完成度</ThemedText>
@@ -409,80 +595,230 @@ export default function ProductCreateScreen() {
           </View>
         </View>
 
-        <View style={[styles.sectionBlock, { backgroundColor: surface, borderColor }]}>
-          <SectionHeader hint="录入商品主数据，作为销售、采购和库存链路的共用基础信息。" title="基础资料" />
-          <ProductTextField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" required value={itemName} />
-          <ProductTextField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />
-          <View style={styles.rowFields}>
-            <View style={styles.rowField}>
-              <ProductSelectorField label="商品分类" onPress={() => handleOpenMasterPicker('itemGroup')} value={itemGroup} />
-            </View>
-            <View style={styles.rowField}>
-              <ProductSelectorField label="品牌" onPress={() => handleOpenMasterPicker('brand')} value={brand} />
-            </View>
-          </View>
-          <ProductTextField label="主条码" onChangeText={setBarcode} placeholder="输入商品主条码" value={barcode} />
-          <ProductTextField label="商品昵称" onChangeText={setNickname} placeholder="如常用简称或别名" value={nickname} />
-          <ProductTextField label="规格" onChangeText={setSpecification} placeholder="如 500ml / 大号 / A4" value={specification} />
-          <ProductTextField label="图片地址" onChangeText={setImageUrl} placeholder="输入商品图片 URL" value={imageUrl} />
-          <ProductTextField label="描述" multiline onChangeText={setDescription} placeholder="补充备注或说明" value={description} />
-        </View>
-
-        <View style={[styles.sectionBlock, { backgroundColor: surface, borderColor }]}>
-          <SectionHeader hint="先确定库存基准单位，再配置批发、零售默认成交单位及换算关系。" title="价格与成交单位" />
-          <View style={styles.inlineInfoCard}>
-            <ThemedText style={styles.inlineInfoLabel}>库存基准单位</ThemedText>
-            <ThemedText style={styles.inlineInfoValue} type="defaultSemiBold">
-              {formatDisplayUom(stockUom)}
+        <View style={[styles.modeSwitchCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.modeSwitchHeader}>
+            <ThemedText style={styles.modeSwitchTitle} type="defaultSemiBold">
+              创建模式
             </ThemedText>
-            <ThemedText style={styles.inlineInfoHint}>库存统一按这个单位结算，批发和零售默认单位都要能换算到这里。</ThemedText>
+            <ThemedText style={styles.modeSwitchHint}>默认使用简化版，后续可切到详细版补充信息。</ThemedText>
           </View>
-          <View style={styles.unitEditorRow}>
-            <View style={styles.unitEditorCell}>
-              <View style={styles.labelRow}>
-                <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
-                  库存基准单位
-                </ThemedText>
-                <ThemedText style={styles.requiredMark} type="defaultSemiBold">
-                  *
-                </ThemedText>
-              </View>
-              <Pressable onPress={() => handleOpenUomPicker('stock')} style={styles.selectorFieldCompact}>
-                <View style={styles.selectorFieldCompactCopy}>
-                  <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                    {formatDisplayUom(stockUom)}
-                  </ThemedText>
-                </View>
-                <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                  选择
-                </ThemedText>
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.syncModeRow}>
+          <View style={styles.modeSwitchRow}>
             {[
-              { key: 'manual', label: '手动指定' },
-              { key: 'wholesale', label: '与批发单位同步' },
-              { key: 'retail', label: '与零售单位同步' },
+              {
+                key: 'simple',
+                label: '简化版',
+              },
+              {
+                key: 'detailed',
+                label: '详细版',
+              },
             ].map((option) => {
-              const active = stockSyncMode === option.key;
+              const active = createMode === option.key;
               return (
                 <Pressable
                   key={option.key}
-                  onPress={() => applyStockSyncMode(option.key as 'manual' | 'wholesale' | 'retail')}
-                  style={[styles.syncModeChip, active ? styles.syncModeChipActive : null]}>
-                  <ThemedText style={[styles.syncModeChipText, active ? { color: tintColor } : null]} type="defaultSemiBold">
+                  onPress={() => setCreateMode(option.key as 'simple' | 'detailed')}
+                  style={[
+                    styles.modeSwitchOption,
+                    {
+                      backgroundColor: active ? 'rgba(37,99,235,0.08)' : surfaceMuted,
+                      borderColor: active ? tintColor : borderColor,
+                    },
+                  ]}>
+                  <ThemedText style={styles.modeSwitchOptionTitle} type="defaultSemiBold">
                     {option.label}
                   </ThemedText>
                 </Pressable>
               );
             })}
           </View>
-          <ThemedText style={styles.sectionHint}>
-            选择同步后，库存基准单位会跟随对应默认成交单位变化；只需要配置另一侧到基准单位的换算关系。
-          </ThemedText>
-          <View style={styles.unitRuleList}>
-            {stockSyncMode !== 'wholesale' ? (
+        </View>
+
+        <View style={[styles.sectionBlock, { backgroundColor: surface, borderColor }]}>
+          <SectionHeader
+            collapsed={baseCollapsed}
+            hint="录入商品主数据，作为销售、采购和库存链路的共用基础信息。"
+            onToggle={() => setBaseCollapsed((value) => !value)}
+            summary={baseSummary}
+            title="基础资料"
+          />
+          {!baseCollapsed ? (
+            <>
+              <ProductTextField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" required value={itemName} />
+              <ProductTextField label="主条码" onChangeText={setBarcode} placeholder="输入商品主条码" value={barcode} />
+              <ProductTextField label="商品昵称" onChangeText={setNickname} placeholder="如常用简称或别名" value={nickname} />
+              <ProductTextField label="规格" onChangeText={setSpecification} placeholder="如 500ml / 大号 / A4" value={specification} />
+              <ProductTextField label="图片地址" onChangeText={setImageUrl} placeholder="输入商品图片 URL" value={imageUrl} />
+              {createMode === 'detailed' ? (
+                <>
+                  <ProductTextField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />
+                  <View style={styles.rowFields}>
+                    <View style={styles.rowField}>
+                      <ProductSelectorField label="商品分类" onPress={() => handleOpenMasterPicker('itemGroup')} value={itemGroup} />
+                    </View>
+                    <View style={styles.rowField}>
+                      <ProductSelectorField label="品牌" onPress={() => handleOpenMasterPicker('brand')} value={brand} />
+                    </View>
+                  </View>
+                  <ProductTextField label="描述" multiline onChangeText={setDescription} placeholder="补充备注或说明" value={description} />
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </View>
+
+        <View style={[styles.sectionBlock, { backgroundColor: surface, borderColor }]}>
+          <SectionHeader
+            collapsed={pricingCollapsed}
+            hint={
+              createMode === 'simple'
+                ? ''
+                : '先确定库存基准单位，再配置批发、零售默认成交单位及换算关系。'
+            }
+            onToggle={() => setPricingCollapsed((value) => !value)}
+            summary={pricingSummary}
+            title="价格与成交单位"
+          />
+          {!pricingCollapsed && createMode === 'simple' ? (
+            <>
+              <View style={styles.syncModeRow}>
+                {[
+                  { key: 'wholesale', label: '以批发为基准' },
+                  { key: 'retail', label: '以零售为基准' },
+                ].map((option) => {
+                  const active = stockSyncMode === option.key;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      onPress={() => applyStockSyncMode(option.key as 'wholesale' | 'retail')}
+                      style={[styles.syncModeChip, active ? styles.syncModeChipActive : null]}>
+                      <ThemedText style={[styles.syncModeChipText, active ? { color: tintColor } : null]} type="defaultSemiBold">
+                        {option.label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={styles.unitRuleList}>
+                <View style={styles.labelRow}>
+                  <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
+                    单位换算
+                  </ThemedText>
+                  <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+                    *
+                  </ThemedText>
+                </View>
+                <View style={styles.simpleUnitBridgeRow}>
+                  <View style={styles.simpleUnitBridgeCell}>
+                    <ThemedText style={styles.inlineInfoLabel}>批发单位</ThemedText>
+                    <Pressable onPress={() => handleOpenUomPicker('wholesale')} style={styles.selectorFieldCompact}>
+                      <View style={styles.selectorFieldCompactCopy}>
+                        <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                          {wholesaleDefaultUom ? formatDisplayUom(wholesaleDefaultUom) : '请选择'}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                        选择
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                  <View style={styles.simpleUnitBridgeFactor}>
+                    <ThemedText style={styles.inlineInfoLabel}>系数</ThemedText>
+                    <ProductTextField
+                      keyboardType="decimal-pad"
+                      label=""
+                      onChangeText={stockSyncMode === 'retail' ? handleWholesaleFactorChange : handleRetailFactorChange}
+                      placeholder="1"
+                      value={
+                        stockSyncMode === 'retail'
+                          ? wholesaleNeedsFactor ? wholesaleConversionFactor : '1'
+                          : retailNeedsFactor ? retailConversionFactor : '1'
+                      }
+                    />
+                  </View>
+                  <View style={styles.simpleUnitBridgeCell}>
+                    <ThemedText style={styles.inlineInfoLabel}>零售单位</ThemedText>
+                    <Pressable onPress={() => handleOpenUomPicker('retail')} style={styles.selectorFieldCompact}>
+                      <View style={styles.selectorFieldCompactCopy}>
+                        <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                          {retailDefaultUom ? formatDisplayUom(retailDefaultUom) : '请选择'}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                        选择
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+                <ThemedText style={styles.unitFormulaPreview}>
+                  {wholesaleDefaultUom.trim() && retailDefaultUom.trim()
+                    ? `1 ${formatDisplayUom(wholesaleDefaultUom)} = ${
+                        stockSyncMode === 'retail'
+                          ? wholesaleNeedsFactor ? wholesaleConversionFactor || '？' : '1'
+                          : retailNeedsFactor ? retailConversionFactor || '？' : '1'
+                      } ${formatDisplayUom(retailDefaultUom)}`
+                    : '请选择批发单位和零售单位。'}
+                </ThemedText>
+              </View>
+            </>
+          ) : !pricingCollapsed ? (
+            <>
+              <View style={styles.inlineInfoCard}>
+                <ThemedText style={styles.inlineInfoLabel}>库存基准单位</ThemedText>
+                <ThemedText style={styles.inlineInfoValue} type="defaultSemiBold">
+                  {formatDisplayUom(stockUom)}
+                </ThemedText>
+                <ThemedText style={styles.inlineInfoHint}>库存统一按这个单位结算，批发和零售默认单位都要能换算到这里。</ThemedText>
+              </View>
+              <View style={styles.unitEditorRow}>
+                <View style={styles.unitEditorCell}>
+                  <View style={styles.labelRow}>
+                    <ThemedText style={styles.fieldLabel} type="defaultSemiBold">
+                      库存基准单位
+                    </ThemedText>
+                    <ThemedText style={styles.requiredMark} type="defaultSemiBold">
+                      *
+                    </ThemedText>
+                  </View>
+                  <Pressable onPress={() => handleOpenUomPicker('stock')} style={styles.selectorFieldCompact}>
+                    <View style={styles.selectorFieldCompactCopy}>
+                      <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
+                        {formatDisplayUom(stockUom)}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                      选择
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+              <View style={styles.syncModeRow}>
+                {[
+                  { key: 'manual', label: '手动指定' },
+                  { key: 'wholesale', label: '与批发单位同步' },
+                  { key: 'retail', label: '与零售单位同步' },
+                ].map((option) => {
+                  const active = stockSyncMode === option.key;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      onPress={() => applyStockSyncMode(option.key as 'manual' | 'wholesale' | 'retail')}
+                      style={[styles.syncModeChip, active ? styles.syncModeChipActive : null]}>
+                      <ThemedText style={[styles.syncModeChipText, active ? { color: tintColor } : null]} type="defaultSemiBold">
+                        {option.label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <ThemedText style={styles.sectionHint}>
+                选择同步后，库存基准单位会跟随对应默认成交单位变化；只需要配置另一侧到基准单位的换算关系。
+              </ThemedText>
+            </>
+          ) : null}
+          {!pricingCollapsed && createMode === 'detailed' ? (
+            <View style={styles.unitRuleList}>
+              {stockSyncMode !== 'wholesale' ? (
               <View style={styles.unitRuleRow}>
                 <View style={styles.labelRow}>
                   <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
@@ -512,8 +848,9 @@ export default function ProductCreateScreen() {
                   </ThemedText>
                   <View style={styles.unitFormulaFactorCell}>
                     <ProductTextField
+                      keyboardType="decimal-pad"
                       label=""
-                      onChangeText={setWholesaleConversionFactor}
+                      onChangeText={handleWholesaleFactorChange}
                       placeholder={wholesaleNeedsFactor ? '例如 12' : '1'}
                       value={wholesaleNeedsFactor ? wholesaleConversionFactor : '1'}
                     />
@@ -528,8 +865,8 @@ export default function ProductCreateScreen() {
                 </View>
                 <ThemedText style={styles.unitFormulaPreview}>{wholesaleFormulaPreview}</ThemedText>
               </View>
-            ) : null}
-            {stockSyncMode !== 'retail' ? (
+              ) : null}
+              {stockSyncMode !== 'retail' ? (
               <View style={styles.unitRuleRow}>
                 <View style={styles.labelRow}>
                   <ThemedText style={styles.unitRuleLabel} type="defaultSemiBold">
@@ -569,8 +906,9 @@ export default function ProductCreateScreen() {
                   </ThemedText>
                   <View style={styles.unitFormulaFactorCell}>
                     <ProductTextField
+                      keyboardType="decimal-pad"
                       label=""
-                      onChangeText={setRetailConversionFactor}
+                      onChangeText={handleRetailFactorChange}
                       placeholder={retailNeedsFactor ? '例如 1' : '1'}
                       value={retailNeedsFactor ? retailConversionFactor : '1'}
                     />
@@ -598,31 +936,116 @@ export default function ProductCreateScreen() {
                 </View>
                 <ThemedText style={styles.unitFormulaPreview}>{retailFormulaPreview}</ThemedText>
               </View>
-            ) : null}
-          </View>
-          <View style={styles.rowFields}>
-            <View style={styles.rowField}>
-              <ProductTextField label="标准售价" onChangeText={setStandardRate} placeholder="例如 99" value={standardRate} />
+              ) : null}
             </View>
-            <View style={styles.rowField}>
-              <ProductTextField label="批发价" onChangeText={setWholesaleRate} placeholder="例如 68" value={wholesaleRate} />
+          ) : null}
+          {!pricingCollapsed ? (
+            <View style={styles.rowFields}>
+              <View style={styles.rowField}>
+                <ProductTextField
+                  keyboardType="decimal-pad"
+                  label="批发价"
+                  onChangeText={handleWholesaleRateChange}
+                  placeholder="例如 68"
+                  value={wholesaleRate}
+                />
+              </View>
+              {createMode === 'detailed' ? (
+                <View style={styles.rowField}>
+                  <ProductTextField
+                    keyboardType="decimal-pad"
+                    label="标准售价"
+                    onChangeText={handleStandardRateChange}
+                    placeholder="例如 99"
+                    value={standardRate}
+                  />
+                </View>
+              ) : null}
             </View>
-          </View>
-          <View style={styles.rowFields}>
-            <View style={styles.rowField}>
-              <ProductTextField label="零售价" onChangeText={setRetailRate} placeholder="例如 9.9" value={retailRate} />
+          ) : null}
+          {!pricingCollapsed ? (
+            <View style={styles.rowFields}>
+              <View style={styles.rowField}>
+                <ProductTextField
+                  keyboardType="decimal-pad"
+                  label="零售价"
+                  onChangeText={handleRetailRateChange}
+                  placeholder="例如 9.9"
+                  value={retailRate}
+                />
+              </View>
+              <View style={styles.rowField}>
+                <ProductTextField
+                  keyboardType="decimal-pad"
+                  label={`默认采购价（${formatDisplayUom(purchasingBaseUomLabel)}）`}
+                  onChangeText={handleBuyingRateChange}
+                  placeholder="例如 55（默认按批发采购口径）"
+                  value={standardBuyingRate}
+                />
+              </View>
             </View>
-            <View style={styles.rowField}>
-              <ProductTextField
-                label="默认采购价"
-                onChangeText={setStandardBuyingRate}
-                placeholder="例如 55（默认按批发采购口径）"
-                value={standardBuyingRate}
+          ) : null}
+        </View>
+
+        <View style={[styles.sectionBlock, { backgroundColor: surface, borderColor }]}>
+          <SectionHeader
+            collapsed={inventoryCollapsed}
+            hint="新增商品时顺手完成基础库存落仓，避免回到订单后仍然缺少仓库语义。"
+            onToggle={() => setInventoryCollapsed((value) => !value)}
+            summary={inventorySummary}
+            title="库存初始化"
+          />
+          {!inventoryCollapsed ? (
+            <>
+              <ProductSelectorField
+                label="入库仓库"
+                onPress={() => {
+                  setWarehousePickerQuery('');
+                  setWarehousePickerVisible(true);
+                }}
+                required
+                value={openingWarehouse}
               />
-            </View>
-          </View>
+              <View style={styles.rowFields}>
+                <View style={styles.rowField}>
+                  <ProductTextField
+                    keyboardType="decimal-pad"
+                    label="初始库存数量"
+                    onChangeText={handleOpeningQtyChange}
+                    placeholder="默认 0"
+                    required
+                    value={openingQty}
+                  />
+                </View>
+                <View style={styles.rowField}>
+                  <View style={styles.inlineInfoCard}>
+                    <ThemedText style={styles.inlineInfoLabel}>库存单位</ThemedText>
+                    <ThemedText style={styles.inlineInfoValue} type="defaultSemiBold">
+                      {formatDisplayUom(stockUom)}
+                    </ThemedText>
+                    <ThemedText style={styles.inlineInfoHint}>初始库存将按当前库存基准单位写入所选仓库。</ThemedText>
+                  </View>
+                </View>
+              </View>
+            </>
+          ) : null}
         </View>
       </ScrollView>
+      <ProductPickerSheet
+        hint="优先使用当前业务上下文仓库；没有时使用系统默认仓。"
+        onChangeQuery={setWarehousePickerQuery}
+        onClose={() => {
+          setWarehousePickerVisible(false);
+          setWarehousePickerQuery('');
+        }}
+        onSelect={handleSelectWarehouse}
+        options={warehouseOptions}
+        placeholder="搜索仓库名称"
+        query={warehousePickerQuery}
+        selectedValue={openingWarehouse}
+        title="选择入库仓库"
+        visible={warehousePickerVisible}
+      />
       <ProductPickerSheet
         hint="通过搜索选择系统中已有主数据。"
         onChangeQuery={setMasterPickerQuery}
@@ -728,6 +1151,37 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 26,
   },
+  modeSwitchCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    padding: 18,
+  },
+  modeSwitchHeader: {
+    gap: 4,
+  },
+  modeSwitchTitle: {
+    fontSize: 18,
+  },
+  modeSwitchHint: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modeSwitchRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modeSwitchOption: {
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+  },
+  modeSwitchOptionTitle: {
+    fontSize: 16,
+  },
   sectionBlock: {
     borderRadius: 24,
     borderWidth: 1,
@@ -737,6 +1191,11 @@ const styles = StyleSheet.create({
   sectionHeader: {
     gap: 4,
   },
+  sectionHeaderTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   sectionTitle: {
     fontSize: 18,
   },
@@ -744,6 +1203,18 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 14,
     lineHeight: 20,
+  },
+  sectionToggleChip: {
+    backgroundColor: 'rgba(148,163,184,0.08)',
+    borderColor: 'rgba(148,163,184,0.2)',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  sectionToggleChipText: {
+    color: '#475569',
+    fontSize: 13,
   },
   rowFields: {
     flexDirection: 'row',
@@ -800,10 +1271,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
     justifyContent: 'space-between',
     minHeight: 56,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
   },
   selectorFieldCompactCopy: {
     flex: 1,
@@ -820,7 +1291,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 56,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
   },
   syncModeRow: {
     flexDirection: 'row',
@@ -857,13 +1328,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   unitFormulaUnitCell: {
-    flex: 1.15,
+    flex: 1.05,
   },
   unitFormulaFactorCell: {
-    flex: 0.9,
+    flex: 0.72,
   },
   unitFormulaTargetCell: {
-    flex: 0.8,
+    flex: 1,
   },
   unitFormulaOperator: {
     color: '#475569',
@@ -873,6 +1344,19 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     lineHeight: 18,
+  },
+  simpleUnitBridgeRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  simpleUnitBridgeCell: {
+    flex: 1,
+    gap: 8,
+  },
+  simpleUnitBridgeFactor: {
+    flex: 0.72,
+    gap: 8,
   },
   footerBar: {
     flexDirection: 'row',

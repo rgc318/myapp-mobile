@@ -7,6 +7,7 @@ import { BarcodeScannerSheet } from '@/components/barcode-scanner-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getAppPreferences } from '@/lib/app-preferences';
 import { formatDisplayUom } from '@/lib/display-uom';
 import { useFeedback } from '@/providers/feedback-provider';
 import { searchCatalogProducts } from '@/services/products';
@@ -147,6 +148,7 @@ function ProductCard({ item, onOpen }: { item: ProductListItem; onOpen: (code: s
 export default function ProductsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ query?: string }>();
+  const preferences = getAppPreferences();
   const { showError } = useFeedback();
   const [query, setQuery] = useState(typeof params.query === 'string' ? params.query : '');
   const deferredQuery = useDeferredValue(query);
@@ -251,7 +253,16 @@ export default function ProductsScreen() {
                 统一维护商品资料、价格与库存口径，让销售、采购和盘点数据保持一致。
               </ThemedText>
             </View>
-            <Pressable onPress={() => router.push('/common/product/create')} style={[styles.primaryCta, { backgroundColor: tintColor }]}>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/common/product/create',
+                  params: {
+                    defaultWarehouse: preferences.defaultWarehouse || undefined,
+                  },
+                })
+              }
+              style={[styles.primaryCta, { backgroundColor: tintColor }]}>
               <IconSymbol color="#FFFFFF" name="tray.full.fill" size={16} />
               <ThemedText style={styles.primaryCtaText} type="defaultSemiBold">
                 新增商品
@@ -401,11 +412,14 @@ export default function ProductsScreen() {
                   onPress={() => {
                     const barcode = pendingScannedBarcode;
                     setPendingScannedBarcode('');
-                    router.push({
-                      pathname: '/common/product/create',
-                      params: { barcode },
-                    });
-                  }}
+                  router.push({
+                    pathname: '/common/product/create',
+                    params: {
+                      barcode,
+                      defaultWarehouse: preferences.defaultWarehouse || undefined,
+                    },
+                  });
+                }}
                   style={[styles.centerDialogButton, { backgroundColor: tintColor, borderColor: tintColor }]}>
                   <ThemedText style={[styles.centerDialogButtonText, { color: '#FFFFFF' }]} type="defaultSemiBold">
                     去新建商品
