@@ -70,8 +70,15 @@ function isSelectableWarehouse(value: string) {
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { showError, showSuccess } = useFeedback();
-  const { itemCode, warehouse: initialWarehouse } = useLocalSearchParams<{ itemCode?: string; warehouse?: string }>();
+  const {
+    itemCode,
+    warehouse: initialWarehouse,
+    returnTo: returnToParam,
+    returnLabel: returnLabelParam,
+  } = useLocalSearchParams<{ itemCode?: string; warehouse?: string; returnTo?: string; returnLabel?: string }>();
   const productCode = typeof itemCode === 'string' ? itemCode : '';
+  const returnTo = typeof returnToParam === 'string' && returnToParam.trim() ? returnToParam.trim() : '';
+  const returnLabel = typeof returnLabelParam === 'string' && returnLabelParam.trim() ? returnLabelParam.trim() : '返回商品';
 
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
@@ -883,9 +890,9 @@ export default function ProductDetailScreen() {
       description="查看商品价格、库存分布，并维护基础信息。"
       footer={
         <View style={styles.footerBar}>
-          <Pressable onPress={() => router.replace('/common/products')} style={styles.footerSecondary}>
+          <Pressable onPress={() => router.replace((returnTo || '/common/products') as never)} style={styles.footerSecondary}>
             <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-              返回商品
+              {returnTo ? returnLabel : '返回商品'}
             </ThemedText>
           </Pressable>
           {isEditing ? (

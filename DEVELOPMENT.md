@@ -6664,3 +6664,37 @@ This round focused on making product creation practical on mobile while keeping 
 - mobile product creation should optimize for speed first, then allow deeper editing
 - unit-conversion storage semantics may remain ERPNext-compatible, but displayed factors must always be converted back into business-facing wording before users see them
 - order entry may search broadly, but order insertion must land on a real warehouse
+
+## Barcode Return Flow Polish (2026-04-06)
+
+This follow-up closed the last awkward gap in the mobile barcode-create flow: returning to the originating order search page after creating a missing product.
+
+### Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/item-search.tsx`
+
+### What Changed
+
+- barcode miss from sales/purchase item search now carries a concrete `returnTo` route into product creation
+- after successful product creation, the app still opens product detail, but detail now preserves the originating route context
+- the product-detail footer no longer always returns to the product list:
+  - from order search flows it now shows `返回选品`
+  - tapping it returns directly to the original sales or purchase item-search screen
+- this keeps the workflow closed:
+  - scan missing barcode
+  - create product
+  - inspect product detail if needed
+  - return directly to the original add-item flow
+
+### Device Validation
+
+- this round was verified on a real mobile device
+- the following flow has been confirmed:
+  - sales/purchase item search barcode miss
+  - jump into product creation
+  - create product with initial warehouse/inventory
+  - open product detail
+  - return directly to the original order item-search page

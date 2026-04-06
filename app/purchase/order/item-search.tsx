@@ -59,6 +59,36 @@ function formatQty(value: number | null | undefined) {
   return String(value);
 }
 
+function buildPurchaseItemSearchReturnTo(params: {
+  lineId?: string;
+  company?: string;
+  warehouse?: string;
+  defaultWarehouse?: string;
+  draftScope?: string;
+  returnTo?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params.lineId) {
+    query.set('lineId', params.lineId);
+  }
+  if (params.company) {
+    query.set('company', params.company);
+  }
+  if (params.warehouse) {
+    query.set('warehouse', params.warehouse);
+  }
+  if (params.defaultWarehouse) {
+    query.set('defaultWarehouse', params.defaultWarehouse);
+  }
+  if (params.draftScope) {
+    query.set('draftScope', params.draftScope);
+  }
+  if (params.returnTo) {
+    query.set('returnTo', params.returnTo);
+  }
+  return `/purchase/order/item-search?${query.toString()}`;
+}
+
 function getPrimaryProductLabel(item: Pick<ProductSearchItem | PurchaseOrderDraftItem, 'nickname' | 'itemName' | 'itemCode'>) {
   return item.nickname?.trim() || item.itemName?.trim() || item.itemCode;
 }
@@ -274,6 +304,18 @@ export default function PurchaseOrderItemSearchScreen() {
       : typeof params.warehouse === 'string'
         ? params.warehouse.trim()
         : '';
+  const createReturnTo = useMemo(
+    () =>
+      buildPurchaseItemSearchReturnTo({
+        lineId,
+        company,
+        warehouse: typeof params.warehouse === 'string' ? params.warehouse.trim() : '',
+        defaultWarehouse,
+        draftScope,
+        returnTo,
+      }),
+    [company, defaultWarehouse, draftScope, lineId, params.warehouse, returnTo],
+  );
 
   const [query, setQuery] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('');
@@ -753,6 +795,8 @@ export default function PurchaseOrderItemSearchScreen() {
                     params: {
                       barcode,
                       defaultWarehouse: suggestedWarehouse,
+                      returnTo: createReturnTo,
+                      returnLabel: '返回选品',
                     },
                   });
                 }}

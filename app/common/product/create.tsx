@@ -72,6 +72,8 @@ export default function ProductCreateScreen() {
     specification?: string;
     brand?: string;
     defaultWarehouse?: string;
+    returnTo?: string;
+    returnLabel?: string;
   }>();
   const { showError, showSuccess } = useFeedback();
   const preferences = getAppPreferences();
@@ -121,6 +123,8 @@ export default function ProductCreateScreen() {
   const [baseCollapsed, setBaseCollapsed] = useState(false);
   const [pricingCollapsed, setPricingCollapsed] = useState(false);
   const [inventoryCollapsed, setInventoryCollapsed] = useState(false);
+  const returnTo = typeof params.returnTo === 'string' && params.returnTo.trim() ? params.returnTo.trim() : '';
+  const returnLabel = typeof params.returnLabel === 'string' && params.returnLabel.trim() ? params.returnLabel.trim() : '返回商品';
 
   useEffect(() => {
     const nextDefaultWarehouse =
@@ -397,7 +401,12 @@ export default function ProductCreateScreen() {
       showSuccess(`商品 ${created.itemName} 已创建，并已完成库存初始化`);
       router.replace({
         pathname: '/common/product/[itemCode]',
-        params: { itemCode: created.itemCode, warehouse: trimmedOpeningWarehouse },
+        params: {
+          itemCode: created.itemCode,
+          warehouse: trimmedOpeningWarehouse,
+          returnTo: returnTo || undefined,
+          returnLabel: returnTo ? returnLabel : undefined,
+        },
       });
     } catch (error) {
       showError(error instanceof Error ? error.message : '创建商品失败');
@@ -559,9 +568,9 @@ export default function ProductCreateScreen() {
       description="录入商品基础资料、多价格、库存基准单位和默认成交单位。"
       footer={
         <View style={styles.footerBar}>
-          <Pressable onPress={() => router.replace('/common/products')} style={styles.footerSecondary}>
+          <Pressable onPress={() => router.replace((returnTo || '/common/products') as never)} style={styles.footerSecondary}>
             <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-              返回商品
+              {returnTo ? returnLabel : '返回商品'}
             </ThemedText>
           </Pressable>
           <Pressable

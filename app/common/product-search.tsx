@@ -118,6 +118,29 @@ function buildWarehouseSummaryText(draftItems: SalesOrderDraftItem[]) {
     .join(' / ');
 }
 
+function buildProductSearchReturnTo(params: {
+  draftScope?: string;
+  returnOrderName?: string;
+  resumeEdit?: string;
+  defaultSalesMode?: string;
+}) {
+  const query = new URLSearchParams();
+  query.set('mode', 'order');
+  if (params.draftScope) {
+    query.set('draftScope', params.draftScope);
+  }
+  if (params.returnOrderName) {
+    query.set('returnOrderName', params.returnOrderName);
+  }
+  if (params.resumeEdit) {
+    query.set('resumeEdit', params.resumeEdit);
+  }
+  if (params.defaultSalesMode) {
+    query.set('defaultSalesMode', params.defaultSalesMode);
+  }
+  return `/common/product-search?${query.toString()}`;
+}
+
 function formatModePriceReference(
   label: string,
   rate: number | null | undefined,
@@ -511,6 +534,16 @@ export default function ProductSearchScreen() {
   const borderColor = useThemeColor({}, 'border');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const tintColor = useThemeColor({}, 'tint');
+  const createReturnTo = useMemo(
+    () =>
+      buildProductSearchReturnTo({
+        draftScope,
+        returnOrderName,
+        resumeEdit,
+        defaultSalesMode,
+      }),
+    [defaultSalesMode, draftScope, resumeEdit, returnOrderName],
+  );
 
   const draftCount = draftItems.length;
   const totalSelectedQty = useMemo(
@@ -1032,6 +1065,8 @@ export default function ProductSearchScreen() {
                     params: {
                       barcode,
                       defaultWarehouse: suggestedWarehouse,
+                      returnTo: isOrderMode ? createReturnTo : undefined,
+                      returnLabel: isOrderMode ? '返回选品' : undefined,
                     },
                   });
                 }}
