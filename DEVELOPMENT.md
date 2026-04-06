@@ -291,7 +291,7 @@ This round established the first migration-friendly image-upload boundary withou
 
 ## UOM Display Alignment (Temporary Next Step)
 
-After the image-upload chain was connected, the next temporary cleanup target is the unit module.
+After the image-upload chain was connected, the unit module entered a temporary consistency-alignment round.
 
 ### Why This Is Needed
 
@@ -302,7 +302,16 @@ After the image-upload chain was connected, the next temporary cleanup target is
 
 - treat this as a temporary consistency-improvement round first
 - prioritize backend display-field alignment before doing broader master-data remodeling
-- first target:
+- backend first-phase is now landed
+  - UOM APIs now return `display_name`
+  - product APIs now return:
+    - `stock_uom_display`
+    - `uom_display`
+    - `all_uoms[].uom_display`
+    - `wholesale_default_uom_display`
+    - `retail_default_uom_display`
+    - `sales_profiles[].default_uom_display`
+- next frontend target:
   - UOM master-data pages
   - product module unit display
 
