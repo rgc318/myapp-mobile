@@ -649,10 +649,10 @@ export default function ProductCreateScreen() {
           {!baseCollapsed ? (
             <>
               <ProductTextField label="商品名称" onChangeText={setItemName} placeholder="例如 可口可乐 500ml" required value={itemName} />
+              <ItemImageField onChange={setImageUrl} value={imageUrl} variant="cover" />
               <ProductTextField label="主条码" onChangeText={setBarcode} placeholder="输入商品主条码" value={barcode} />
               <ProductTextField label="商品昵称" onChangeText={setNickname} placeholder="如常用简称或别名" value={nickname} />
               <ProductTextField label="规格" onChangeText={setSpecification} placeholder="如 500ml / 大号 / A4" value={specification} />
-              <ItemImageField onChange={setImageUrl} value={imageUrl} />
               {createMode === 'detailed' ? (
                 <>
                   <ProductTextField label="商品编码" onChangeText={setItemCode} placeholder="可留空，由系统生成" value={itemCode} />

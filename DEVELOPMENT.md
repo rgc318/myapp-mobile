@@ -347,6 +347,26 @@ This round established the first migration-friendly image-upload boundary withou
 - if product creation rolls back, backend cleanup removes that temporary file
 - backend also runs an hourly cleanup task for temporary images older than 24 hours
 
+### Current Mobile Upload UX
+
+- the product create page now treats image upload as a cover-style entry block instead of a plain late-form field
+- selected images are compressed before upload on mobile:
+  - longest edge is reduced to about `1600`
+  - image is re-encoded as `JPEG`
+  - quality is currently around `0.78`
+- backend still keeps the final `5MB` hard limit as a safety gate
+
+### Native Dependency Note
+
+- upload compression currently depends on:
+  - `expo-image-manipulator`
+- after adding this dependency:
+  - Expo Go / Metro usually needs a clean restart
+  - custom dev clients need to be rebuilt so the native module is present
+- common recovery steps:
+  - `npx expo start -c`
+  - if using a custom dev client: rebuild with `npx expo run:android` or `npx expo run:ios`
+
 ### Frontend Service Entry
 
 - shared mobile upload service:
