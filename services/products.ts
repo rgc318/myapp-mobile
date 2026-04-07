@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '@/lib/api-client';
 import type { UomConversion } from '@/lib/uom-conversion';
+import { resolveMediaUrl } from '@/lib/media-url';
 import { searchProducts, type ProductSearchItem } from '@/services/gateway';
 import type { PriceSummary, SalesProfile } from '@/lib/sales-mode';
 
@@ -292,12 +293,13 @@ function mapProductRow(
           : null,
     specification: typeof data.specification === 'string' ? data.specification : '',
     description: typeof data.description === 'string' ? data.description : '',
-    imageUrl:
+    imageUrl: resolveMediaUrl(
       typeof data.image === 'string'
         ? data.image
         : typeof data.image_url === 'string'
           ? data.image_url
           : '',
+    ),
     disabled: Boolean(data.disabled),
     nickname: typeof data.nickname === 'string' ? data.nickname : '',
     barcode: typeof data.barcode === 'string' ? data.barcode : '',
@@ -533,7 +535,7 @@ export async function createProductAndStock(payload: {
     stockUom: typeof data?.uom === 'string' ? data.uom : null,
     allUoms: typeof data?.uom === 'string' ? [data.uom] : [],
     warehouse: typeof data?.warehouse === 'string' ? data.warehouse : null,
-    imageUrl: typeof data?.image === 'string' ? data.image : null,
+    imageUrl: resolveMediaUrl(typeof data?.image === 'string' ? data.image : null),
     description: typeof payload.description === 'string' ? payload.description : null,
     specification: typeof data?.specification === 'string' ? data.specification : null,
     nickname: typeof data?.nickname === 'string' ? data.nickname : null,

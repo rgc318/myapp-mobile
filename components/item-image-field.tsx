@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useFeedback } from '@/providers/feedback-provider';
-import { replaceItemImage, uploadItemImage } from '@/services/media';
+import { deleteItemImage, replaceItemImage, uploadItemImage } from '@/services/media';
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -87,9 +87,10 @@ function InnerItemImageField({
   showSuccess: (message: string) => void;
 }) {
   const [isUploading, setIsUploading] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const handlePickImage = async () => {
-    if (disabled || isUploading) {
+    if (disabled || isUploading || isDeleting) {
       return;
     }
 
@@ -142,6 +143,28 @@ function InnerItemImageField({
     }
   };
 
+  const handleClearImage = async () => {
+    if (!value || disabled || isUploading || isDeleting) {
+      return;
+    }
+
+    if (!itemCode) {
+      onChange('');
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      await deleteItemImage(itemCode);
+      onChange('');
+      showSuccess('商品图片已删除');
+    } catch (error) {
+      showError(error instanceof Error ? error.message : '商品图片删除失败');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <View style={styles.fieldBlock}>
       <View style={styles.labelRow}>
@@ -161,11 +184,11 @@ function InnerItemImageField({
         </View>
         <View style={styles.actions}>
           <Pressable
-            disabled={disabled || isUploading}
+            disabled={disabled || isUploading || isDeleting}
             onPress={() => void handlePickImage()}
             style={[
               styles.primaryAction,
-              { backgroundColor: tintColor, opacity: disabled || isUploading ? 0.6 : 1 },
+              { backgroundColor: tintColor, opacity: disabled || isUploading || isDeleting ? 0.6 : 1 },
             ]}>
             {isUploading ? <ActivityIndicator color="#fff" size="small" /> : null}
             <ThemedText style={styles.primaryActionText} type="defaultSemiBold">
@@ -174,11 +197,12 @@ function InnerItemImageField({
           </Pressable>
           {value ? (
             <Pressable
-              disabled={disabled || isUploading}
-              onPress={() => onChange('')}
+              disabled={disabled || isUploading || isDeleting}
+              onPress={() => void handleClearImage()}
               style={[styles.secondaryAction, { borderColor }]}>
+              {isDeleting ? <ActivityIndicator color={tintColor} size="small" /> : null}
               <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-                清空地址
+                {isDeleting ? '删除中…' : itemCode ? '删除图片' : '清空地址'}
               </ThemedText>
             </Pressable>
           ) : null}

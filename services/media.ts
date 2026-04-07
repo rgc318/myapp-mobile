@@ -1,4 +1,5 @@
 import { callGatewayMethod } from '@/lib/api-client';
+import { resolveMediaUrl } from '@/lib/media-url';
 
 export type UploadedItemImage = {
   fileUrl: string;
@@ -8,6 +9,13 @@ export type UploadedItemImage = {
   attachedToDoctype: string | null;
   attachedToName: string | null;
   storageProvider: string | null;
+};
+
+export type DeletedItemImage = {
+  itemCode: string;
+  previousFileUrl: string | null;
+  deleted: boolean;
+  reason: string | null;
 };
 
 export type UploadItemImagePayload = {
@@ -20,7 +28,7 @@ export type UploadItemImagePayload = {
 
 function mapUploadedItemImage(data: Record<string, unknown>): UploadedItemImage {
   return {
-    fileUrl: typeof data.file_url === 'string' ? data.file_url : '',
+    fileUrl: resolveMediaUrl(typeof data.file_url === 'string' ? data.file_url : ''),
     fileName: typeof data.file_name === 'string' ? data.file_name : null,
     fileId: typeof data.file_id === 'string' ? data.file_id : null,
     isPrivate: Boolean(data.is_private),
@@ -60,4 +68,21 @@ export async function replaceItemImage(payload: UploadItemImagePayload & { itemC
   }
 
   return mapUploadedItemImage(data);
+}
+
+export async function deleteItemImage(itemCode: string): Promise<DeletedItemImage> {
+  const data = await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.delete_item_image', {
+    item_code: itemCode,
+  });
+
+  if (!data || typeof data !== 'object') {
+    throw new Error('商品图片删除失败');
+  }
+
+  return {
+    itemCode: typeof data.item_code === 'string' ? data.item_code : itemCode,
+    previousFileUrl: typeof data.previous_file_url === 'string' ? data.previous_file_url : null,
+    deleted: Boolean(data.deleted),
+    reason: typeof data.reason === 'string' ? data.reason : null,
+  };
 }

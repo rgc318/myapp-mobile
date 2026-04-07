@@ -323,15 +323,29 @@ This round established the first migration-friendly image-upload boundary withou
   - `myapp.api.gateway.upload_item_image`
 - when replacing an existing product image, frontend should prefer:
   - `myapp.api.gateway.replace_item_image`
+- when removing an existing product image, frontend should prefer:
+  - `myapp.api.gateway.delete_item_image`
 - upload response returns a stable `file_url`
+- frontend should normalize relative backend file paths like `/files/...` into absolute backend URLs before rendering previews
 - product create/update flows should keep writing that returned URL into the existing `image` field
 - replace flow now includes guarded cleanup for the previous managed image file when it is safe to remove
+- create flow now treats pre-uploaded images as temporary files until the product is successfully inserted
 
 ### Why This Boundary Exists
 
 - current implementation uses Frappe `File` storage first
 - future storage can switch behind the same backend media service boundary
 - mobile product pages should not need storage-provider-specific logic such as MinIO / OSS / S3 branching
+
+### Current Lifecycle
+
+- uploaded images for existing products are attached directly to `Item.image`
+- uploaded images before product creation are first stored under:
+  - `Home/Attachments/MyApp Item Images/Temporary`
+- once product creation succeeds, backend binds the temporary file to the new `Item` and moves it into:
+  - `Home/Attachments/MyApp Item Images`
+- if product creation rolls back, backend cleanup removes that temporary file
+- backend also runs an hourly cleanup task for temporary images older than 24 hours
 
 ### Frontend Service Entry
 
