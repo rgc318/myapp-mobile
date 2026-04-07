@@ -8,14 +8,14 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getAppPreferences } from '@/lib/app-preferences';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { useFeedback } from '@/providers/feedback-provider';
 import { searchCatalogProducts } from '@/services/products';
 import { fetchProducts, type ProductListItem } from '@/services/products';
 
-function formatPriceLine(value: number | null | undefined, uom?: string | null) {
+function formatPriceLine(value: number | null | undefined, uom?: string | null, uomDisplay?: string | null) {
   const price = typeof value === 'number' ? `¥ ${value.toFixed(2)}` : '未配置';
-  return `${price}${uom ? ` / ${formatDisplayUom(uom)}` : ''}`;
+  return `${price}${uom ? ` / ${resolveDisplayUom(uom, uomDisplay)}` : ''}`;
 }
 
 function formatQty(value: number | null | undefined) {
@@ -45,7 +45,7 @@ function ProductCard({ item, onOpen }: { item: ProductListItem; onOpen: (code: s
   const danger = useThemeColor({}, 'danger');
 
   const shortCode = item.itemCode.length > 22 ? `${item.itemCode.slice(0, 22)}...` : item.itemCode;
-  const stockUnit = formatDisplayUom(item.stockUom);
+  const stockUnit = resolveDisplayUom(item.stockUom, item.stockUomDisplay);
   const warehouseCount = item.warehouseStockDetails.length || 0;
   const primaryTitle = item.itemName || item.itemCode;
   const nicknameText = item.nickname?.trim() || '';
@@ -113,13 +113,21 @@ function ProductCard({ item, onOpen }: { item: ProductListItem; onOpen: (code: s
         <View style={styles.infoRow}>
           <ThemedText style={styles.infoLabel}>批发价</ThemedText>
           <ThemedText numberOfLines={1} style={styles.infoValue} type="defaultSemiBold">
-            {formatPriceLine(item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
+            {formatPriceLine(
+              item.priceSummary?.wholesaleRate,
+              item.wholesaleDefaultUom,
+              item.wholesaleDefaultUomDisplay,
+            )}
           </ThemedText>
         </View>
         <View style={styles.infoRow}>
           <ThemedText style={styles.infoLabel}>零售价</ThemedText>
           <ThemedText numberOfLines={1} style={styles.infoValue} type="defaultSemiBold">
-            {formatPriceLine(item.priceSummary?.retailRate, item.retailDefaultUom)}
+            {formatPriceLine(
+              item.priceSummary?.retailRate,
+              item.retailDefaultUom,
+              item.retailDefaultUomDisplay,
+            )}
           </ThemedText>
         </View>
         <View style={styles.infoRow}>

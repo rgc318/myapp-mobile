@@ -15,15 +15,21 @@ export type SalesOrderDraftItem = {
   qty: number;
   price: number | null;
   uom: string | null;
+  uomDisplay?: string | null;
   salesMode?: SalesMode;
   allUoms?: string[];
+  allUomDisplays?: Record<string, string>;
   uomConversions?: UomConversion[];
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
   stockQty?: number | null;
   warehouseStockQty?: number | null;
   warehouseStockUom?: string | null;
+  warehouseStockUomDisplay?: string | null;
   wholesaleDefaultUom?: string | null;
+  wholesaleDefaultUomDisplay?: string | null;
   retailDefaultUom?: string | null;
+  retailDefaultUomDisplay?: string | null;
   salesProfiles?: SalesProfile[];
   priceSummary?: PriceSummary | null;
   warehouse: string | null;
@@ -70,10 +76,19 @@ function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
     qty: typeof item.qty === 'number' && Number.isFinite(item.qty) ? item.qty : 1,
     price: typeof item.price === 'number' && Number.isFinite(item.price) ? item.price : null,
     uom,
+    uomDisplay: typeof item.uomDisplay === 'string' ? item.uomDisplay : null,
     salesMode: normalizeSalesMode(item.salesMode),
     allUoms: Array.isArray(item.allUoms)
       ? item.allUoms.map((value) => (typeof value === 'string' ? value : '')).filter(Boolean)
       : [],
+    allUomDisplays:
+      item.allUomDisplays && typeof item.allUomDisplays === 'object'
+        ? Object.fromEntries(
+            Object.entries(item.allUomDisplays).filter(
+              ([key, value]) => typeof key === 'string' && typeof value === 'string' && key.trim() && value.trim(),
+            ),
+          )
+        : {},
     uomConversions: Array.isArray(item.uomConversions)
       ? item.uomConversions
           .map((entry) =>
@@ -90,16 +105,23 @@ function normalizeDraftItem(item: Partial<SalesOrderDraftItem>) {
           .filter((entry): entry is UomConversion => Boolean(entry))
       : [],
     stockUom: typeof item.stockUom === 'string' ? item.stockUom : null,
+    stockUomDisplay: typeof item.stockUomDisplay === 'string' ? item.stockUomDisplay : null,
     stockQty: typeof item.stockQty === 'number' && Number.isFinite(item.stockQty) ? item.stockQty : null,
     warehouseStockQty:
       typeof item.warehouseStockQty === 'number' && Number.isFinite(item.warehouseStockQty)
         ? item.warehouseStockQty
         : null,
     warehouseStockUom: typeof item.warehouseStockUom === 'string' ? item.warehouseStockUom : null,
+    warehouseStockUomDisplay:
+      typeof item.warehouseStockUomDisplay === 'string' ? item.warehouseStockUomDisplay : null,
     wholesaleDefaultUom:
       typeof item.wholesaleDefaultUom === 'string' ? item.wholesaleDefaultUom : null,
+    wholesaleDefaultUomDisplay:
+      typeof item.wholesaleDefaultUomDisplay === 'string' ? item.wholesaleDefaultUomDisplay : null,
     retailDefaultUom:
       typeof item.retailDefaultUom === 'string' ? item.retailDefaultUom : null,
+    retailDefaultUomDisplay:
+      typeof item.retailDefaultUomDisplay === 'string' ? item.retailDefaultUomDisplay : null,
     salesProfiles: Array.isArray(item.salesProfiles) ? item.salesProfiles : [],
     priceSummary:
       item.priceSummary && typeof item.priceSummary === 'object'
@@ -288,15 +310,21 @@ export function addItemToSalesOrderDraft(
     qty: 1,
     price: defaults.price,
     uom: defaults.uom || item.uom,
+    uomDisplay: item.allUomDisplays?.[defaults.uom || item.uom || ''] ?? item.uomDisplay ?? null,
     salesMode: defaults.salesMode,
     allUoms: item.allUoms ?? [],
+    allUomDisplays: item.allUomDisplays ?? {},
     uomConversions: item.uomConversions ?? [],
     stockUom: item.stockUom ?? null,
+    stockUomDisplay: item.stockUomDisplay ?? null,
     stockQty: item.stockQty ?? null,
     warehouseStockQty: item.warehouseStockQty ?? item.stockQty ?? null,
     warehouseStockUom: item.warehouseStockUom ?? item.stockUom ?? null,
+    warehouseStockUomDisplay: item.stockUomDisplay ?? item.warehouseStockUomDisplay ?? null,
     wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
+    wholesaleDefaultUomDisplay: item.wholesaleDefaultUomDisplay ?? null,
     retailDefaultUom: item.retailDefaultUom ?? null,
+    retailDefaultUomDisplay: item.retailDefaultUomDisplay ?? null,
     salesProfiles: item.salesProfiles ?? [],
     priceSummary: item.priceSummary ?? null,
     warehouse: item.warehouse,

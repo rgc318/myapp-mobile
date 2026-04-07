@@ -5,7 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } fro
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { normalizeAppError } from '@/lib/app-error';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { buildQuantityComposition } from '@/lib/uom-display';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
@@ -178,7 +178,7 @@ function GroupedDeliveryItems({
                   <View style={styles.deliveryWarehouseSummaryRow}>
                     <ThemedText style={styles.deliveryWarehouseFormula}>
                       {formatCurrency(item.rate, currency)} x {item.qty ?? '—'}{' '}
-                      {item.uom ? formatDisplayUom(item.uom) : ''}
+                      {item.uom ? resolveDisplayUom(item.uom, item.uomDisplay) : ''}
                     </ThemedText>
                   </View>
                 </View>

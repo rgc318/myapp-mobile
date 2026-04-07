@@ -8,7 +8,7 @@ import { SalesInvoiceSheet } from '@/components/sales-invoice-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { getPaymentResultHandoff } from '@/lib/payment-result-handoff';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { buildQuantityComposition } from '@/lib/uom-display';
 import { useFeedback } from '@/providers/feedback-provider';
 import { createSalesInvoice } from '@/services/gateway';
@@ -130,7 +130,8 @@ function buildGroupedInvoiceRateSummary(
   );
 
   if (uniqueRates.length === 1 && uniqueUoms.length === 1) {
-    return `${formatCurrency(uniqueRates[0], currency)} / ${formatDisplayUom(uniqueUoms[0])}`;
+    const display = items.find((item) => (typeof item.uom === 'string' ? item.uom.trim() : '') === uniqueUoms[0])?.uomDisplay ?? null;
+    return `${formatCurrency(uniqueRates[0], currency)} / ${resolveDisplayUom(uniqueUoms[0], display)}`;
   }
 
   return '多单价/单位';

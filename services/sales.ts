@@ -78,11 +78,16 @@ export type SalesOrderDetailV2 = {
     amount: number | null;
     warehouse: string;
     uom: string;
+    uomDisplay?: string | null;
     salesMode: SalesMode;
     allUoms?: string[];
+    allUomDisplays?: Record<string, string>;
     stockUom?: string | null;
+    stockUomDisplay?: string | null;
     wholesaleDefaultUom?: string | null;
+    wholesaleDefaultUomDisplay?: string | null;
     retailDefaultUom?: string | null;
+    retailDefaultUomDisplay?: string | null;
     salesProfiles?: SalesProfile[];
     priceSummary?: PriceSummary | null;
     imageUrl: string;
@@ -152,6 +157,7 @@ export type DeliveryNoteDetailV2 = {
     amount: number | null;
     warehouse: string;
     uom: string;
+    uomDisplay?: string | null;
     imageUrl: string;
   }[];
 };
@@ -190,6 +196,7 @@ export type SalesInvoiceDetailV2 = {
     amount: number | null;
     warehouse: string;
     uom: string;
+    uomDisplay?: string | null;
     imageUrl: string;
   }[];
 };
@@ -464,6 +471,7 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
             : null,
       warehouse: String(item.warehouse ?? ''),
       uom: String(item.uom ?? ''),
+      uomDisplay: typeof item.uom_display === 'string' ? item.uom_display : null,
       salesMode: item.sales_mode === 'retail' ? 'retail' : 'wholesale',
       allUoms: Array.isArray(item.all_uoms)
         ? item.all_uoms
@@ -480,11 +488,31 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
             })
             .filter(Boolean)
         : [],
+      allUomDisplays: Array.isArray(item.all_uoms)
+        ? Object.fromEntries(
+            item.all_uoms
+              .map((value: unknown) => {
+                if (!value || typeof value !== 'object') {
+                  return null;
+                }
+                const row = value as Record<string, unknown>;
+                const uom = typeof row.uom === 'string' ? row.uom : '';
+                const display = typeof row.uom_display === 'string' ? row.uom_display : '';
+                return uom && display ? [uom, display] : null;
+              })
+              .filter((entry): entry is [string, string] => Boolean(entry)),
+          )
+        : {},
       stockUom: typeof item.stock_uom === 'string' ? item.stock_uom : null,
+      stockUomDisplay: typeof item.stock_uom_display === 'string' ? item.stock_uom_display : null,
       wholesaleDefaultUom:
         typeof item.wholesale_default_uom === 'string' ? item.wholesale_default_uom : null,
+      wholesaleDefaultUomDisplay:
+        typeof item.wholesale_default_uom_display === 'string' ? item.wholesale_default_uom_display : null,
       retailDefaultUom:
         typeof item.retail_default_uom === 'string' ? item.retail_default_uom : null,
+      retailDefaultUomDisplay:
+        typeof item.retail_default_uom_display === 'string' ? item.retail_default_uom_display : null,
       salesProfiles: Array.isArray(item.sales_profiles)
         ? item.sales_profiles
             .map((value: unknown) => {
@@ -505,6 +533,8 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
                 modeCode,
                 priceList: typeof row.price_list === 'string' ? row.price_list : null,
                 defaultUom: typeof row.default_uom === 'string' ? row.default_uom : null,
+                defaultUomDisplay:
+                  typeof row.default_uom_display === 'string' ? row.default_uom_display : null,
               } satisfies SalesProfile;
             })
             .filter((entry: SalesProfile | null): entry is SalesProfile => Boolean(entry))
@@ -668,6 +698,7 @@ export async function getDeliveryNoteDetailV2(
       amount: toOptionalNumber(item.amount),
       warehouse: String(item.warehouse ?? ''),
       uom: String(item.uom ?? ''),
+      uomDisplay: typeof item.uom_display === 'string' ? item.uom_display : null,
       imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
     })),
   };
@@ -745,6 +776,7 @@ export async function getSalesInvoiceDetailV2(
       amount: toOptionalNumber(item.amount),
       warehouse: String(item.warehouse ?? ''),
       uom: String(item.uom ?? ''),
+      uomDisplay: typeof item.uom_display === 'string' ? item.uom_display : null,
       imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
     })),
   };

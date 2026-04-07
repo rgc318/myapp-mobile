@@ -60,3 +60,20 @@ export function formatDisplayUom(uom: string | null | undefined) {
       return normalized;
   }
 }
+
+export function resolveDisplayUom(
+  uom: string | null | undefined,
+  displayName?: string | null,
+) {
+  const normalizedUom = typeof uom === 'string' ? uom.trim() : '';
+  const normalizedDisplayName = typeof displayName === 'string' ? displayName.trim() : '';
+
+  if (
+    normalizedDisplayName &&
+    (!normalizedUom || normalizedDisplayName.toUpperCase() !== normalizedUom.toUpperCase())
+  ) {
+    return normalizedDisplayName;
+  }
+
+  return formatDisplayUom(uom);
+}

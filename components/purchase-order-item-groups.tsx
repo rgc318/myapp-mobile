@@ -4,7 +4,7 @@ import { Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-n
 
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { convertQtyToStockQty, formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
 
 export type PurchaseOrderEditorField = 'qty' | 'price' | 'warehouse' | 'uom';
@@ -19,11 +19,14 @@ export type PurchaseOrderEditorItem = {
   price: string;
   warehouse: string;
   uom: string;
+  uomDisplay?: string | null;
   imageUrl?: string | null;
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
   totalQty?: number | null;
   standardBuyingRate?: number | null;
   allUoms?: string[];
+  allUomDisplays?: Record<string, string>;
   uomConversions?: UomConversion[];
   warehouseStockDetails?: { warehouse: string; company: string | null; qty: number }[];
 };
@@ -112,6 +115,20 @@ function DetailInfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function getDisplayUom(
+  item: Pick<PurchaseOrderEditorItem, 'uom' | 'uomDisplay' | 'stockUom' | 'stockUomDisplay' | 'allUomDisplays'>,
+  uom?: string | null,
+) {
+  const targetUom = typeof uom === 'string' ? uom : item.uom || item.stockUom || '';
+  return resolveDisplayUom(
+    targetUom,
+    (targetUom && item.allUomDisplays?.[targetUom]) ||
+      (targetUom === item.uom ? item.uomDisplay : null) ||
+      (targetUom === item.stockUom ? item.stockUomDisplay : null) ||
+      null,
+  );
+}
+
 export function PurchaseOrderItemGroups({
   items,
   editable = true,
@@ -178,7 +195,7 @@ export function PurchaseOrderItemGroups({
           typeof leadRow.totalQty === 'number' ? leadRow.totalQty + incomingQty : null;
         const groupReferenceBuyingRate =
           typeof leadRow.standardBuyingRate === 'number' ? leadRow.standardBuyingRate : null;
-        const groupReferenceUnit = formatDisplayUom(leadRow.stockUom || leadRow.uom || '');
+        const groupReferenceUnit = getDisplayUom(leadRow, leadRow.stockUom || leadRow.uom || '');
         const groupPurchaseAmount = group.rows.reduce((sum, row) => {
           const qty = Number(row.qty);
           const price = Number(row.price);
@@ -269,11 +286,11 @@ export function PurchaseOrderItemGroups({
 
             <View style={[styles.groupSummaryBar, { backgroundColor: surface }]}>
               <ThemedText style={styles.groupSummaryText}>
-                总库存 <ThemedText type="defaultSemiBold">{formatQty(leadRow.totalQty)} {stockUom ? formatDisplayUom(stockUom) : ''}</ThemedText>
+                总库存 <ThemedText type="defaultSemiBold">{formatQty(leadRow.totalQty)} {stockUom ? getDisplayUom(leadRow, stockUom) : ''}</ThemedText>
               </ThemedText>
               <ThemedText style={styles.groupSummaryDivider}>·</ThemedText>
               <ThemedText style={styles.groupSummaryText}>
-                本次入库后 <ThemedText type="defaultSemiBold">{formatQty(projectedTotal)} {stockUom ? formatDisplayUom(stockUom) : ''}</ThemedText>
+                本次入库后 <ThemedText type="defaultSemiBold">{formatQty(projectedTotal)} {stockUom ? getDisplayUom(leadRow, stockUom) : ''}</ThemedText>
               </ThemedText>
               <ThemedText style={styles.groupSummaryDivider}>·</ThemedText>
               <ThemedText style={styles.groupSummaryText}>
@@ -300,7 +317,7 @@ export function PurchaseOrderItemGroups({
                     ? currentWarehouseStock + incomingStockQty
                     : null;
                 const rowUnit = item.uom || item.stockUom || '';
-                const rowDisplayUnit = formatDisplayUom(rowUnit);
+                const rowDisplayUnit = getDisplayUom(item, rowUnit);
                 const rowPriceNumber = Number(item.price);
                 const rowSubtotal =
                   Number.isFinite(rowQty) && Number.isFinite(rowPriceNumber)
@@ -338,11 +355,11 @@ export function PurchaseOrderItemGroups({
                         </View>
                         <View style={styles.subRowSummaryInline}>
                           <ThemedText style={styles.subRowMetaCompact}>
-                            当前仓库 {formatQty(currentWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
+                            当前仓库 {formatQty(currentWarehouseStock)} {item.stockUom ? getDisplayUom(item, item.stockUom) : ''}
                           </ThemedText>
                           <ThemedText style={styles.subRowSummaryDivider}>→</ThemedText>
                           <ThemedText style={styles.subRowMetaCompact}>
-                            入库后 {formatQty(projectedWarehouseStock)} {item.stockUom ? formatDisplayUom(item.stockUom) : ''}
+                            入库后 {formatQty(projectedWarehouseStock)} {item.stockUom ? getDisplayUom(item, item.stockUom) : ''}
                           </ThemedText>
                         </View>
                       </View>

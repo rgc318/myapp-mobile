@@ -14,6 +14,7 @@ export type SalesProfile = {
   modeCode: SalesMode;
   priceList?: string | null;
   defaultUom?: string | null;
+  defaultUomDisplay?: string | null;
 };
 
 export type SalesModeDefaultsSource = {

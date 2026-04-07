@@ -14,7 +14,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import {
   compactAddressText,
   composeStructuredAddressText,
@@ -99,9 +99,10 @@ function formatModeReference(
   label: string,
   rate: number | null | undefined,
   uom: string | null | undefined,
+  uomDisplay?: string | null,
 ) {
   const formattedRate = typeof rate === 'number' ? `¥ ${formatMoney(rate)}` : '未配置';
-  const formattedUom = uom ? formatDisplayUom(uom) : '未设置单位';
+  const formattedUom = uom ? resolveDisplayUom(uom, uomDisplay) : '未设置单位';
   return `${label} ${formattedRate} / ${formattedUom}`;
 }
 
@@ -487,18 +488,27 @@ export default function SalesOrderCreateScreen() {
           imageUrl: item.imageUrl || detail.imageUrl,
           salesMode: effectiveMode,
           uom: item.uom || defaults.uom || detail.stockUom,
+          uomDisplay:
+            detail.allUomDisplays?.[item.uom || defaults.uom || detail.stockUom || ''] ??
+            item.uomDisplay ??
+            null,
           price: item.price ?? defaults.price ?? detail.price ?? null,
           allUoms: detail.allUoms,
+          allUomDisplays: detail.allUomDisplays ?? {},
           uomConversions: detail.uomConversions,
           stockUom: detail.stockUom,
+          stockUomDisplay: detail.stockUomDisplay ?? null,
           stockQty: detail.stockQty,
           warehouseStockQty:
             detail.warehouseStockDetails.find((row) => row.warehouse === item.warehouse)?.qty ??
             item.warehouseStockQty ??
             null,
           warehouseStockUom: item.warehouseStockUom ?? detail.stockUom,
+          warehouseStockUomDisplay: detail.stockUomDisplay ?? null,
           wholesaleDefaultUom: detail.wholesaleDefaultUom,
+          wholesaleDefaultUomDisplay: detail.wholesaleDefaultUomDisplay ?? null,
           retailDefaultUom: detail.retailDefaultUom,
+          retailDefaultUomDisplay: detail.retailDefaultUomDisplay ?? null,
           salesProfiles: detail.salesProfiles,
           priceSummary: detail.priceSummary,
         });
@@ -680,7 +690,7 @@ export default function SalesOrderCreateScreen() {
       const totalQty = draftItems.reduce((sum, item) => sum + item.qty, 0);
       const onlyUom = normalizedUoms[0];
       return onlyUom
-        ? `共 ${totalLineCount} 项 · ${totalQty} ${formatDisplayUom(onlyUom)}`
+        ? `共 ${totalLineCount} 项 · ${totalQty} ${resolveDisplayUom(onlyUom, draftItems.find((item) => item.uom === onlyUom)?.uomDisplay)}`
         : `共 ${totalLineCount} 项`;
     }
 
@@ -1111,6 +1121,7 @@ export default function SalesOrderCreateScreen() {
                       const warehouseStockDisplay = buildWarehouseStockDisplay({
                         warehouseStockQty: item.warehouseStockQty,
                         warehouseStockUom: item.warehouseStockUom ?? item.stockUom,
+                        warehouseStockUomDisplay: item.warehouseStockUomDisplay ?? item.stockUomDisplay,
                         qty: item.qty,
                         uom: item.uom,
                         stockUom: item.stockUom,
@@ -1122,26 +1133,42 @@ export default function SalesOrderCreateScreen() {
                       warehouse: item.warehouse || preferences.defaultWarehouse,
                       salesMode: normalizeSalesMode(item.salesMode),
                       uom: item.uom,
+                      uomDisplay: item.uomDisplay,
                       wholesaleReferenceLabel: formatModeReference(
                         '批发',
                         item.priceSummary?.wholesaleRate ?? null,
                         item.wholesaleDefaultUom,
+                        item.wholesaleDefaultUomDisplay,
                       ),
                       retailReferenceLabel: formatModeReference(
                         '零售',
                         item.priceSummary?.retailRate ?? null,
                         item.retailDefaultUom,
+                        item.retailDefaultUomDisplay,
                       ),
                       warehouseStockLabel: warehouseStockDisplay?.label ?? null,
                       warehouseStockTone: warehouseStockDisplay?.tone ?? 'default',
-                      conversionSummary: buildEntryToStockSummary(item),
-                      stockReferenceSummary: buildStockReferenceSummary(item),
+                      conversionSummary: buildEntryToStockSummary({
+                        qty: item.qty,
+                        uom: item.uom,
+                        uomDisplay: item.uomDisplay,
+                        stockUom: item.stockUom,
+                        stockUomDisplay: item.stockUomDisplay,
+                        uomConversions: item.uomConversions,
+                      }),
+                      stockReferenceSummary: buildStockReferenceSummary({
+                        stockQty: item.stockQty,
+                        stockUom: item.stockUom,
+                        stockUomDisplay: item.stockUomDisplay,
+                      }),
                       onChangeSalesMode: (nextMode) => {
                         const defaults = buildModeDefaults(item, nextMode);
                         restoreSalesOrderDraftItem({
                           ...item,
                           salesMode: defaults.salesMode,
                           uom: defaults.uom || item.uom,
+                          uomDisplay:
+                            item.allUomDisplays?.[defaults.uom || item.uom || ''] ?? item.uomDisplay ?? null,
                           price: defaults.price ?? item.price ?? null,
                         });
                         syncDraft();

@@ -58,7 +58,7 @@ function UomCard({ item }: { item: UomDetail }) {
         <View style={styles.cardMainCopy}>
           <View style={styles.cardTitleRow}>
             <ThemedText style={styles.cardTitle} type="defaultSemiBold">
-              {item.uomName || item.name}
+              {item.displayName || item.uomName || item.name}
             </ThemedText>
             {item.symbol ? (
               <View style={[styles.symbolChip, { backgroundColor: accentSoft }]}>

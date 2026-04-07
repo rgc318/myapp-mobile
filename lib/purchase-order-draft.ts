@@ -20,9 +20,12 @@ export type PurchaseOrderDraftItem = {
   price: string;
   warehouse: string;
   uom: string;
+  uomDisplay?: string | null;
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
   totalQty?: number | null;
   allUoms?: string[];
+  allUomDisplays?: Record<string, string>;
   uomConversions?: UomConversion[];
   warehouseStockDetails?: PurchaseOrderWarehouseStockDetail[];
 };
@@ -67,11 +70,21 @@ function normalizeDraftItem(item: Partial<PurchaseOrderDraftItem>) {
     price: typeof item.price === 'string' ? item.price : '',
     warehouse: typeof item.warehouse === 'string' ? item.warehouse : '',
     uom: typeof item.uom === 'string' ? item.uom : '',
+    uomDisplay: typeof item.uomDisplay === 'string' ? item.uomDisplay : null,
     stockUom: typeof item.stockUom === 'string' ? item.stockUom : null,
+    stockUomDisplay: typeof item.stockUomDisplay === 'string' ? item.stockUomDisplay : null,
     totalQty: normalizeOptionalNumber(item.totalQty),
     allUoms: Array.isArray(item.allUoms)
       ? item.allUoms.map((value) => (typeof value === 'string' ? value : '')).filter(Boolean)
       : [],
+    allUomDisplays:
+      item.allUomDisplays && typeof item.allUomDisplays === 'object'
+        ? Object.fromEntries(
+            Object.entries(item.allUomDisplays).filter(
+              ([key, value]) => typeof key === 'string' && typeof value === 'string' && key.trim() && value.trim(),
+            ),
+          )
+        : {},
     uomConversions: Array.isArray(item.uomConversions)
       ? item.uomConversions
           .map((entry) =>

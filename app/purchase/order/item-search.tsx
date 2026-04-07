@@ -10,7 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import {
   getPurchaseOrderDraft,
   removePurchaseOrderDraftItem,
@@ -164,7 +164,7 @@ function ResultRow({
   const borderColor = useThemeColor({}, 'border');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const tintColor = useThemeColor({}, 'tint');
-  const stockUomLabel = item.stockUom ? formatDisplayUom(item.stockUom) : '未设置';
+  const stockUomLabel = item.stockUom ? resolveDisplayUom(item.stockUom, item.stockUomDisplay) : '未设置';
   const totalStockQty = item.globalTotalQty ?? item.totalQty;
   const primaryLabel = getPrimaryProductLabel(item);
   const secondaryLabel = getSecondaryProductLabel(item);
@@ -505,7 +505,9 @@ export default function PurchaseOrderItemSearchScreen() {
           : ''),
       warehouse: selectedWarehouse,
       uom: item.stockUom || item.uom || '',
+      uomDisplay: item.stockUomDisplay || item.uomDisplay || null,
       stockUom: item.stockUom || existing?.stockUom || item.uom || null,
+      stockUomDisplay: item.stockUomDisplay || existing?.stockUomDisplay || null,
       totalQty: typeof item.totalQty === 'number' ? item.totalQty : existing?.totalQty ?? null,
       allUoms:
         item.allUoms?.length
@@ -515,6 +517,10 @@ export default function PurchaseOrderItemSearchScreen() {
             : item.stockUom
               ? [item.stockUom]
               : [],
+      allUomDisplays:
+        item.allUomDisplays && Object.keys(item.allUomDisplays).length
+          ? item.allUomDisplays
+          : existing?.allUomDisplays ?? {},
       uomConversions: item.uomConversions?.length ? item.uomConversions : existing?.uomConversions ?? [],
       warehouseStockDetails:
         item.warehouseStockDetails?.length ? item.warehouseStockDetails : existing?.warehouseStockDetails ?? [],

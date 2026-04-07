@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { buildQuantityComposition } from '@/lib/uom-display';
 import type { SalesInvoiceDetailV2 } from '@/services/sales';
 
@@ -67,7 +67,8 @@ function buildInvoiceRateSummary(
   );
 
   if (uniqueRates.length === 1 && uniqueUoms.length === 1) {
-    return `${formatCurrency(uniqueRates[0], currency)} / ${formatDisplayUom(uniqueUoms[0])}`;
+    const display = items.find((item) => (typeof item.uom === 'string' ? item.uom.trim() : '') === uniqueUoms[0])?.uomDisplay ?? null;
+    return `${formatCurrency(uniqueRates[0], currency)} / ${resolveDisplayUom(uniqueUoms[0], display)}`;
   }
 
   return '多单价/单位';
@@ -170,7 +171,7 @@ export function SalesInvoiceSheet({ detail }: { detail: SalesInvoiceDetailV2 }) 
           <ThemedText style={[styles.tableCell, styles.tableCellQty]}>
             {item.rows.length > 1
               ? `合计 ${buildQuantityComposition(item.rows)}`
-              : `${item.rows[0]?.qty ?? '—'} ${item.rows[0]?.uom ? formatDisplayUom(item.rows[0].uom) : ''}`}
+              : `${item.rows[0]?.qty ?? '—'} ${item.rows[0]?.uom ? resolveDisplayUom(item.rows[0].uom, item.rows[0].uomDisplay) : ''}`}
           </ThemedText>
           <ThemedText style={[styles.tableCell, styles.tableCellRate]}>{buildInvoiceRateSummary(item.rows, detail.currency)}</ThemedText>
           <ThemedText style={[styles.tableCell, styles.tableCellAmount, styles.tableAmountValue]}>

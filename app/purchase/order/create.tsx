@@ -14,7 +14,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import {
   clearPurchaseOrderDraft,
@@ -104,6 +104,20 @@ function getAvailableUoms(item: PurchaseOrderDraftItem) {
     }
   });
   return Array.from(values);
+}
+
+function getDisplayUom(
+  item: Pick<PurchaseOrderDraftItem, 'uom' | 'uomDisplay' | 'stockUom' | 'stockUomDisplay' | 'allUomDisplays'>,
+  uom?: string | null,
+) {
+  const targetUom = typeof uom === 'string' ? uom : item.uom || item.stockUom || '';
+  return resolveDisplayUom(
+    targetUom,
+    (targetUom && item.allUomDisplays?.[targetUom]) ||
+      (targetUom === item.uom ? item.uomDisplay : null) ||
+      (targetUom === item.stockUom ? item.stockUomDisplay : null) ||
+      null,
+  );
 }
 
 function resolveFormDefaultWarehouse(
@@ -326,7 +340,11 @@ export default function PurchaseOrderCreateScreen() {
         return;
       }
 
-      const detailMap = new Map(results.filter(Boolean).map((entry) => [entry.id, entry.detail]));
+      const detailMap = new Map(
+        results
+          .filter((entry): entry is { id: string; detail: NonNullable<Awaited<ReturnType<typeof fetchProductDetail>>> } => entry !== null)
+          .map((entry) => [entry.id, entry.detail]),
+      );
       if (!detailMap.size) {
         return;
       }
@@ -342,12 +360,15 @@ export default function PurchaseOrderCreateScreen() {
             ...item,
             imageUrl: item.imageUrl || detail.imageUrl || null,
             stockUom: item.stockUom || detail.stockUom || null,
+            uomDisplay: item.uomDisplay || (item.uom ? detail.allUomDisplays?.[item.uom] : null) || null,
+            stockUomDisplay: item.stockUomDisplay || detail.stockUomDisplay || null,
             standardBuyingRate:
               typeof item.standardBuyingRate === 'number'
                 ? item.standardBuyingRate
                 : detail.priceSummary?.standardBuyingRate ?? null,
             totalQty: typeof detail.totalQty === 'number' ? detail.totalQty : item.totalQty ?? null,
             allUoms: item.allUoms?.length ? item.allUoms : detail.allUoms,
+            allUomDisplays: Object.keys(item.allUomDisplays ?? {}).length ? item.allUomDisplays ?? {} : detail.allUomDisplays ?? {},
             uomConversions: item.uomConversions?.length ? item.uomConversions : detail.uomConversions,
             warehouseStockDetails: item.warehouseStockDetails?.length
               ? item.warehouseStockDetails
@@ -525,7 +546,7 @@ export default function PurchaseOrderCreateScreen() {
           const localOptions = getAvailableUoms(pickerItem)
             .filter((uom) => (keyword ? uom.toLowerCase().includes(keyword) : true))
             .map((uom) => ({
-              label: formatDisplayUom(uom),
+              label: getDisplayUom(pickerItem, uom),
               value: uom,
               description:
                 pickerItem.stockUom && uom === pickerItem.stockUom ? `${uom} · 基准单位（默认）` : `${uom} · 可选采购单位`,
@@ -718,9 +739,12 @@ export default function PurchaseOrderCreateScreen() {
           supplierContext?.suggestions.warehouse ||
           '',
         uom: baseRow.stockUom || baseRow.uom,
+        uomDisplay: getDisplayUom(baseRow, baseRow.stockUom || baseRow.uom),
         stockUom: baseRow.stockUom ?? null,
+        stockUomDisplay: baseRow.stockUomDisplay ?? null,
         totalQty: baseRow.totalQty ?? null,
         allUoms: baseRow.allUoms ?? [],
+        allUomDisplays: baseRow.allUomDisplays ?? {},
         uomConversions: baseRow.uomConversions ?? [],
         warehouseStockDetails: baseRow.warehouseStockDetails ?? [],
       },

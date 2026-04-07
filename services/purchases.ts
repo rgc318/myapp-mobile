@@ -164,6 +164,11 @@ export type PurchaseOrderDetail = {
     amount: number | null;
     warehouse: string;
     uom: string;
+    uomDisplay?: string | null;
+    stockUom?: string | null;
+    stockUomDisplay?: string | null;
+    allUoms?: string[];
+    allUomDisplays?: Record<string, string>;
   }[];
 };
 
@@ -196,6 +201,7 @@ export type PurchaseReceiptDetail = {
     amount: number | null;
     warehouse: string;
     uom: string;
+    uomDisplay?: string | null;
   }[];
 };
 
@@ -228,6 +234,7 @@ export type PurchaseInvoiceDetail = {
     amount: number | null;
     warehouse: string;
     uom: string;
+    uomDisplay?: string | null;
   }[];
 };
 
@@ -290,6 +297,10 @@ function normalizeOptionalText(value: string | null | undefined) {
 
 function randomRequestId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value != null;
 }
 
 function mapContact(value: unknown): SupplierContact | null {
@@ -1151,6 +1162,29 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
           return null;
         }
         const row = entry as Record<string, unknown>;
+        const allUomRows = Array.isArray(row.all_uoms) ? row.all_uoms : [];
+        const allUoms = allUomRows
+          .map((value) => {
+            if (!value || typeof value !== 'object') {
+              return null;
+            }
+            const uomRow = value as Record<string, unknown>;
+            return typeof uomRow.uom === 'string' ? uomRow.uom : null;
+          })
+          .filter((value): value is string => Boolean(value));
+        const allUomDisplays = Object.fromEntries(
+          allUomRows
+            .map((value) => {
+              if (!value || typeof value !== 'object') {
+                return null;
+              }
+              const uomRow = value as Record<string, unknown>;
+              const uom = typeof uomRow.uom === 'string' ? uomRow.uom : '';
+              const display = typeof uomRow.uom_display === 'string' ? uomRow.uom_display : '';
+              return uom && display ? [uom, display] : null;
+            })
+            .filter((value): value is [string, string] => Boolean(value)),
+        );
         return {
           purchaseOrderItem:
             typeof row.purchase_order_item === 'string'
@@ -1178,23 +1212,14 @@ export async function fetchPurchaseOrderDetail(orderName: string): Promise<Purch
           amount: toOptionalNumber(row.amount),
           warehouse: typeof row.warehouse === 'string' ? row.warehouse : '',
           uom: typeof row.uom === 'string' ? row.uom : '',
+          uomDisplay: typeof row.uom_display === 'string' ? row.uom_display : null,
+          stockUom: typeof row.stock_uom === 'string' ? row.stock_uom : null,
+          stockUomDisplay: typeof row.stock_uom_display === 'string' ? row.stock_uom_display : null,
+          allUoms,
+          allUomDisplays,
         };
       })
-      .filter(
-        (
-          row,
-        ): row is {
-          purchaseOrderItem: string;
-          itemCode: string;
-          itemName: string;
-          qty: number | null;
-          receivedQty: number | null;
-          rate: number | null;
-          amount: number | null;
-          warehouse: string;
-          uom: string;
-        } => Boolean(row),
-      ),
+      .filter(isPresent),
   };
 }
 
@@ -1281,9 +1306,10 @@ export async function fetchPurchaseReceiptDetail(receiptName: string): Promise<P
           amount: toOptionalNumber(row.amount),
           warehouse: typeof row.warehouse === 'string' ? row.warehouse : '',
           uom: typeof row.uom === 'string' ? row.uom : '',
+          uomDisplay: typeof row.uom_display === 'string' ? row.uom_display : null,
         };
       })
-      .filter((row): row is PurchaseReceiptDetail['items'][number] => Boolean(row)),
+      .filter(isPresent),
   };
 }
 
@@ -1371,8 +1397,9 @@ export async function fetchPurchaseInvoiceDetail(invoiceName: string): Promise<P
           amount: toOptionalNumber(row.amount),
           warehouse: typeof row.warehouse === 'string' ? row.warehouse : '',
           uom: typeof row.uom === 'string' ? row.uom : '',
+          uomDisplay: typeof row.uom_display === 'string' ? row.uom_display : null,
         };
       })
-      .filter((row): row is PurchaseInvoiceDetail['items'][number] => Boolean(row)),
+      .filter(isPresent),
   };
 }

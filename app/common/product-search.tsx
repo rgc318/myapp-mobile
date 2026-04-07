@@ -12,7 +12,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { sanitizeDecimalInput, sanitizeIntegerInput } from '@/lib/numeric-input';
 import { normalizeText, toOptionalText } from '@/lib/form-utils';
 import { normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
@@ -145,9 +145,10 @@ function formatModePriceReference(
   label: string,
   rate: number | null | undefined,
   uom: string | null | undefined,
+  uomDisplay?: string | null,
 ) {
   const priceText = typeof rate === 'number' ? `¥ ${rate}` : '未配置';
-  const uomText = uom ? formatDisplayUom(uom) : '未设置单位';
+  const uomText = uom ? resolveDisplayUom(uom, uomDisplay) : '未设置单位';
   return `${label} ${priceText} / ${uomText}`;
 }
 
@@ -155,7 +156,8 @@ function formatWarehouseStockLabel(item: ProductSearchItem, warehouse: string | 
   const selectedRow = item.warehouseStockDetails?.find((row) => row.warehouse === warehouse);
   const qty = selectedRow?.qty ?? item.stockQty ?? 0;
   const uom = item.stockUom || item.uom || '';
-  return `${qty} ${uom ? formatDisplayUom(uom) : ''}`.trim();
+  const uomDisplay = item.stockUomDisplay || item.uomDisplay || null;
+  return `${qty} ${uom ? resolveDisplayUom(uom, uomDisplay) : ''}`.trim();
 }
 
 function getPrimaryProductLabel(item: Pick<ProductSearchItem, 'nickname' | 'itemName' | 'itemCode'>) {
@@ -303,14 +305,18 @@ function ResultRow({
             <ThemedText style={styles.modePriceInlineValue}>
               {typeof item.priceSummary?.wholesaleRate === 'number' ? `¥ ${item.priceSummary.wholesaleRate}` : '¥ 0'}
             </ThemedText>
-            {item.wholesaleDefaultUom ? ` / ${formatDisplayUom(item.wholesaleDefaultUom)}` : ' / 未设置单位'}
+            {item.wholesaleDefaultUom
+              ? ` / ${resolveDisplayUom(item.wholesaleDefaultUom, item.wholesaleDefaultUomDisplay)}`
+              : ' / 未设置单位'}
           </ThemedText>
           <ThemedText style={styles.modePriceInlineText} numberOfLines={1}>
             零售价{' '}
             <ThemedText style={styles.modePriceInlineValue}>
               {typeof item.priceSummary?.retailRate === 'number' ? `¥ ${item.priceSummary.retailRate}` : '¥ 0'}
             </ThemedText>
-            {item.retailDefaultUom ? ` / ${formatDisplayUom(item.retailDefaultUom)}` : ' / 未设置单位'}
+            {item.retailDefaultUom
+              ? ` / ${resolveDisplayUom(item.retailDefaultUom, item.retailDefaultUomDisplay)}`
+              : ' / 未设置单位'}
           </ThemedText>
         </View>
 
@@ -380,12 +386,22 @@ function DraftWarehouseRow({
         <View style={styles.draftItemReferenceRow}>
           <View style={styles.draftReferencePill}>
             <ThemedText numberOfLines={1} style={styles.draftReferenceText}>
-              {formatModePriceReference('批发', item.priceSummary?.wholesaleRate, item.wholesaleDefaultUom)}
+              {formatModePriceReference(
+                '批发',
+                item.priceSummary?.wholesaleRate,
+                item.wholesaleDefaultUom,
+                item.wholesaleDefaultUomDisplay,
+              )}
             </ThemedText>
           </View>
           <View style={styles.draftReferencePill}>
             <ThemedText numberOfLines={1} style={styles.draftReferenceText}>
-              {formatModePriceReference('零售', item.priceSummary?.retailRate, item.retailDefaultUom)}
+              {formatModePriceReference(
+                '零售',
+                item.priceSummary?.retailRate,
+                item.retailDefaultUom,
+                item.retailDefaultUomDisplay,
+              )}
             </ThemedText>
           </View>
         </View>
@@ -1430,7 +1446,10 @@ export default function ProductSearchScreen() {
                           <ThemedText style={styles.modalWarehouseMeta}>
                             库存 {stockRow.qty}{' '}
                             {warehousePickerItem?.stockUom || warehousePickerItem?.uom
-                              ? formatDisplayUom(warehousePickerItem?.stockUom || warehousePickerItem?.uom || '')
+                              ? resolveDisplayUom(
+                                  warehousePickerItem?.stockUom || warehousePickerItem?.uom || '',
+                                  warehousePickerItem?.stockUomDisplay || warehousePickerItem?.uomDisplay || null,
+                                )
                               : ''}
                           </ThemedText>
                           {stockRow.company ? (

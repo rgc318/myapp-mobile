@@ -121,6 +121,7 @@ export function ProductPickerSheet({
   options,
   selectedValue,
   onSelect,
+  getOptionLabel,
 }: {
   visible: boolean;
   title: string;
@@ -132,6 +133,7 @@ export function ProductPickerSheet({
   options: string[];
   selectedValue?: string;
   onSelect: (value: string) => void;
+  getOptionLabel?: (value: string) => string;
 }) {
   const surface = useThemeColor({}, 'surface');
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
@@ -163,6 +165,7 @@ export function ProductPickerSheet({
             {options.length ? (
               options.map((value) => {
                 const active = value === selectedValue;
+                const label = getOptionLabel ? getOptionLabel(value) : value;
                 return (
                   <Pressable
                     key={value}
@@ -172,7 +175,7 @@ export function ProductPickerSheet({
                       { backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted, borderColor },
                     ]}>
                     <ThemedText numberOfLines={1} style={styles.modalOptionValue} type="defaultSemiBold">
-                      {value}
+                      {label}
                     </ThemedText>
                     <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
                       {active ? '当前' : '选择'}

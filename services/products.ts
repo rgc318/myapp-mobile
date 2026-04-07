@@ -10,6 +10,7 @@ type WarehouseStockDetail = {
 };
 
 export type ProductUomConversion = UomConversion;
+export type ProductUomDisplayMap = Record<string, string>;
 
 export type ProductDetail = {
   itemCode: string;
@@ -17,6 +18,7 @@ export type ProductDetail = {
   itemGroup: string;
   brand: string;
   stockUom: string;
+  stockUomDisplay?: string | null;
   specification: string;
   description: string;
   imageUrl: string;
@@ -31,9 +33,12 @@ export type ProductDetail = {
   price: number | null;
   warehouse: string;
   allUoms: string[];
+  allUomDisplays?: ProductUomDisplayMap;
   uomConversions: ProductUomConversion[];
   wholesaleDefaultUom?: string | null;
+  wholesaleDefaultUomDisplay?: string | null;
   retailDefaultUom?: string | null;
+  retailDefaultUomDisplay?: string | null;
   salesProfiles?: SalesProfile[];
   priceSummary?: PriceSummary | null;
 };
@@ -106,6 +111,7 @@ export function searchCatalogProducts(
     company?: string;
     limit?: number;
     inStockOnly?: boolean;
+    disabled?: number | null;
   },
 ) {
   return searchProducts(query, options);
@@ -141,6 +147,25 @@ function mapUomNames(value: unknown) {
       return '';
     })
     .filter(Boolean);
+}
+
+function mapUomDisplays(value: unknown): ProductUomDisplayMap {
+  if (!Array.isArray(value)) {
+    return {};
+  }
+
+  return value.reduce<ProductUomDisplayMap>((acc, entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return acc;
+    }
+    const row = entry as Record<string, unknown>;
+    const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
+    const display = typeof row.uom_display === 'string' ? row.uom_display.trim() : '';
+    if (uom && display) {
+      acc[uom] = display;
+    }
+    return acc;
+  }, {});
 }
 
 function mapUomConversions(value: unknown): ProductUomConversion[] {
@@ -209,6 +234,8 @@ function mapSalesProfiles(value: unknown): SalesProfile[] {
         modeCode,
         priceList: typeof row.price_list === 'string' ? row.price_list : null,
         defaultUom: typeof row.default_uom === 'string' ? row.default_uom : null,
+        defaultUomDisplay:
+          typeof row.default_uom_display === 'string' ? row.default_uom_display : null,
       } satisfies SalesProfile;
     })
     .filter((entry): entry is SalesProfile => Boolean(entry));
@@ -257,6 +284,12 @@ function mapProductRow(
     itemGroup: typeof data.item_group === 'string' ? data.item_group : '',
     brand: typeof data.brand === 'string' ? data.brand : '',
     stockUom: typeof data.stock_uom === 'string' ? data.stock_uom : typeof data.uom === 'string' ? data.uom : '',
+    stockUomDisplay:
+      typeof data.stock_uom_display === 'string'
+        ? data.stock_uom_display
+        : typeof data.uom_display === 'string'
+          ? data.uom_display
+          : null,
     specification: typeof data.specification === 'string' ? data.specification : '',
     description: typeof data.description === 'string' ? data.description : '',
     imageUrl:
@@ -276,11 +309,16 @@ function mapProductRow(
     price: toOptionalNumber(data.price),
     warehouse,
     allUoms: mapUomNames(data.all_uoms),
+    allUomDisplays: mapUomDisplays(data.all_uoms),
     uomConversions: mapUomConversions(data.all_uoms),
     wholesaleDefaultUom:
       typeof data.wholesale_default_uom === 'string' ? data.wholesale_default_uom : null,
+    wholesaleDefaultUomDisplay:
+      typeof data.wholesale_default_uom_display === 'string' ? data.wholesale_default_uom_display : null,
     retailDefaultUom:
       typeof data.retail_default_uom === 'string' ? data.retail_default_uom : null,
+    retailDefaultUomDisplay:
+      typeof data.retail_default_uom_display === 'string' ? data.retail_default_uom_display : null,
     salesProfiles: mapSalesProfiles(data.sales_profiles),
     priceSummary: mapPriceSummary(data.price_summary),
     creation: typeof data.creation === 'string' ? data.creation : null,
@@ -327,7 +365,7 @@ export async function fetchProducts(options?: {
       search_key: options?.searchKey,
       warehouse: options?.warehouse,
       company: options?.company,
-      disabled: options?.disabled,
+      disabled: options?.disabled ?? 0,
       limit: options?.limit ?? 40,
       selling_price_lists: ['Standard Selling', 'Wholesale', 'Retail'],
       buying_price_lists: ['Standard Buying'],

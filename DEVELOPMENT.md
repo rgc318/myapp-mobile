@@ -6714,6 +6714,17 @@ This round focused on making product creation practical on mobile while keeping 
   - but adding to an order now requires a concrete warehouse
   - fake `未指定仓库` warehouse options were removed from warehouse selection
   - sales search now defaults to `全部仓库`
+- disabled-product handling is now stricter:
+  - common product search now defaults to `disabled=0`
+  - sales-order and purchase-order item pickers inherit this default behavior
+  - product list pages may still query disabled items explicitly when the UI is in a management/filtering scenario
+  - in business semantics, `已停用` products are treated like logical deletion and should not appear in normal item selection flows
+- UOM display fallback was hardened:
+  - if the backend sends a display value that is effectively the same as the raw English UOM code, the mobile client now falls back to the local Chinese mapping
+  - product detail edit mode no longer reuses stale `detail.*_display` values after a user has already picked a new UOM in the current draft
+- numeric input consistency was tightened:
+  - product create page now reuses the shared numeric sanitizer from `/lib/numeric-input.ts`
+  - opening stock and related decimal inputs now strip redundant leading zeroes the same way as other business forms
 
 ### Current Design Rule
 

@@ -8,7 +8,8 @@ import { ProductPickerSheet, ProductSelectorField, ProductTextField } from '@/co
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getAppPreferences } from '@/lib/app-preferences';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
+import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import { buildProductUomConversions, type StockSyncMode } from '@/lib/product-uom-sync';
 import { useFeedback } from '@/providers/feedback-provider';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
@@ -22,15 +23,6 @@ function toNumberOrNull(value: string) {
   }
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function sanitizeDecimalInput(value: string) {
-  const normalized = value.replace(/[^\d.]/g, '');
-  const [integerPart, ...rest] = normalized.split('.');
-  if (!rest.length) {
-    return normalized;
-  }
-  return `${integerPart}.${rest.join('')}`;
 }
 
 function SectionHeader({
@@ -275,6 +267,8 @@ export default function ProductCreateScreen() {
     }
   }, [createMode, retailDefaultUom, stockSyncMode, wholesaleDefaultUom]);
 
+  const displayUom = (uom: string | null | undefined) => resolveDisplayUom(uom);
+
   const handleCreate = async () => {
     if (!itemName.trim()) {
       showError('请先填写商品名称。');
@@ -504,15 +498,15 @@ export default function ProductCreateScreen() {
     wholesaleDefaultUom.trim() !== stockUom.trim();
   const retailNeedsFactor = Boolean(retailDefaultUom.trim()) && Boolean(stockUom.trim()) && retailDefaultUom.trim() !== stockUom.trim();
   const wholesaleFormulaPreview = wholesaleDefaultUom.trim() && stockUom.trim()
-    ? `1 ${formatDisplayUom(wholesaleDefaultUom)} = ${wholesaleConversionFactor || '？'} ${formatDisplayUom(stockUom)}`
+    ? `1 ${displayUom(wholesaleDefaultUom)} = ${wholesaleConversionFactor || '？'} ${displayUom(stockUom)}`
     : '';
   const retailFormulaPreview =
     retailDefaultUom.trim() && stockUom.trim()
       ? stockSyncMode === 'wholesale'
-        ? `1 ${formatDisplayUom(stockUom)} = ${retailConversionFactor || '？'} ${formatDisplayUom(retailDefaultUom)}`
+        ? `1 ${displayUom(stockUom)} = ${retailConversionFactor || '？'} ${displayUom(retailDefaultUom)}`
         : stockSyncMode === 'retail'
-          ? `1 ${formatDisplayUom(retailDefaultUom)} = 1 ${formatDisplayUom(stockUom)}`
-          : `1 ${formatDisplayUom(retailDefaultUom)} = ${retailConversionFactor || '？'} ${formatDisplayUom(stockUom)}`
+          ? `1 ${displayUom(retailDefaultUom)} = 1 ${displayUom(stockUom)}`
+          : `1 ${displayUom(retailDefaultUom)} = ${retailConversionFactor || '？'} ${displayUom(stockUom)}`
       : '';
   const completion = [
     itemName.trim(),
@@ -537,8 +531,8 @@ export default function ProductCreateScreen() {
         : stockSyncMode === 'retail'
           ? '与零售同步'
           : '与批发同步',
-    wholesaleDefaultUom.trim() ? `批 ${formatDisplayUom(wholesaleDefaultUom)}` : null,
-    retailDefaultUom.trim() ? `零 ${formatDisplayUom(retailDefaultUom)}` : null,
+    wholesaleDefaultUom.trim() ? `批 ${displayUom(wholesaleDefaultUom)}` : null,
+    retailDefaultUom.trim() ? `零 ${displayUom(retailDefaultUom)}` : null,
     wholesaleRate.trim() ? `批 ¥${wholesaleRate.trim()}` : null,
     retailRate.trim() ? `零 ¥${retailRate.trim()}` : null,
   ]
@@ -546,7 +540,7 @@ export default function ProductCreateScreen() {
     .join(' · ');
   const inventorySummary = [
     openingWarehouse.trim() || '未选仓库',
-    `库存 ${openingQty.trim() || '0'} ${formatDisplayUom(stockUom)}`,
+    `库存 ${openingQty.trim() || '0'} ${displayUom(stockUom)}`,
   ].join(' · ');
   const purchasingBaseUomLabel =
     createMode === 'simple'
@@ -724,7 +718,7 @@ export default function ProductCreateScreen() {
                     <Pressable onPress={() => handleOpenUomPicker('wholesale')} style={styles.selectorFieldCompact}>
                       <View style={styles.selectorFieldCompactCopy}>
                         <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                          {wholesaleDefaultUom ? formatDisplayUom(wholesaleDefaultUom) : '请选择'}
+                          {wholesaleDefaultUom ? displayUom(wholesaleDefaultUom) : '请选择'}
                         </ThemedText>
                       </View>
                       <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
@@ -751,7 +745,7 @@ export default function ProductCreateScreen() {
                     <Pressable onPress={() => handleOpenUomPicker('retail')} style={styles.selectorFieldCompact}>
                       <View style={styles.selectorFieldCompactCopy}>
                         <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                          {retailDefaultUom ? formatDisplayUom(retailDefaultUom) : '请选择'}
+                          {retailDefaultUom ? displayUom(retailDefaultUom) : '请选择'}
                         </ThemedText>
                       </View>
                       <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
@@ -762,11 +756,11 @@ export default function ProductCreateScreen() {
                 </View>
                 <ThemedText style={styles.unitFormulaPreview}>
                   {wholesaleDefaultUom.trim() && retailDefaultUom.trim()
-                    ? `1 ${formatDisplayUom(wholesaleDefaultUom)} = ${
+                    ? `1 ${displayUom(wholesaleDefaultUom)} = ${
                         stockSyncMode === 'retail'
                           ? wholesaleNeedsFactor ? wholesaleConversionFactor || '？' : '1'
                           : retailNeedsFactor ? retailConversionFactor || '？' : '1'
-                      } ${formatDisplayUom(retailDefaultUom)}`
+                      } ${displayUom(retailDefaultUom)}`
                     : '请选择批发单位和零售单位。'}
                 </ThemedText>
               </View>
@@ -776,7 +770,7 @@ export default function ProductCreateScreen() {
               <View style={styles.inlineInfoCard}>
                 <ThemedText style={styles.inlineInfoLabel}>库存基准单位</ThemedText>
                 <ThemedText style={styles.inlineInfoValue} type="defaultSemiBold">
-                  {formatDisplayUom(stockUom)}
+                  {displayUom(stockUom)}
                 </ThemedText>
                 <ThemedText style={styles.inlineInfoHint}>库存统一按这个单位结算，批发和零售默认单位都要能换算到这里。</ThemedText>
               </View>
@@ -793,7 +787,7 @@ export default function ProductCreateScreen() {
                   <Pressable onPress={() => handleOpenUomPicker('stock')} style={styles.selectorFieldCompact}>
                     <View style={styles.selectorFieldCompactCopy}>
                       <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                        {formatDisplayUom(stockUom)}
+                        {displayUom(stockUom)}
                       </ThemedText>
                     </View>
                     <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
@@ -845,7 +839,7 @@ export default function ProductCreateScreen() {
                     <Pressable onPress={() => handleOpenUomPicker('wholesale')} style={styles.selectorFieldCompact}>
                       <View style={styles.selectorFieldCompactCopy}>
                         <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                          {wholesaleDefaultUom ? formatDisplayUom(wholesaleDefaultUom) : '请选择'}
+                          {wholesaleDefaultUom ? displayUom(wholesaleDefaultUom) : '请选择'}
                         </ThemedText>
                       </View>
                       <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
@@ -868,7 +862,7 @@ export default function ProductCreateScreen() {
                   <View style={styles.unitFormulaTargetCell}>
                     <View style={styles.staticField}>
                       <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                        {formatDisplayUom(stockUom)}
+                        {displayUom(stockUom)}
                       </ThemedText>
                     </View>
                   </View>
@@ -893,7 +887,7 @@ export default function ProductCreateScreen() {
                     <View style={styles.unitFormulaUnitCell}>
                       <View style={styles.staticField}>
                         <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                          {formatDisplayUom(stockUom)}
+                          {displayUom(stockUom)}
                         </ThemedText>
                       </View>
                     </View>
@@ -902,7 +896,7 @@ export default function ProductCreateScreen() {
                       <Pressable onPress={() => handleOpenUomPicker('retail')} style={styles.selectorFieldCompact}>
                         <View style={styles.selectorFieldCompactCopy}>
                           <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                            {retailDefaultUom ? formatDisplayUom(retailDefaultUom) : '请选择'}
+                            {retailDefaultUom ? displayUom(retailDefaultUom) : '请选择'}
                           </ThemedText>
                         </View>
                         <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
@@ -928,7 +922,7 @@ export default function ProductCreateScreen() {
                       <Pressable onPress={() => handleOpenUomPicker('retail')} style={styles.selectorFieldCompact}>
                         <View style={styles.selectorFieldCompactCopy}>
                           <ThemedText numberOfLines={1} style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                            {retailDefaultUom ? formatDisplayUom(retailDefaultUom) : '请选择'}
+                            {retailDefaultUom ? displayUom(retailDefaultUom) : '请选择'}
                           </ThemedText>
                         </View>
                         <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
@@ -938,7 +932,7 @@ export default function ProductCreateScreen() {
                     ) : (
                       <View style={styles.staticField}>
                         <ThemedText style={styles.selectorFieldCompactValue} type="defaultSemiBold">
-                          {formatDisplayUom(stockUom)}
+                          {displayUom(stockUom)}
                         </ThemedText>
                       </View>
                     )}
@@ -987,7 +981,7 @@ export default function ProductCreateScreen() {
               <View style={styles.rowField}>
                 <ProductTextField
                   keyboardType="decimal-pad"
-                  label={`默认采购价（${formatDisplayUom(purchasingBaseUomLabel)}）`}
+                  label={`默认采购价（${displayUom(purchasingBaseUomLabel)}）`}
                   onChangeText={handleBuyingRateChange}
                   placeholder="例如 55（默认按批发采购口径）"
                   value={standardBuyingRate}
@@ -1031,7 +1025,7 @@ export default function ProductCreateScreen() {
                   <View style={styles.inlineInfoCard}>
                     <ThemedText style={styles.inlineInfoLabel}>库存单位</ThemedText>
                     <ThemedText style={styles.inlineInfoValue} type="defaultSemiBold">
-                      {formatDisplayUom(stockUom)}
+                      {displayUom(stockUom)}
                     </ThemedText>
                     <ThemedText style={styles.inlineInfoHint}>初始库存将按当前库存基准单位写入所选仓库。</ThemedText>
                   </View>
@@ -1082,6 +1076,7 @@ export default function ProductCreateScreen() {
         }}
         onSelect={handleSelectUom}
         options={uomOptions}
+        getOptionLabel={(value) => `${displayUom(value)} · ${value}`}
         placeholder="搜索单位名称"
         query={uomPickerQuery}
         selectedValue={uomPickerTarget === 'stock' ? stockUom : uomPickerTarget === 'wholesale' ? wholesaleDefaultUom : retailDefaultUom}

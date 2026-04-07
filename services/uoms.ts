@@ -15,6 +15,7 @@ export type UomUsageSummary = {
 export type UomDetail = {
   name: string;
   uomName: string;
+  displayName: string;
   symbol: string | null;
   description: string | null;
   enabled: number;
@@ -98,6 +99,14 @@ function mapUomRow(data: Record<string, unknown>): UomDetail {
         : typeof data.name === 'string'
           ? data.name
           : '',
+    displayName:
+      typeof data.display_name === 'string'
+        ? data.display_name
+        : typeof data.uom_name === 'string'
+          ? data.uom_name
+          : typeof data.name === 'string'
+            ? data.name
+            : '',
     symbol: typeof data.symbol === 'string' ? data.symbol : null,
     description: typeof data.description === 'string' ? data.description : null,
     enabled: toOptionalNumber(data.enabled) ?? 0,

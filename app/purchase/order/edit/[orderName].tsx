@@ -12,7 +12,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { isValidIsoDate } from '@/lib/date-value';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import {
   clearPurchaseOrderDraft,
   getPurchaseOrderDraft,
@@ -48,10 +48,13 @@ type EditablePurchaseOrderItem = {
   price: string;
   warehouse: string;
   uom: string;
+  uomDisplay?: string | null;
   imageUrl?: string | null;
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
   totalQty?: number | null;
   allUoms?: string[];
+  allUomDisplays?: Record<string, string>;
   uomConversions?: UomConversion[];
   warehouseStockDetails?: { warehouse: string; company: string | null; qty: number }[];
 };
@@ -94,7 +97,14 @@ function getOrderSummaryUom(detail: PurchaseOrderDetail | null) {
   }
 
   const uoms = Array.from(new Set(detail.items.map((item) => item.uom).filter(Boolean)));
-  return uoms.length === 1 ? formatDisplayUom(uoms[0]) : '';
+  if (uoms.length !== 1) {
+    return '';
+  }
+  const item = detail.items[0];
+  return resolveDisplayUom(
+    uoms[0],
+    item.allUomDisplays?.[uoms[0]] || item.uomDisplay || item.stockUomDisplay || null,
+  );
 }
 
 function getPrimaryPurchaseInvoice(detail: PurchaseOrderDetail | null) {
@@ -358,6 +368,20 @@ function getAvailableUoms(item: EditablePurchaseOrderItem) {
   return Array.from(values);
 }
 
+function getDisplayUom(
+  item: Pick<EditablePurchaseOrderItem, 'uom' | 'uomDisplay' | 'stockUom' | 'stockUomDisplay' | 'allUomDisplays'>,
+  uom?: string | null,
+) {
+  const targetUom = typeof uom === 'string' ? uom : item.uom || item.stockUom || '';
+  return resolveDisplayUom(
+    targetUom,
+    (targetUom && item.allUomDisplays?.[targetUom]) ||
+      (targetUom === item.uom ? item.uomDisplay : null) ||
+      (targetUom === item.stockUom ? item.stockUomDisplay : null) ||
+      null,
+  );
+}
+
 function buildItemsSignature(
   items: {
     itemCode: string;
@@ -397,10 +421,13 @@ function buildEditableItemsFromDetail(detail: PurchaseOrderDetail | null) {
     price: typeof item.rate === 'number' ? String(item.rate) : '',
     warehouse: item.warehouse || '',
     uom: item.uom || '',
+    uomDisplay: item.uomDisplay ?? null,
     imageUrl: null,
-    stockUom: item.uom || null,
+    stockUom: item.stockUom || item.uom || null,
+    stockUomDisplay: item.stockUomDisplay ?? item.uomDisplay ?? null,
     totalQty: null,
-    allUoms: item.uom ? [item.uom] : [],
+    allUoms: item.allUoms?.length ? item.allUoms : item.uom ? [item.uom] : [],
+    allUomDisplays: item.allUomDisplays ?? {},
     uomConversions: [],
     warehouseStockDetails: [],
   }));
@@ -521,10 +548,13 @@ export default function PurchaseOrderEditScreen() {
                 price: item.price,
                 warehouse: item.warehouse || '',
                 uom: item.uom || '',
+                uomDisplay: item.uomDisplay || null,
                 imageUrl: item.imageUrl || null,
                 stockUom: item.stockUom || null,
+                stockUomDisplay: item.stockUomDisplay || null,
                 totalQty: item.totalQty ?? null,
                 allUoms: item.allUoms ?? [],
+                allUomDisplays: item.allUomDisplays ?? {},
                 uomConversions: item.uomConversions ?? [],
                 warehouseStockDetails: item.warehouseStockDetails ?? [],
               }))
@@ -655,9 +685,12 @@ export default function PurchaseOrderEditScreen() {
         price: item.price,
         warehouse: item.warehouse || '',
         uom: item.uom || '',
+        uomDisplay: item.uomDisplay || null,
         stockUom: item.stockUom || null,
+        stockUomDisplay: item.stockUomDisplay || null,
         totalQty: item.totalQty ?? null,
         allUoms: item.allUoms ?? [],
+        allUomDisplays: item.allUomDisplays ?? {},
         uomConversions: item.uomConversions ?? [],
         warehouseStockDetails: item.warehouseStockDetails ?? [],
       })),
@@ -796,8 +829,11 @@ export default function PurchaseOrderEditScreen() {
             ...item,
             imageUrl: item.imageUrl || product.imageUrl || null,
             stockUom: item.stockUom || product.stockUom || null,
+            uomDisplay: item.uomDisplay || (item.uom ? product.allUomDisplays?.[item.uom] : null) || null,
+            stockUomDisplay: item.stockUomDisplay || product.stockUomDisplay || null,
             totalQty: typeof product.totalQty === 'number' ? product.totalQty : item.totalQty ?? null,
             allUoms: item.allUoms?.length ? item.allUoms : product.allUoms,
+            allUomDisplays: Object.keys(item.allUomDisplays ?? {}).length ? item.allUomDisplays ?? {} : product.allUomDisplays ?? {},
             uomConversions: item.uomConversions?.length ? item.uomConversions : product.uomConversions,
             warehouseStockDetails: item.warehouseStockDetails?.length ? item.warehouseStockDetails : product.warehouseStockDetails,
             nickname: item.nickname ?? product.nickname ?? null,
@@ -835,7 +871,7 @@ export default function PurchaseOrderEditScreen() {
           const localOptions = getAvailableUoms(pickerItem)
             .filter((uom) => (keyword ? uom.toLowerCase().includes(keyword) : true))
             .map((uom) => ({
-              label: formatDisplayUom(uom),
+              label: getDisplayUom(pickerItem, uom),
               value: uom,
               description:
                 pickerItem.stockUom && uom === pickerItem.stockUom ? `${uom} · 库存单位` : `${uom} · 商品单位`,

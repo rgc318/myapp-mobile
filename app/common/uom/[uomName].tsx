@@ -100,7 +100,7 @@ export default function UomDetailScreen() {
 
       hydrateDraft(saved);
       setIsEditing(false);
-      showSuccess(`单位 ${saved.uomName} 已保存`);
+      showSuccess(`单位 ${saved.displayName || saved.uomName} 已保存`);
     } catch (error) {
       showError(error instanceof Error ? error.message : '保存单位失败');
     } finally {
@@ -119,7 +119,7 @@ export default function UomDetailScreen() {
         throw new Error('更新单位状态失败');
       }
       hydrateDraft(next);
-      showSuccess(`单位 ${next.uomName} 已${next.enabled ? '启用' : '停用'}`);
+      showSuccess(`单位 ${next.displayName || next.uomName} 已${next.enabled ? '启用' : '停用'}`);
     } catch (error) {
       showError(error instanceof Error ? error.message : '更新单位状态失败');
     }
@@ -130,7 +130,7 @@ export default function UomDetailScreen() {
       return;
     }
 
-    Alert.alert('删除单位', `确认删除单位 ${detail.uomName || detail.name}？`, [
+    Alert.alert('删除单位', `确认删除单位 ${detail.displayName || detail.uomName || detail.name}？`, [
       { text: '取消', style: 'cancel' },
       {
         text: '确认删除',
@@ -138,7 +138,7 @@ export default function UomDetailScreen() {
         onPress: async () => {
           try {
             const deleted = await deleteUom(detail.name);
-            showSuccess(`单位 ${deleted?.uomName || detail.uomName} 已删除`);
+            showSuccess(`单位 ${detail.displayName || deleted?.uomName || detail.uomName} 已删除`);
             router.replace('/common/uoms');
           } catch (error) {
             showError(error instanceof Error ? error.message : '删除单位失败');
@@ -177,7 +177,7 @@ export default function UomDetailScreen() {
           )}
         </View>
       }
-      title={detail?.uomName || '单位详情'}>
+      title={detail?.displayName || detail?.uomName || '单位详情'}>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl onRefresh={() => void loadDetail(true)} refreshing={isRefreshing} />}
@@ -186,7 +186,7 @@ export default function UomDetailScreen() {
           <View style={styles.heroTopRow}>
             <View style={styles.heroMainCopy}>
               <ThemedText style={styles.heroTitle} type="defaultSemiBold">
-                {detail?.uomName || uomName || '单位'}
+                {detail?.displayName || detail?.uomName || uomName || '单位'}
               </ThemedText>
               <ThemedText style={styles.heroMeta}>编码 {detail?.name || uomName || '—'}</ThemedText>
             </View>

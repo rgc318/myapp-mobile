@@ -2,7 +2,7 @@ import { Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { sanitizeDecimalInput, sanitizeIntegerInput } from '@/lib/numeric-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getSalesModeLabel, type SalesMode } from '@/lib/sales-mode';
@@ -47,6 +47,7 @@ type WarehouseEntryEditorProps = {
   warehouseStockTone?: 'default' | 'warning' | 'danger';
   salesMode: SalesMode;
   uom: string | null;
+  uomDisplay?: string | null;
   wholesaleReferenceLabel: string;
   retailReferenceLabel: string;
   conversionSummary?: string | null;
@@ -80,6 +81,7 @@ export type SalesOrderItemEditorProps = {
   warehouseStockTone?: 'default' | 'warning' | 'danger';
   salesMode: SalesMode;
   uom: string | null;
+  uomDisplay?: string | null;
   wholesaleReferenceLabel: string;
   retailReferenceLabel: string;
   conversionSummary?: string | null;
@@ -102,6 +104,7 @@ function WarehouseEntryEditor({
   warehouseStockTone = 'default',
   salesMode,
   uom,
+  uomDisplay,
   wholesaleReferenceLabel,
   retailReferenceLabel,
   conversionSummary,
@@ -180,7 +183,7 @@ function WarehouseEntryEditor({
                   {qty}
                 </ThemedText>
                 <ThemedText style={styles.readonlyMetricUom} type="defaultSemiBold">
-                  {uom ? formatDisplayUom(uom) : '未设置'}
+                  {uom ? resolveDisplayUom(uom, uomDisplay) : '未设置'}
                 </ThemedText>
               </View>
             </View>
@@ -259,7 +262,7 @@ function WarehouseEntryEditor({
             <ThemedText style={styles.itemEditLabel}>{'单位'}</ThemedText>
             <View style={styles.uomDisplayWrap}>
               <ThemedText style={styles.uomDisplayText} type="defaultSemiBold">
-                {uom ? formatDisplayUom(uom) : '未设置'}
+                {uom ? resolveDisplayUom(uom, uomDisplay) : '未设置'}
               </ThemedText>
             </View>
           </View>
@@ -303,6 +306,7 @@ export function SalesOrderItemEditor({
   warehouseStockTone,
   salesMode,
   uom,
+  uomDisplay,
   wholesaleReferenceLabel,
   retailReferenceLabel,
   conversionSummary,
@@ -383,6 +387,7 @@ export function SalesOrderItemEditor({
               salesMode={line.salesMode}
               stockReferenceSummary={line.stockReferenceSummary}
               uom={line.uom}
+              uomDisplay={line.uomDisplay}
               warehouse={line.warehouse}
               warehouseStockLabel={line.warehouseStockLabel}
               warehouseStockTone={line.warehouseStockTone}
@@ -412,6 +417,7 @@ export function SalesOrderItemEditor({
       salesMode={salesMode}
       stockReferenceSummary={stockReferenceSummary}
       uom={uom}
+      uomDisplay={uomDisplay}
       warehouse={warehouse}
       warehouseStockLabel={warehouseStockLabel}
       warehouseStockTone={warehouseStockTone}

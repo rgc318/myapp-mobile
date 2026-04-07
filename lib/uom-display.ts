@@ -1,4 +1,4 @@
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { convertQtyToStockQty, formatConvertedQty, type UomConversion } from '@/lib/uom-conversion';
 import type { SalesMode } from '@/lib/sales-mode';
 
@@ -9,10 +9,12 @@ function normalizeUom(value: string | null | undefined) {
 export function buildLineUnitSummary(options: {
   salesMode: SalesMode;
   uom?: string | null;
+  uomDisplay?: string | null;
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
 }) {
-  const currentUom = options.uom ? formatDisplayUom(options.uom) : '未设置单位';
-  const stockUom = options.stockUom ? formatDisplayUom(options.stockUom) : '';
+  const currentUom = options.uom ? resolveDisplayUom(options.uom, options.uomDisplay) : '未设置单位';
+  const stockUom = options.stockUom ? resolveDisplayUom(options.stockUom, options.stockUomDisplay) : '';
   const modeLabel = options.salesMode === 'retail' ? '零售' : '批发';
 
   if (stockUom && options.uom && normalizeUom(options.uom) !== normalizeUom(options.stockUom)) {
@@ -25,7 +27,9 @@ export function buildLineUnitSummary(options: {
 export function buildEntryToStockSummary(options: {
   qty: number;
   uom?: string | null;
+  uomDisplay?: string | null;
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
   uomConversions?: UomConversion[] | null;
 }) {
   const stockQty = convertQtyToStockQty(options);
@@ -34,26 +38,28 @@ export function buildEntryToStockSummary(options: {
   }
 
   if (!options.uom || normalizeUom(options.uom) === normalizeUom(options.stockUom)) {
-    return `当前按 ${formatDisplayUom(options.stockUom)} 录入。`;
+    return `当前按 ${resolveDisplayUom(options.stockUom, options.stockUomDisplay)} 录入。`;
   }
 
-  return `${options.qty} ${formatDisplayUom(options.uom)} 约等于 ${formatConvertedQty(stockQty)} ${formatDisplayUom(options.stockUom)}。`;
+  return `${options.qty} ${resolveDisplayUom(options.uom, options.uomDisplay)} 约等于 ${formatConvertedQty(stockQty)} ${resolveDisplayUom(options.stockUom, options.stockUomDisplay)}。`;
 }
 
 export function buildStockReferenceSummary(options: {
   stockQty?: number | null;
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
 }) {
   if (typeof options.stockQty !== 'number' || !Number.isFinite(options.stockQty) || !options.stockUom) {
     return null;
   }
 
-  return `参考库存约 ${formatConvertedQty(options.stockQty)} ${formatDisplayUom(options.stockUom)}，仅作提醒。`;
+  return `参考库存约 ${formatConvertedQty(options.stockQty)} ${resolveDisplayUom(options.stockUom, options.stockUomDisplay)}，仅作提醒。`;
 }
 
 export function buildWarehouseStockDisplay(options: {
   warehouseStockQty?: number | null;
   warehouseStockUom?: string | null;
+  warehouseStockUomDisplay?: string | null;
   qty: number;
   uom?: string | null;
   stockUom?: string | null;
@@ -78,12 +84,12 @@ export function buildWarehouseStockDisplay(options: {
   const tone = remainingQty <= 0 ? 'danger' : remainingQty <= 10 ? 'warning' : 'default';
 
   return {
-    label: `库存剩余：${formatConvertedQty(remainingQty)} ${formatDisplayUom(options.warehouseStockUom)}`,
+    label: `库存剩余：${formatConvertedQty(remainingQty)} ${resolveDisplayUom(options.warehouseStockUom, options.warehouseStockUomDisplay)}`,
     tone: tone as 'default' | 'warning' | 'danger',
   };
 }
 
-export function buildQuantitySummary(items: { qty?: number | null; uom?: string | null }[]) {
+export function buildQuantitySummary(items: { qty?: number | null; uom?: string | null; uomDisplay?: string | null }[]) {
   if (!items.length) {
     return '暂无商品明细';
   }
@@ -97,13 +103,14 @@ export function buildQuantitySummary(items: { qty?: number | null; uom?: string 
   if (uomSet.size === 1) {
     const onlyUom = Array.from(uomSet)[0];
     const totalQty = items.reduce((count, item) => count + (item.qty ?? 0), 0);
-    return `录入数量 ${totalQty} ${formatDisplayUom(onlyUom)}`;
+    const display = items.find((item) => normalizeUom(item.uom) === onlyUom)?.uomDisplay ?? null;
+    return `录入数量 ${totalQty} ${resolveDisplayUom(onlyUom, display)}`;
   }
 
   return '存在多种单位，数量以各行显示为准';
 }
 
-export function buildQuantityComposition(items: { qty?: number | null; uom?: string | null }[]) {
+export function buildQuantityComposition(items: { qty?: number | null; uom?: string | null; uomDisplay?: string | null }[]) {
   if (!items.length) {
     return '暂无商品明细';
   }
@@ -122,6 +129,9 @@ export function buildQuantityComposition(items: { qty?: number | null; uom?: str
   }
 
   return Array.from(totals.entries())
-    .map(([uom, qty]) => `${qty} ${formatDisplayUom(uom)}`)
+    .map(([uom, qty]) => {
+      const display = items.find((item) => normalizeUom(item.uom) === uom)?.uomDisplay ?? null;
+      return `${qty} ${resolveDisplayUom(uom, display)}`;
+    })
     .join(' + ');
 }

@@ -12,7 +12,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { isValidIsoDate } from '@/lib/date-value';
 import { formatCurrencyValue } from '@/lib/display-currency';
-import { formatDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { getPaymentResultHandoff, type PaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { buildModeDefaults, normalizeSalesMode, type SalesMode } from '@/lib/sales-mode';
 import { type UomConversion } from '@/lib/uom-conversion';
@@ -55,14 +55,20 @@ type EditableOrderItem = {
   amount: number | null;
   warehouse: string;
   uom: string;
+  uomDisplay?: string | null;
   salesMode: SalesMode;
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
   uomConversions?: UomConversion[];
   warehouseStockQty?: number | null;
   warehouseStockUom?: string | null;
+  warehouseStockUomDisplay?: string | null;
   wholesaleDefaultUom?: string | null;
+  wholesaleDefaultUomDisplay?: string | null;
   retailDefaultUom?: string | null;
+  retailDefaultUomDisplay?: string | null;
   allUoms?: string[];
+  allUomDisplays?: Record<string, string>;
   salesProfiles?: { modeCode: SalesMode; priceList?: string | null; defaultUom?: string | null }[];
   priceSummary?: {
     currentPriceList?: string | null;
@@ -126,9 +132,10 @@ function formatModeReference(
   label: string,
   rate: number | null | undefined,
   uom: string | null | undefined,
+  uomDisplay: string | null | undefined,
   currency: string,
 ) {
-  return `${label} ${formatCurrencyValue(rate ?? null, currency)} / ${uom ? formatDisplayUom(uom) : '未设置单位'}`;
+  return `${label} ${formatCurrencyValue(rate ?? null, currency)} / ${uom ? resolveDisplayUom(uom, uomDisplay) : '未设置单位'}`;
 }
 
 function buildOrderQuantitySummary(items: { qty?: number | null; uom?: string | null }[]) {
@@ -294,13 +301,19 @@ function mapDraftItemToEditable(item: SalesOrderDraftItem): EditableOrderItem {
     amount: (item.price ?? 0) * item.qty,
     warehouse: item.warehouse ?? '',
     uom: item.uom ?? '',
+    uomDisplay: item.uomDisplay ?? null,
     salesMode: normalizeSalesMode(item.salesMode),
     stockUom: item.stockUom ?? null,
+    stockUomDisplay: item.stockUomDisplay ?? null,
     uomConversions: item.uomConversions ?? [],
     warehouseStockQty: item.warehouseStockQty ?? null,
     warehouseStockUom: item.warehouseStockUom ?? item.stockUom ?? null,
+    warehouseStockUomDisplay: item.warehouseStockUomDisplay ?? item.stockUomDisplay ?? null,
     wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
+    wholesaleDefaultUomDisplay: item.wholesaleDefaultUomDisplay ?? null,
     retailDefaultUom: item.retailDefaultUom ?? null,
+    retailDefaultUomDisplay: item.retailDefaultUomDisplay ?? null,
+    allUomDisplays: item.allUomDisplays ?? {},
     salesProfiles: item.salesProfiles ?? [],
     priceSummary: item.priceSummary ?? null,
     imageUrl: item.imageUrl ?? '',
@@ -475,11 +488,16 @@ export default function SalesOrderDetailScreen() {
             amount: item.amount,
             warehouse: item.warehouse,
             uom: item.uom,
+            uomDisplay: item.uomDisplay ?? null,
             salesMode: normalizeSalesMode(item.salesMode),
             stockUom: item.stockUom ?? null,
+            stockUomDisplay: item.stockUomDisplay ?? null,
             uomConversions: [],
             wholesaleDefaultUom: item.wholesaleDefaultUom ?? null,
+            wholesaleDefaultUomDisplay: item.wholesaleDefaultUomDisplay ?? null,
             retailDefaultUom: item.retailDefaultUom ?? null,
+            retailDefaultUomDisplay: item.retailDefaultUomDisplay ?? null,
+            allUomDisplays: item.allUomDisplays ?? {},
             salesProfiles: item.salesProfiles ?? [],
             priceSummary: item.priceSummary ?? null,
             imageUrl: item.imageUrl,
@@ -606,12 +624,16 @@ export default function SalesOrderDetailScreen() {
             {
               allUoms: Array.from(new Set(allUoms.filter(Boolean))),
               stockUom: productDetail?.stockUom ?? null,
+              stockUomDisplay: productDetail?.stockUomDisplay ?? null,
               uomConversions: productDetail?.uomConversions ?? [],
               warehouseStockDetails: productDetail?.warehouseStockDetails ?? [],
               nickname: productDetail?.nickname ?? null,
               specification: productDetail?.specification ?? null,
               wholesaleDefaultUom: productDetail?.wholesaleDefaultUom ?? null,
+              wholesaleDefaultUomDisplay: productDetail?.wholesaleDefaultUomDisplay ?? null,
               retailDefaultUom: productDetail?.retailDefaultUom ?? null,
+              retailDefaultUomDisplay: productDetail?.retailDefaultUomDisplay ?? null,
+              allUomDisplays: productDetail?.allUomDisplays ?? {},
               salesProfiles: productDetail?.salesProfiles ?? [],
               priceSummary: productDetail?.priceSummary ?? null,
             },
@@ -659,16 +681,28 @@ export default function SalesOrderDetailScreen() {
           return {
             ...item,
             allUoms: item.allUoms?.length ? item.allUoms : config.allUoms,
+            allUomDisplays: item.allUomDisplays ?? config.allUomDisplays ?? {},
             stockUom: item.stockUom ?? config.stockUom ?? null,
+            stockUomDisplay: item.stockUomDisplay ?? config.stockUomDisplay ?? null,
             uomConversions: item.uomConversions?.length ? item.uomConversions : config.uomConversions ?? [],
             warehouseStockQty: matchedWarehouseStock?.qty ?? item.warehouseStockQty ?? null,
             warehouseStockUom: item.warehouseStockUom ?? config.stockUom ?? null,
+            warehouseStockUomDisplay: item.warehouseStockUomDisplay ?? config.stockUomDisplay ?? null,
             nickname: item.nickname ?? config.nickname ?? null,
             specification: item.specification ?? config.specification ?? null,
             wholesaleDefaultUom: item.wholesaleDefaultUom ?? config.wholesaleDefaultUom ?? null,
+            wholesaleDefaultUomDisplay:
+              item.wholesaleDefaultUomDisplay ?? config.wholesaleDefaultUomDisplay ?? null,
             retailDefaultUom: item.retailDefaultUom ?? config.retailDefaultUom ?? null,
+            retailDefaultUomDisplay:
+              item.retailDefaultUomDisplay ?? config.retailDefaultUomDisplay ?? null,
             salesProfiles: item.salesProfiles?.length ? item.salesProfiles : config.salesProfiles ?? [],
             priceSummary: item.priceSummary ?? config.priceSummary ?? null,
+            uomDisplay:
+              item.allUomDisplays?.[item.uom] ??
+              config.allUomDisplays?.[item.uom] ??
+              item.uomDisplay ??
+              null,
           };
         }),
       );
@@ -2021,6 +2055,8 @@ export default function SalesOrderDetailScreen() {
                       const warehouseStockDisplay = buildWarehouseStockDisplay({
                         warehouseStockQty: editableItem.warehouseStockQty,
                         warehouseStockUom: editableItem.warehouseStockUom ?? editableItem.stockUom,
+                        warehouseStockUomDisplay:
+                          editableItem.warehouseStockUomDisplay ?? editableItem.stockUomDisplay,
                         qty: editableItem.qty,
                         uom: editableItem.uom,
                         stockUom: editableItem.stockUom,
@@ -2032,16 +2068,19 @@ export default function SalesOrderDetailScreen() {
                         warehouse: editableItem.warehouse,
                         salesMode: editableItem.salesMode,
                         uom: editableItem.uom,
+                        uomDisplay: editableItem.uomDisplay,
                         wholesaleReferenceLabel: formatModeReference(
                           '批发',
                           effectivePriceSummary?.wholesaleRate ?? null,
                           effectiveWholesaleDefaultUom,
+                          editableItem.wholesaleDefaultUomDisplay ?? null,
                           detail?.currency || 'CNY',
                         ),
                         retailReferenceLabel: formatModeReference(
                           '零售',
                           effectivePriceSummary?.retailRate ?? null,
                           effectiveRetailDefaultUom,
+                          editableItem.retailDefaultUomDisplay ?? null,
                           detail?.currency || 'CNY',
                         ),
                         warehouseStockLabel: warehouseStockDisplay?.label ?? null,
@@ -2049,11 +2088,13 @@ export default function SalesOrderDetailScreen() {
                         conversionSummary: buildLineUnitSummary({
                           salesMode: editableItem.salesMode,
                           uom: editableItem.uom,
+                          uomDisplay: editableItem.uomDisplay,
                           stockUom: editableItem.stockUom,
+                          stockUomDisplay: editableItem.stockUomDisplay,
                         }),
                         stockReferenceSummary:
                           editableItem.stockUom
-                            ? `库存结算单位：${formatDisplayUom(editableItem.stockUom)}`
+                            ? `库存结算单位：${resolveDisplayUom(editableItem.stockUom, editableItem.stockUomDisplay)}`
                             : null,
                         lineAmountLabel: formatCurrencyValue(
                           ((editableItem.rate ?? 0) * editableItem.qty),
@@ -2082,13 +2123,16 @@ export default function SalesOrderDetailScreen() {
                       warehouse: item.warehouse || '未指定仓库',
                       salesMode: normalizeSalesMode(item.salesMode),
                       uom: item.uom,
+                      uomDisplay: item.uomDisplay ?? null,
                       wholesaleReferenceLabel: '',
                       retailReferenceLabel: '',
                       warehouseStockLabel: null,
                       conversionSummary: buildLineUnitSummary({
                         salesMode: normalizeSalesMode(item.salesMode),
                         uom: item.uom,
+                        uomDisplay: item.uomDisplay ?? null,
                         stockUom: item.stockUom ?? null,
+                        stockUomDisplay: item.stockUomDisplay ?? null,
                       }),
                       stockReferenceSummary: null,
                       lineAmountLabel: formatCurrencyValue(item.amount, detail?.currency || 'CNY'),

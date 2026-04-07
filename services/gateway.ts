@@ -12,12 +12,17 @@ export type ProductSearchItem = {
   globalTotalQty?: number | null;
   price: number | null;
   uom: string | null;
+  uomDisplay?: string | null;
   stockUom?: string | null;
+  stockUomDisplay?: string | null;
   warehouseStockUom?: string | null;
   allUoms?: string[];
+  allUomDisplays?: Record<string, string>;
   uomConversions?: UomConversion[];
   wholesaleDefaultUom?: string | null;
+  wholesaleDefaultUomDisplay?: string | null;
   retailDefaultUom?: string | null;
+  retailDefaultUomDisplay?: string | null;
   salesProfiles?: SalesProfile[];
   priceSummary?: PriceSummary | null;
   warehouse: string | null;
@@ -162,6 +167,25 @@ function mapUomNames(value: unknown) {
     .filter(Boolean);
 }
 
+function mapUomDisplays(value: unknown) {
+  if (!Array.isArray(value)) {
+    return {} as Record<string, string>;
+  }
+
+  return value.reduce<Record<string, string>>((acc, entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return acc;
+    }
+    const row = entry as Record<string, unknown>;
+    const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
+    const display = typeof row.uom_display === 'string' ? row.uom_display.trim() : '';
+    if (uom && display) {
+      acc[uom] = display;
+    }
+    return acc;
+  }, {});
+}
+
 function mapUomConversions(value: unknown): UomConversion[] {
   if (!Array.isArray(value)) {
     return [];
@@ -221,6 +245,8 @@ function mapSalesProfiles(value: unknown): SalesProfile[] {
         modeCode,
         priceList: typeof row.price_list === 'string' ? row.price_list : null,
         defaultUom: typeof row.default_uom === 'string' ? row.default_uom : null,
+        defaultUomDisplay:
+          typeof row.default_uom_display === 'string' ? row.default_uom_display : null,
       } satisfies SalesProfile;
     })
     .filter((entry): entry is SalesProfile => Boolean(entry));
@@ -237,6 +263,7 @@ export async function searchProducts(
     company?: string;
     limit?: number;
     inStockOnly?: boolean;
+    disabled?: number | null;
   },
 ) {
   const data = await postGateway<any>('myapp.api.gateway.search_product_v2', {
@@ -244,6 +271,7 @@ export async function searchProducts(
     warehouse: options?.warehouse,
     company: options?.company,
     limit: options?.limit ?? 20,
+    disabled: options?.disabled ?? 0,
     in_stock_only: options?.inStockOnly ? 1 : 0,
     search_fields: ['item_code', 'item_name', 'barcode', 'nickname', 'description', 'specification'],
     sort_by: 'relevance',
@@ -269,13 +297,20 @@ export async function searchProducts(
       globalTotalQty: toOptionalNumber(row.global_total_qty) ?? null,
       price: toOptionalNumber(row.price) ?? toOptionalNumber(row.rate) ?? null,
       uom: typeof row.uom === 'string' ? row.uom : null,
+      uomDisplay: typeof row.uom_display === 'string' ? row.uom_display : null,
       stockUom: typeof row.stock_uom === 'string' ? row.stock_uom : null,
+      stockUomDisplay: typeof row.stock_uom_display === 'string' ? row.stock_uom_display : null,
       allUoms: mapUomNames(row.all_uoms),
+      allUomDisplays: mapUomDisplays(row.all_uoms),
       uomConversions: mapUomConversions(row.all_uoms),
       wholesaleDefaultUom:
         typeof row.wholesale_default_uom === 'string' ? row.wholesale_default_uom : null,
+      wholesaleDefaultUomDisplay:
+        typeof row.wholesale_default_uom_display === 'string' ? row.wholesale_default_uom_display : null,
       retailDefaultUom:
         typeof row.retail_default_uom === 'string' ? row.retail_default_uom : null,
+      retailDefaultUomDisplay:
+        typeof row.retail_default_uom_display === 'string' ? row.retail_default_uom_display : null,
       salesProfiles: mapSalesProfiles(row.sales_profiles),
       priceSummary: mapPriceSummary(row.price_summary),
       warehouse:
