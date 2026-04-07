@@ -395,10 +395,12 @@ export default function UomDetailScreen() {
             <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
               单位资料
             </ThemedText>
-            <ThemedText style={styles.sectionHint}>维护显示符号和业务说明，帮助前台页面展示更统一。</ThemedText>
+            <ThemedText style={styles.sectionHint}>维护显示符号和业务说明。单位名称和系统编码当前作为系统识别字段，不在这里直接改名。</ThemedText>
           </View>
           {isEditing ? (
             <>
+              <ProductTextField editable={false} label="单位名称" value={detail?.uomName || detail?.name || ''} />
+              <ProductTextField editable={false} label="系统编码" value={detail?.name || ''} />
               <ProductTextField label="单位符号" onChangeText={setSymbol} placeholder="例如 ct、pcs，可留空" value={symbol} />
               <ProductTextField
                 label="单位说明"
@@ -410,6 +412,18 @@ export default function UomDetailScreen() {
             </>
           ) : (
             <View style={styles.readOnlyList}>
+              <View style={styles.readOnlyRow}>
+                <ThemedText style={styles.readOnlyLabel}>单位名称</ThemedText>
+                <ThemedText style={styles.readOnlyValue} type="defaultSemiBold">
+                  {detail?.uomName || detail?.name || '未设置'}
+                </ThemedText>
+              </View>
+              <View style={styles.readOnlyRow}>
+                <ThemedText style={styles.readOnlyLabel}>系统编码</ThemedText>
+                <ThemedText style={styles.readOnlyValue} type="defaultSemiBold">
+                  {detail?.name || '未设置'}
+                </ThemedText>
+              </View>
               <View style={styles.readOnlyRow}>
                 <ThemedText style={styles.readOnlyLabel}>单位符号</ThemedText>
                 <ThemedText style={styles.readOnlyValue} type="defaultSemiBold">
