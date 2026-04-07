@@ -35,6 +35,8 @@ export type PrintFileData = {
   isPrivate: boolean;
   status: string;
   fileSize: number;
+  archived: boolean;
+  storageMode: 'stream' | 'archive';
 };
 
 function mapTemplateOption(value: unknown): PrintTemplateOption | null {
@@ -99,12 +101,14 @@ export async function fetchPrintFile(params: {
   docname: string;
   template?: string | null;
   filename?: string | null;
+  archive?: boolean;
 }): Promise<PrintFileData> {
   const data = await callGatewayMethod<Record<string, unknown>>('myapp.api.gateway.get_print_file_v1', {
     doctype: params.doctype,
     docname: params.docname,
     template: params.template ?? undefined,
     filename: params.filename ?? undefined,
+    archive: params.archive ? 1 : 0,
   });
 
   const template = mapTemplateOption(data.template) ?? {
@@ -128,6 +132,8 @@ export async function fetchPrintFile(params: {
     isPrivate: Boolean(data.is_private),
     status: typeof data.status === 'string' ? data.status : 'unknown',
     fileSize: typeof data.file_size === 'number' ? data.file_size : 0,
+    archived: Boolean(data.archived),
+    storageMode: data.storage_mode === 'archive' ? 'archive' : 'stream',
   };
 }
 

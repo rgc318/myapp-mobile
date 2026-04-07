@@ -6863,3 +6863,33 @@ This follow-up closed the last awkward gap in the mobile barcode-create flow: re
   - create product with initial warehouse/inventory
   - open product detail
   - return directly to the original order item-search page
+
+## Print File Policy (2026-04-07)
+
+The print/PDF flow now distinguishes routine download from explicit archival so the backend does not quietly accumulate permanent PDF attachments.
+
+### Current Rule
+
+- `get_print_file_v1` is now metadata-first:
+  - it returns filename, template, mime type, and file size
+  - default `storageMode` is `stream`
+  - default mode does not save a backend `File`
+- routine viewer/share/download flows should continue using:
+  - `get_print_file_v1` for metadata
+  - `download_print_file_v1` for the actual PDF bytes
+- only explicit archival scenarios should send `archive=1`
+- archived PDF files are stored as private Frappe `File` records under:
+  - `Home/Attachments/MyApp Print Files/Archive`
+- the backend now auto-creates that archive folder on first use
+
+### Why
+
+- mobile print preview and share are frequent actions
+- saving every generated PDF would make the server-side `File` table and private-files directory grow continuously
+- separating stream mode from archive mode keeps preview fast while reserving persistent storage for true traceability cases
+
+### Validation
+
+- real-site verification has confirmed:
+  - default print metadata fetch does not create a backend `File`
+  - explicit `archive=1` creates a private archived `File` attached to the target document
