@@ -23,6 +23,25 @@ function buildUsageSummary(detail: UomDetail | null) {
   return topRefs ? `已发现 ${total} 条引用，主要分布在 ${topRefs}。` : `已发现 ${total} 条业务引用。`;
 }
 
+function HeroStat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <View style={[styles.heroStatCard, { borderColor: `${accent}33`, backgroundColor: `${accent}12` }]}>
+      <ThemedText style={styles.heroStatLabel}>{label}</ThemedText>
+      <ThemedText style={[styles.heroStatValue, { color: accent }]} type="defaultSemiBold">
+        {value}
+      </ThemedText>
+    </View>
+  );
+}
+
 export default function UomDetailScreen() {
   const router = useRouter();
   const { uomName } = useLocalSearchParams<{ uomName: string }>();
@@ -79,6 +98,10 @@ export default function UomDetailScreen() {
 
   const usageSummaryText = useMemo(() => buildUsageSummary(detail), [detail]);
   const hasReferences = (detail?.usageSummary?.totalReferences ?? 0) > 0;
+  const displayName = detail?.displayName || detail?.uomName || uomName || '单位';
+  const currentEnabled = isEditing ? enabled : Boolean(detail?.enabled);
+  const currentWholeNumber = isEditing ? mustBeWholeNumber : Boolean(detail?.mustBeWholeNumber);
+  const topReferences = (detail?.usageSummary?.doctypes ?? []).slice(0, 4);
 
   const handleSave = async () => {
     if (!detail) {
@@ -183,60 +206,113 @@ export default function UomDetailScreen() {
         refreshControl={<RefreshControl onRefresh={() => void loadDetail(true)} refreshing={isRefreshing} />}
         showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.heroGlowBlue} />
+          <View style={styles.heroGlowAmber} />
           <View style={styles.heroTopRow}>
             <View style={styles.heroMainCopy}>
+              <ThemedText style={styles.heroEyebrow}>UNIT PROFILE</ThemedText>
               <ThemedText style={styles.heroTitle} type="defaultSemiBold">
-                {detail?.displayName || detail?.uomName || uomName || '单位'}
+                {displayName}
               </ThemedText>
               <ThemedText style={styles.heroMeta}>编码 {detail?.name || uomName || '—'}</ThemedText>
+              <ThemedText style={styles.heroDescription}>
+                在这里统一维护单位的显示语义、整数录入规则和启停状态，避免商品与单据继续出现口径分裂。
+              </ThemedText>
             </View>
             <View style={styles.heroStatusWrap}>
               <View
                 style={[
                   styles.statusChip,
-                  { backgroundColor: detail?.enabled ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)' },
+                  styles.primaryStatusChip,
+                  { backgroundColor: currentEnabled ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)' },
                 ]}>
                 <ThemedText
-                  style={[styles.statusChipText, { color: detail?.enabled ? success : danger }]}
+                  style={[styles.statusChipText, { color: currentEnabled ? success : danger }]}
                   type="defaultSemiBold">
-                  {detail?.enabled ? '启用中' : '已停用'}
+                  {currentEnabled ? '启用中' : '已停用'}
                 </ThemedText>
               </View>
               <View
                 style={[
                   styles.statusChip,
-                  { backgroundColor: detail?.mustBeWholeNumber ? 'rgba(245,158,11,0.12)' : 'rgba(59,130,246,0.12)' },
+                  styles.secondaryStatusChip,
+                  {
+                    backgroundColor: currentWholeNumber ? 'rgba(245,158,11,0.12)' : 'rgba(59,130,246,0.12)',
+                  },
                 ]}>
                 <ThemedText
-                  style={[styles.statusChipText, { color: detail?.mustBeWholeNumber ? warning : tintColor }]}
+                  style={[styles.statusChipText, { color: currentWholeNumber ? warning : tintColor }]}
                   type="defaultSemiBold">
-                  {detail?.mustBeWholeNumber ? '必须整数' : '允许小数'}
+                  {currentWholeNumber ? '必须整数' : '允许小数'}
                 </ThemedText>
               </View>
             </View>
           </View>
 
           <View style={styles.heroMetricsRow}>
-            <View style={[styles.metricCard, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.metricLabel}>单位符号</ThemedText>
-              <ThemedText style={styles.metricValue} type="defaultSemiBold">
+            <HeroStat accent="#2563EB" label="单位符号" value={detail?.symbol || '未设置'} />
+            <HeroStat accent="#059669" label="引用总数" value={`${detail?.usageSummary?.totalReferences ?? 0}`} />
+            <HeroStat accent="#D97706" label="录入规则" value={currentWholeNumber ? '整数' : '小数'} />
+          </View>
+        </View>
+
+        <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.sectionHeaderCopy}>
+            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+              基本信息
+            </ThemedText>
+            <ThemedText style={styles.sectionHint}>保持显示名称、系统编码和单位符号的区分，前台统一展示中文语义，系统内部继续使用稳定编码。</ThemedText>
+          </View>
+          <View style={styles.summaryGrid}>
+            <View style={[styles.summaryCard, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.summaryLabel}>显示名称</ThemedText>
+              <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+                {displayName}
+              </ThemedText>
+            </View>
+            <View style={[styles.summaryCard, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.summaryLabel}>单位符号</ThemedText>
+              <ThemedText style={styles.summaryValue} type="defaultSemiBold">
                 {detail?.symbol || '未设置'}
               </ThemedText>
             </View>
-            <View style={[styles.metricCard, { backgroundColor: surfaceMuted }]}>
-              <ThemedText style={styles.metricLabel}>引用总数</ThemedText>
-              <ThemedText style={styles.metricValue} type="defaultSemiBold">
-                {detail?.usageSummary?.totalReferences ?? 0}
+            <View style={[styles.summaryCard, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.summaryLabel}>系统编码</ThemedText>
+              <ThemedText numberOfLines={2} style={styles.summaryValue} type="defaultSemiBold">
+                {detail?.name || '未设置'}
+              </ThemedText>
+            </View>
+            <View style={[styles.summaryCard, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={styles.summaryLabel}>当前状态</ThemedText>
+              <ThemedText style={styles.summaryValue} type="defaultSemiBold">
+                {currentEnabled ? '启用中' : '已停用'}
               </ThemedText>
             </View>
           </View>
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            单位规则
-          </ThemedText>
-          <ThemedText style={styles.sectionHint}>{usageSummaryText}</ThemedText>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderCopy}>
+              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                单位规则
+              </ThemedText>
+              <ThemedText style={styles.sectionHint}>{usageSummaryText}</ThemedText>
+            </View>
+            {hasReferences ? (
+              <View style={[styles.referenceBadge, { backgroundColor: 'rgba(245,158,11,0.14)' }]}>
+                <ThemedText style={[styles.referenceBadgeText, { color: warning }]} type="defaultSemiBold">
+                  已有引用
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={[styles.referenceBadge, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+                <ThemedText style={[styles.referenceBadgeText, { color: success }]} type="defaultSemiBold">
+                  可自由调整
+                </ThemedText>
+              </View>
+            )}
+          </View>
           <View style={[styles.ruleRow, { backgroundColor: surfaceMuted }]}>
             <View style={styles.ruleCopy}>
               <ThemedText style={styles.ruleLabel} type="defaultSemiBold">
@@ -271,9 +347,56 @@ export default function UomDetailScreen() {
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            单位资料
-          </ThemedText>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderCopy}>
+              <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+                引用概览
+              </ThemedText>
+              <ThemedText style={styles.sectionHint}>修改前先看一下这个单位已经在哪些业务对象里被使用，避免误伤旧数据。</ThemedText>
+            </View>
+            <View
+              style={[
+                styles.referenceBadge,
+                { backgroundColor: hasReferences ? 'rgba(245,158,11,0.14)' : 'rgba(16,185,129,0.12)' },
+              ]}>
+              <ThemedText
+                style={[styles.referenceBadgeText, { color: hasReferences ? warning : success }]}
+                type="defaultSemiBold">
+                {hasReferences ? `${detail?.usageSummary?.totalReferences ?? 0} 条引用` : '暂无引用'}
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={[styles.referenceSummaryCard, { backgroundColor: surfaceMuted }]}>
+            <ThemedText style={styles.referenceSummaryText}>{usageSummaryText}</ThemedText>
+          </View>
+
+          {topReferences.length ? (
+            <View style={styles.referenceList}>
+              {topReferences.map((row) => (
+                <View key={`${row.doctype}-${row.fieldname}`} style={[styles.referenceRow, { backgroundColor: surfaceMuted }]}>
+                  <View style={styles.referenceCopy}>
+                    <ThemedText style={styles.referenceName} type="defaultSemiBold">
+                      {row.doctype}
+                    </ThemedText>
+                    <ThemedText style={styles.referenceField}>{row.fieldname}</ThemedText>
+                  </View>
+                  <ThemedText style={styles.referenceCount} type="defaultSemiBold">
+                    {row.count}
+                  </ThemedText>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+
+        <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.sectionHeaderCopy}>
+            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+              单位资料
+            </ThemedText>
+            <ThemedText style={styles.sectionHint}>维护显示符号和业务说明，帮助前台页面展示更统一。</ThemedText>
+          </View>
           {isEditing ? (
             <>
               <ProductTextField label="单位符号" onChangeText={setSymbol} placeholder="例如 ct、pcs，可留空" value={symbol} />
@@ -304,10 +427,12 @@ export default function UomDetailScreen() {
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: surface, borderColor }]}>
-          <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
-            风险操作
-          </ThemedText>
-          <ThemedText style={styles.sectionHint}>已被引用的单位不允许直接删除，建议先停用并逐步迁移引用。</ThemedText>
+          <View style={styles.sectionHeaderCopy}>
+            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+              风险操作
+            </ThemedText>
+            <ThemedText style={styles.sectionHint}>已被引用的单位不允许直接删除，建议先停用并逐步迁移引用。</ThemedText>
+          </View>
           <View style={styles.dangerActions}>
             <Pressable
               onPress={() => void handleToggleEnabled()}
@@ -335,17 +460,38 @@ export default function UomDetailScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: 14,
-    paddingBottom: 20,
+    gap: 16,
+    paddingBottom: 24,
   },
   heroCard: {
-    borderRadius: 24,
+    borderRadius: 28,
     borderWidth: 1,
-    gap: 14,
+    gap: 16,
+    overflow: 'hidden',
     padding: 18,
+    position: 'relative',
+  },
+  heroGlowBlue: {
+    backgroundColor: 'rgba(59,130,246,0.16)',
+    borderRadius: 999,
+    height: 164,
+    position: 'absolute',
+    right: -36,
+    top: -56,
+    width: 164,
+  },
+  heroGlowAmber: {
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderRadius: 999,
+    bottom: -74,
+    height: 148,
+    left: -52,
+    position: 'absolute',
+    width: 148,
   },
   heroTopRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     justifyContent: 'space-between',
   },
@@ -353,63 +499,168 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
+  heroEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    letterSpacing: 1,
+  },
   heroTitle: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 28,
+    lineHeight: 34,
   },
   heroMeta: {
     color: '#64748B',
     fontSize: 14,
   },
+  heroDescription: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 21,
+    maxWidth: '92%',
+  },
   heroStatusWrap: {
     alignItems: 'flex-end',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
+    justifyContent: 'flex-end',
   },
   statusChip: {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
+  primaryStatusChip: {
+    minWidth: 70,
+  },
+  secondaryStatusChip: {
+    opacity: 0.94,
+  },
   statusChipText: {
     fontSize: 13,
   },
   heroMetricsRow: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 10,
   },
-  metricCard: {
+  heroStatCard: {
     borderRadius: 18,
+    borderWidth: 1,
     flex: 1,
     gap: 6,
-    paddingHorizontal: 16,
+    minHeight: 88,
+    minWidth: '30%',
+    paddingHorizontal: 14,
     paddingVertical: 14,
   },
-  metricLabel: {
+  heroStatLabel: {
     color: '#64748B',
-    fontSize: 13,
+    fontSize: 12,
   },
-  metricValue: {
+  heroStatValue: {
     fontSize: 24,
     lineHeight: 30,
   },
   sectionCard: {
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1,
-    gap: 12,
+    gap: 14,
     padding: 18,
   },
-  sectionTitle: {
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  summaryCard: {
+    borderRadius: 18,
+    gap: 6,
+    minHeight: 88,
+    minWidth: '47%',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  summaryLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  summaryValue: {
     fontSize: 18,
+    lineHeight: 24,
+  },
+  sectionHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  sectionHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
   },
   sectionHint: {
     color: '#64748B',
     fontSize: 13,
     lineHeight: 18,
   },
+  referenceBadge: {
+    borderRadius: 999,
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  referenceBadgeText: {
+    fontSize: 12,
+  },
+  referenceSummaryCard: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  referenceSummaryText: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  referenceList: {
+    gap: 10,
+  },
+  referenceRow: {
+    alignItems: 'center',
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  referenceCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  referenceName: {
+    fontSize: 15,
+  },
+  referenceField: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  referenceCount: {
+    color: '#0F172A',
+    fontSize: 18,
+    minWidth: 32,
+    textAlign: 'right',
+  },
   ruleRow: {
     alignItems: 'center',
     borderRadius: 18,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -434,7 +685,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   readOnlyRow: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
     gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   readOnlyLabel: {
     color: '#64748B',
@@ -462,6 +717,7 @@ const styles = StyleSheet.create({
   },
   footerBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   footerSecondary: {

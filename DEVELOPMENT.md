@@ -258,6 +258,60 @@ This round aligned the mobile product module with the new backend `custom_specif
 
 ### Validation Outcome
 
+## UOM Module UI Alignment (2026-04-07)
+
+This round focused on bringing the mobile UOM module closer to the current product-management design language, while keeping unit-management interactions lightweight enough for list browsing on small screens.
+
+### Completed
+
+- UOM list page was rebuilt into a real workbench-style page
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/uoms.tsx`
+  - current page now includes:
+    - top hero summary
+    - search and filter panel
+    - compact card-based UOM directory
+    - explicit empty state and create action
+
+- UOM detail page was visually aligned with the new list page
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/uom/[uomName].tsx`
+  - current page now includes:
+    - hero overview
+    - basic-information summary
+    - usage overview
+    - rule maintenance
+    - risk actions
+
+- UOM list-item layout was simplified after several rounds of mobile tuning
+  - design decision:
+    - keep status chips fixed in the card top-right area
+    - keep title and code on the left
+    - use a lighter inline summary row instead of repeating colored badge groups
+    - keep the lower information panel for secondary fields only
+
+### Problems Encountered
+
+- using `Link` around complex block cards caused unstable layout behavior on native/web
+  - the list page now uses `Pressable + router.push` instead
+
+- the first redesign iteration treated each UOM list item like a mini detail page
+  - this made cards too tall and visually noisy
+  - the final direction is closer to product-list cards:
+    - one clear title area
+    - one compact status area
+    - one secondary information panel
+
+### Current UI Rule
+
+- UOM list page should behave like a directory, not like stacked detail pages
+- primary scan order should be:
+  - display name
+  - enable/disable state
+  - integer-rule state
+  - system code
+- detailed symbol/description editing still belongs to the detail page
+
 ## Item Image Upload Boundary (2026-04-06)
 
 This round established the first migration-friendly image-upload boundary without committing the app to a permanent storage vendor too early.
