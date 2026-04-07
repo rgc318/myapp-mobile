@@ -2400,7 +2400,13 @@ This project can be packaged fully inside WSL. The recommended sequence is:
    - `./gradlew assembleDebug`
 
 6. expected APK output
-   - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/build/outputs/apk/debug/app-debug.apk`
+   - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/build/outputs/apk/debug/`
+   - current project no longer uses the default `app-debug.apk` name
+   - APK filename is now generated automatically as:
+     - `myapp-mobile-<buildType>-v<versionName>-<timestamp>.apk`
+   - example:
+     - `myapp-mobile-debug-v1.0.0-20260407-164512.apk`
+   - this avoids manual renaming when multiple debug builds are exported
 
 ### Example environment variables for WSL
 
