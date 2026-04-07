@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -53,59 +54,71 @@ function ProductCard({ item, onOpen }: { item: ProductListItem; onOpen: (code: s
 
   return (
     <Pressable onPress={() => onOpen(item.itemCode)} style={[styles.card, { backgroundColor: surface, borderColor }]}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardTitleWrap}>
-          <ThemedText numberOfLines={2} style={styles.cardTitle} type="defaultSemiBold">
-            {primaryTitle}
-          </ThemedText>
-          {nicknameText || specificationText ? (
-            <ThemedText numberOfLines={1} style={styles.cardSubtitle}>
-              {nicknameText ? (
-                <ThemedText style={styles.cardNicknameText} type="default">
-                  昵称 {nicknameText}
-                </ThemedText>
-              ) : null}
-              {nicknameText && specificationText ? (
-                <ThemedText style={styles.cardSubtitleDivider} type="default">
-                  {' · '}
-                </ThemedText>
-              ) : null}
-              {specificationText ? (
-                <ThemedText style={styles.cardSpecificationText} type="defaultSemiBold">
-                  规格 {specificationText}
-                </ThemedText>
-              ) : null}
-            </ThemedText>
-          ) : null}
-          <ThemedText numberOfLines={1} style={styles.cardMeta}>
-            商品编码: {shortCode}
-          </ThemedText>
+      <View style={styles.cardHeroRow}>
+        <View style={[styles.cardThumbWrap, { backgroundColor: surfaceMuted, borderColor }]}>
+          {item.imageUrl ? (
+            <Image contentFit="cover" source={item.imageUrl} style={styles.cardThumbImage} />
+          ) : (
+            <IconSymbol color={tintColor} name="photo" size={22} />
+          )}
         </View>
-        <View
-          style={[
-            styles.statusChip,
-            { backgroundColor: item.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)' },
-          ]}>
-          <ThemedText
-            style={[styles.statusChipText, { color: item.disabled ? danger : success }]}
-            type="defaultSemiBold">
-            {item.disabled ? '已停用' : '启用中'}
-          </ThemedText>
-        </View>
-      </View>
 
-      <View style={styles.tagRow}>
-        <ThemedText style={styles.tagLabel}>分类</ThemedText>
-        <View style={[styles.tag, { backgroundColor: surfaceMuted }]}>
-          <ThemedText style={[styles.tagText, { color: tintColor }]} type="defaultSemiBold">
-            {item.itemGroup || '未分组'}
-          </ThemedText>
-        </View>
-        <ThemedText style={styles.tagLabel}>单位</ThemedText>
-        <View style={[styles.tag, { backgroundColor: 'rgba(251,146,60,0.14)' }]}>
-          <ThemedText style={[styles.tagText, { color: '#C2410C' }]} type="defaultSemiBold">
-            {stockUnit}
-          </ThemedText>
+        <View style={styles.cardHeroMain}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleWrap}>
+              <ThemedText numberOfLines={2} style={styles.cardTitle} type="defaultSemiBold">
+                {primaryTitle}
+              </ThemedText>
+              {nicknameText || specificationText ? (
+                <ThemedText numberOfLines={1} style={styles.cardSubtitle}>
+                  {nicknameText ? (
+                    <ThemedText style={styles.cardNicknameText} type="default">
+                      昵称 {nicknameText}
+                    </ThemedText>
+                  ) : null}
+                  {nicknameText && specificationText ? (
+                    <ThemedText style={styles.cardSubtitleDivider} type="default">
+                      {' · '}
+                    </ThemedText>
+                  ) : null}
+                  {specificationText ? (
+                    <ThemedText style={styles.cardSpecificationText} type="defaultSemiBold">
+                      规格 {specificationText}
+                    </ThemedText>
+                  ) : null}
+                </ThemedText>
+              ) : null}
+              <ThemedText numberOfLines={1} style={styles.cardMeta}>
+                商品编码: {shortCode}
+              </ThemedText>
+            </View>
+            <View
+              style={[
+                styles.statusChip,
+                { backgroundColor: item.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)' },
+              ]}>
+              <ThemedText
+                style={[styles.statusChipText, { color: item.disabled ? danger : success }]}
+                type="defaultSemiBold">
+                {item.disabled ? '已停用' : '启用中'}
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.tagRow}>
+            <ThemedText style={styles.tagLabel}>分类</ThemedText>
+            <View style={[styles.tag, { backgroundColor: surfaceMuted }]}>
+              <ThemedText style={[styles.tagText, { color: tintColor }]} type="defaultSemiBold">
+                {item.itemGroup || '未分组'}
+              </ThemedText>
+            </View>
+            <ThemedText style={styles.tagLabel}>单位</ThemedText>
+            <View style={[styles.tag, { backgroundColor: 'rgba(251,146,60,0.14)' }]}>
+              <ThemedText style={[styles.tagText, { color: '#C2410C' }]} type="defaultSemiBold">
+                {stockUnit}
+              </ThemedText>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -672,6 +685,28 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
   },
+  cardHeroRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cardThumbWrap: {
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 92,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 92,
+  },
+  cardThumbImage: {
+    height: '100%',
+    width: '100%',
+  },
+  cardHeroMain: {
+    flex: 1,
+    gap: 10,
+    minWidth: 0,
+  },
   cardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
@@ -685,8 +720,8 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   cardTitle: {
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 22,
+    lineHeight: 28,
   },
   cardSubtitle: {
     fontSize: 13,

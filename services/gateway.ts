@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '@/lib/api-client';
 import { compactAddressText } from '@/lib/form-utils';
+import { resolveMediaUrl } from '@/lib/media-url';
 import type { PriceSummary, SalesMode, SalesProfile } from '@/lib/sales-mode';
 import type { UomConversion } from '@/lib/uom-conversion';
 
@@ -365,7 +366,7 @@ export async function searchProducts(
               ): entry is { warehouse: string; company: string | null; qty: number } => Boolean(entry),
             )
         : [],
-      imageUrl:
+      imageUrl: resolveMediaUrl(
         typeof row.image === 'string'
           ? row.image
           : typeof row.image_url === 'string'
@@ -373,6 +374,7 @@ export async function searchProducts(
             : typeof row.item_image === 'string'
               ? row.item_image
               : null,
+      ),
       description: typeof row.description === 'string' ? row.description : null,
       nickname: typeof row.nickname === 'string' ? row.nickname : null,
       specification: typeof row.specification === 'string' ? row.specification : null,

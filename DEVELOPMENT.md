@@ -350,11 +350,14 @@ This round established the first migration-friendly image-upload boundary withou
 ### Current Mobile Upload UX
 
 - the product create page now treats image upload as a cover-style entry block instead of a plain late-form field
+- the product detail edit page now places the image editor near the top of the base-info form, aligned with the create page instead of leaving image edits too far down
+- the product list page now renders product thumbnail images directly in each card instead of showing text-only rows
 - selected images are compressed before upload on mobile:
   - longest edge is reduced to about `1600`
   - image is re-encoded as `JPEG`
   - quality is currently around `0.78`
 - backend still keeps the final `5MB` hard limit as a safety gate
+- product-search / product-list image URLs now normalize backend relative file paths before rendering, so `/files/...` assets can display correctly in mobile cards
 
 ### Native Dependency Note
 

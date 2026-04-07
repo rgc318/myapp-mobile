@@ -1535,6 +1535,7 @@ export default function ProductDetailScreen() {
               {isEditing ? (
                 <View style={styles.formBlock}>
                   <DetailField label="商品名称" onChangeText={setDraftName} placeholder="输入商品名称" required value={draftName} />
+                  <ItemImageField itemCode={detail.itemCode} onChange={applyImageUrl} value={draftImageUrl} variant="cover" />
                   <View style={styles.rowFields}>
                     <View style={styles.rowField}>
                       <View style={styles.fieldBlock}>
@@ -1580,7 +1581,6 @@ export default function ProductDetailScreen() {
                   <DetailField label="主条码" onChangeText={setDraftBarcode} placeholder="输入商品主条码" value={draftBarcode} />
                   <DetailField label="商品昵称" onChangeText={setDraftNickname} placeholder="输入商品昵称" value={draftNickname} />
                   <DetailField label="规格" onChangeText={setDraftSpecification} placeholder="输入规格，如 500ml / 大号 / A4" value={draftSpecification} />
-                  <ItemImageField itemCode={detail.itemCode} onChange={applyImageUrl} value={draftImageUrl} />
                   <DetailField label="描述" multiline onChangeText={setDraftDescription} placeholder="输入商品说明" value={draftDescription} />
                 </View>
               ) : (
