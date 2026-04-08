@@ -324,6 +324,7 @@ export function SalesOrderItemEditor({
 }: SalesOrderItemEditorProps) {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
+  const tintColor = useThemeColor({}, 'tint');
   const warningColor = useThemeColor({}, 'warning');
   const primaryLabel = nickname?.trim() || itemName || itemCode;
   const secondaryLabel = nickname?.trim() && itemName && nickname.trim() !== itemName ? itemName : '';
@@ -335,8 +336,11 @@ export function SalesOrderItemEditor({
           {imageUrl ? (
             <Image source={{ uri: imageUrl }} style={styles.itemThumbImage} />
           ) : (
-            <View style={[styles.itemThumb, { backgroundColor: '#FFFFFF' }]}>
-              <IconSymbol color="#28B7D7" name="shippingbox.fill" size={20} />
+            <View style={[styles.itemThumb, { backgroundColor: surfaceMuted, borderColor }]}>
+              <IconSymbol color={tintColor} name="photo" size={18} />
+              <ThemedText style={[styles.itemThumbPlaceholderText, { color: tintColor }]} type="defaultSemiBold">
+                无图
+              </ThemedText>
             </View>
           )}
 
@@ -500,6 +504,8 @@ const styles = StyleSheet.create({
   itemThumb: {
     alignItems: 'center',
     borderRadius: 18,
+    borderWidth: 1,
+    gap: 4,
     height: 60,
     justifyContent: 'center',
     width: 60,
@@ -508,6 +514,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     height: 60,
     width: 60,
+  },
+  itemThumbPlaceholderText: {
+    fontSize: 10,
+    lineHeight: 12,
   },
   itemMain: {
     flex: 1,

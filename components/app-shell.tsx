@@ -25,6 +25,7 @@ type AppShellProps = {
   headerSideWidth?: number;
   footer?: ReactNode;
   footerNoShadow?: boolean;
+  scrollable?: boolean;
 };
 
 export function AppShell({
@@ -36,6 +37,7 @@ export function AppShell({
   headerSideWidth,
   footer,
   footerNoShadow = false,
+  scrollable = true,
 }: AppShellProps) {
   const segments = useSegments();
   const isTabRoot = segments[0] === '(tabs)';
@@ -51,32 +53,61 @@ export function AppShell({
         title={title}
       />
 
-      <ScrollView contentContainerStyle={styles.container}>
-        {actions.length ? (
-          <View style={styles.actions}>
-            {actions.map((action) => (
-              <Link
-                key={action.label}
-                href={action.href}
-                style={[styles.linkCard, { backgroundColor: surface, borderColor }]}>
-                <ThemedText type="defaultSemiBold">{action.label}</ThemedText>
-                {action.description ? <ThemedText>{action.description}</ThemedText> : null}
-              </Link>
-            ))}
-          </View>
-        ) : null}
+      {scrollable ? (
+        <ScrollView contentContainerStyle={styles.container}>
+          {actions.length ? (
+            <View style={styles.actions}>
+              {actions.map((action) => (
+                <Link
+                  key={action.label}
+                  href={action.href}
+                  style={[styles.linkCard, { backgroundColor: surface, borderColor }]}>
+                  <ThemedText type="defaultSemiBold">{action.label}</ThemedText>
+                  {action.description ? <ThemedText>{action.description}</ThemedText> : null}
+                </Link>
+              ))}
+            </View>
+          ) : null}
 
-        {children && contentCard ? (
-          <ThemedView
-            lightColor={surface}
-            darkColor={surface}
-            style={[styles.section, { borderColor }]}>
-            {children}
-          </ThemedView>
-        ) : null}
+          {children && contentCard ? (
+            <ThemedView
+              lightColor={surface}
+              darkColor={surface}
+              style={[styles.section, { borderColor }]}>
+              {children}
+            </ThemedView>
+          ) : null}
 
-        {children && !contentCard ? <View style={styles.contentPlain}>{children}</View> : null}
-      </ScrollView>
+          {children && !contentCard ? <View style={styles.contentPlain}>{children}</View> : null}
+        </ScrollView>
+      ) : (
+        <View style={styles.nonScrollableContent}>
+          {actions.length ? (
+            <View style={styles.actions}>
+              {actions.map((action) => (
+                <Link
+                  key={action.label}
+                  href={action.href}
+                  style={[styles.linkCard, { backgroundColor: surface, borderColor }]}>
+                  <ThemedText type="defaultSemiBold">{action.label}</ThemedText>
+                  {action.description ? <ThemedText>{action.description}</ThemedText> : null}
+                </Link>
+              ))}
+            </View>
+          ) : null}
+
+          {children && contentCard ? (
+            <ThemedView
+              lightColor={surface}
+              darkColor={surface}
+              style={[styles.section, { borderColor }]}>
+              {children}
+            </ThemedView>
+          ) : null}
+
+          {children && !contentCard ? <View style={styles.contentPlain}>{children}</View> : null}
+        </View>
+      )}
 
       {footer ? (
         <View style={[styles.footer, { borderTopColor: borderColor }, footerNoShadow ? styles.footerFlat : null]}>
@@ -92,9 +123,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
+    flexGrow: 1,
     gap: 18,
     padding: 18,
     paddingBottom: 48,
+    paddingTop: 14,
+  },
+  nonScrollableContent: {
+    flex: 1,
+    minHeight: 0,
+    padding: 18,
+    paddingBottom: 0,
     paddingTop: 14,
   },
   actions: {
@@ -114,7 +153,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   contentPlain: {
+    flex: 1,
     gap: 12,
+    minHeight: 0,
   },
   footer: {
     backgroundColor: '#FFFFFF',

@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '@/lib/api-client';
 import { compactAddressText } from '@/lib/form-utils';
+import { resolveMediaUrl } from '@/lib/media-url';
 import type { PriceSummary, SalesMode, SalesProfile } from '@/lib/sales-mode';
 import {
   createSalesOrderV2,
@@ -554,7 +555,15 @@ export async function getSalesOrderDetailV2(orderName: string): Promise<SalesOrd
               valuationRate: toOptionalNumber((item.price_summary as Record<string, unknown>).valuation_rate),
             }
           : null,
-      imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
+      imageUrl: resolveMediaUrl(
+        typeof item.image === 'string'
+          ? item.image
+          : typeof item.image_url === 'string'
+            ? item.image_url
+            : typeof item.item_image === 'string'
+              ? item.item_image
+              : '',
+      ),
     })),
   };
 }
@@ -699,7 +708,15 @@ export async function getDeliveryNoteDetailV2(
       warehouse: String(item.warehouse ?? ''),
       uom: String(item.uom ?? ''),
       uomDisplay: typeof item.uom_display === 'string' ? item.uom_display : null,
-      imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
+      imageUrl: resolveMediaUrl(
+        typeof item.image === 'string'
+          ? item.image
+          : typeof item.image_url === 'string'
+            ? item.image_url
+            : typeof item.item_image === 'string'
+              ? item.item_image
+              : '',
+      ),
     })),
   };
 }
@@ -777,7 +794,15 @@ export async function getSalesInvoiceDetailV2(
       warehouse: String(item.warehouse ?? ''),
       uom: String(item.uom ?? ''),
       uomDisplay: typeof item.uom_display === 'string' ? item.uom_display : null,
-      imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
+      imageUrl: resolveMediaUrl(
+        typeof item.image === 'string'
+          ? item.image
+          : typeof item.image_url === 'string'
+            ? item.image_url
+            : typeof item.item_image === 'string'
+              ? item.item_image
+              : '',
+      ),
     })),
   };
 }

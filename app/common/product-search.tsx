@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { BarcodeScannerSheet } from '@/components/barcode-scanner-sheet';
@@ -545,6 +545,7 @@ export default function ProductSearchScreen() {
   const [matchedScannedBarcode, setMatchedScannedBarcode] = useState('');
   const [matchedScannedCount, setMatchedScannedCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
@@ -898,6 +899,18 @@ export default function ProductSearchScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftScope, isOrderMode, params.query]);
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await handleSearch(query, {
+        inStockOnly,
+        warehouseFilter,
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleReturnToOrder = () => {
     if (isOrderMode && navigation.canGoBack()) {
       router.back();
@@ -951,7 +964,13 @@ export default function ProductSearchScreen() {
           </View>
         ) : null
       }
+      scrollable={false}
       title={isOrderMode ? '\u5546\u54c1\u641c\u7d22' : '\u5546\u54c1\u67e5\u8be2'}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl onRefresh={() => void handleRefresh()} refreshing={isRefreshing} />}
+        style={styles.pageScroll}
+        showsVerticalScrollIndicator={false}>
       <View style={[styles.searchCard, { backgroundColor: surface, borderColor }]}>
         <View style={styles.searchTopRow}>
           <View style={[styles.searchInputWrap, styles.searchInputWrapExpanded, { backgroundColor: surfaceMuted, borderColor }]}>
@@ -1290,6 +1309,7 @@ export default function ProductSearchScreen() {
       </View>
 
       {isOrderMode ? <View style={styles.bottomSpacer} /> : null}
+      </ScrollView>
 
       <Modal
         animationType="slide"
@@ -1483,6 +1503,14 @@ export default function ProductSearchScreen() {
 }
 
 const styles = StyleSheet.create({
+  pageScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  content: {
+    gap: 14,
+    paddingBottom: 24,
+  },
   searchCard: {
     borderRadius: 22,
     borderWidth: 1,

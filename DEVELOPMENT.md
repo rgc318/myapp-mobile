@@ -6933,3 +6933,73 @@ The shared product-image field now supports both media-library upload and direct
 - real-site verification has confirmed:
   - default print metadata fetch does not create a backend `File`
   - explicit `archive=1` creates a private archived `File` attached to the target document
+
+## Formal Product Image Cropping (2026-04-08)
+
+The product-image flow has now moved from the lightweight system edit sheet to a production-oriented dedicated cropper path on native devices.
+
+### Updated Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/item-image-field.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app.json`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/package.json`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/package-lock.json`
+
+### Current Behavior
+
+- native mobile now prefers `react-native-image-crop-picker` for product-image selection and capture
+- product images are cropped to a consistent square output before upload:
+  - target size: `1600 x 1600`
+  - compression quality: `0.78`
+- web still keeps the Expo fallback so browser-based debugging does not lose upload capability
+- the image action entry now uses a bottom action sheet instead of three flat inline buttons:
+  - choose from library
+  - capture from camera
+  - delete current image
+
+### Notes
+
+- because `react-native-image-crop-picker` is a native dependency, mobile dev clients and packaged APKs must be rebuilt after installation
+- this cropper path was chosen for production consistency:
+  - square product thumbnails stay visually stable across list, detail, and downstream document views
+  - camera and album uploads now share the same crop rules on native devices
+
+## Product Image Preview And Refresh (2026-04-08)
+
+Product image rendering and refresh behavior were further aligned around real mobile usage.
+
+### Updated Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product/[itemCode].tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/products.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/media-url.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/products.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/gateway.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/sales.ts`
+
+### Current Behavior
+
+- the product-detail hero image now supports fullscreen preview
+- product list and search images use normalized backend media URLs and append a cache-busting version parameter from `modified` / `creation` when available
+- returning from product detail to product list with the system back gesture now refreshes list data on focus, so changed thumbnails no longer stay stale
+- sales-order / delivery-note / sales-invoice detail items now normalize backend item-image URLs through the same media helper
+
+## Search Pull-To-Refresh And Item Fallbacks (2026-04-08)
+
+Search-heavy pages now expose refresh in the places where users naturally expect “pull to reload”.
+
+### Updated Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/app-shell.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/providers/auth-provider.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/me.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/common/product-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/item-search.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/sales-order-item-editor.tsx`
+
+### Current Behavior
+
+- `AppShell` can now opt out of its own outer `ScrollView` through `scrollable={false}`, which allows inner pages to own real pull-to-refresh behavior
+- account workspace and product detail use this pattern for real refresh instead of nested-scroll no-op behavior
+- product search and purchase item search now support pull-to-refresh while keeping current search keyword and filters
+- sales-order item cards now show a clearer default “无图” placeholder instead of a blank image slot when no product image exists

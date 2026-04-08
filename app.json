@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "允许访问相机后，你可以直接拍照上传商品图片。",
+        "NSPhotoLibraryUsageDescription": "允许访问相册后，你可以选择并裁切商品图片。",
+        "NSPhotoLibraryAddUsageDescription": "允许保存临时处理后的图片结果，用于商品图片上传。"
+      }
     },
     "android": {
       "adaptiveIcon": {

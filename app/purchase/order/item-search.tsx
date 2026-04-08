@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { BarcodeScannerSheet } from '@/components/barcode-scanner-sheet';
@@ -332,6 +332,7 @@ export default function PurchaseOrderItemSearchScreen() {
   const [inStockOnly, setInStockOnly] = useState(false);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
@@ -590,6 +591,18 @@ export default function PurchaseOrderItemSearchScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await handleSearch(query, {
+        inStockOnly,
+        warehouseFilter,
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <AppShell
       compactHeader
@@ -619,7 +632,13 @@ export default function PurchaseOrderItemSearchScreen() {
           </Pressable>
         </View>
       }
+      scrollable={false}
       title="选择采购商品">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl onRefresh={() => void handleRefresh()} refreshing={isRefreshing} />}
+        style={styles.pageScroll}
+        showsVerticalScrollIndicator={false}>
       <View style={[styles.searchCard, { backgroundColor: surface, borderColor }]}>
         <View style={styles.searchTopRow}>
           <View style={[styles.searchInputWrap, styles.searchInputWrapExpanded, { backgroundColor: surfaceMuted, borderColor }]}>
@@ -762,6 +781,7 @@ export default function PurchaseOrderItemSearchScreen() {
       </View>
 
       <View style={styles.bottomSpacer} />
+      </ScrollView>
 
       <BarcodeScannerSheet
         description="将商品条码放入取景框内，扫到后会自动搜索；若只匹配一个商品，会直接加入采购单。"
@@ -965,6 +985,14 @@ export default function PurchaseOrderItemSearchScreen() {
 }
 
 const styles = StyleSheet.create({
+  pageScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  content: {
+    gap: 14,
+    paddingBottom: 24,
+  },
   searchCard: {
     borderRadius: 20,
     borderWidth: 1,

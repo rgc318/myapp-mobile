@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
@@ -111,12 +112,13 @@ function MenuRow({
 
 export default function MeTabScreen() {
   const router = useRouter();
-  const { isAuthenticated, profile, roles, signOut, username } = useAuth();
+  const { isAuthenticated, profile, refreshSession, roles, signOut, username } = useAuth();
   const preferences = getAppPreferences();
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
   const success = useThemeColor({}, 'success');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const displayName = profile?.fullName || username || '未登录';
   const avatarLabel = displayName.slice(0, 1).toUpperCase();
   const profileHint = profile?.email || profile?.mobileNo || '当前账号已连接，可继续处理销售、采购、库存和报表工作。';
@@ -141,8 +143,21 @@ export default function MeTabScreen() {
     ]);
   };
 
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshSession();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshSession]);
+
   return (
-    <AppShell title="我的" description="账号资料、环境设置和系统信息都集中在这里。" contentCard={false}>
+    <AppShell title="我的" description="账号资料、环境设置和系统信息都集中在这里。" contentCard={false} scrollable={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl onRefresh={() => void handleRefresh()} refreshing={isRefreshing} />}
+        showsVerticalScrollIndicator={false}>
       <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
         <View style={styles.heroGlowOne} />
         <View style={styles.heroGlowTwo} />
@@ -247,11 +262,16 @@ export default function MeTabScreen() {
           />
         </View>
       </View>
+      </ScrollView>
     </AppShell>
   );
 }
 
 const styles = StyleSheet.create({
+  content: {
+    gap: 16,
+    paddingBottom: 32,
+  },
   section: {
     gap: 10,
   },

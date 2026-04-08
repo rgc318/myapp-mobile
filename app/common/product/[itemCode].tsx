@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { ItemImageField } from '@/components/item-image-field';
@@ -90,6 +90,7 @@ export default function ProductDetailScreen() {
 
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
@@ -102,6 +103,7 @@ export default function ProductDetailScreen() {
   const [uomPickerVisible, setUomPickerVisible] = useState(false);
   const [uomSearchQuery, setUomSearchQuery] = useState('');
   const [uomPickerTarget, setUomPickerTarget] = useState<'stock' | 'wholesale' | 'retail' | null>(null);
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [masterPickerVisible, setMasterPickerVisible] = useState(false);
   const [masterPickerTarget, setMasterPickerTarget] = useState<'itemGroup' | 'brand' | null>(null);
   const [masterPickerQuery, setMasterPickerQuery] = useState('');
@@ -478,13 +480,17 @@ export default function ProductDetailScreen() {
       });
   }, [detail]);
 
-  const loadDetail = useCallback(async () => {
+  const loadDetail = useCallback(async (refresh = false) => {
     if (!productCode) {
       return;
     }
 
     try {
-      setIsLoading(true);
+      if (refresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
       const next = await fetchProductDetail(productCode, {
         warehouse: typeof initialWarehouse === 'string' ? initialWarehouse : undefined,
       });
@@ -497,6 +503,7 @@ export default function ProductDetailScreen() {
       showError(error instanceof Error ? error.message : '加载商品详情失败');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [initialWarehouse, productCode, showError]);
 
@@ -960,15 +967,33 @@ export default function ProductDetailScreen() {
           )}
         </View>
       }
+      scrollable={false}
       title="商品详情">
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl onRefresh={() => void loadDetail(true)} refreshing={isRefreshing} />}
+        showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.heroGlowBlue} />
           <View style={styles.heroGlowAmber} />
           <View style={styles.heroTopRow}>
-            <View style={[styles.imageWrap, { backgroundColor: surfaceMuted }]}>
+            <Pressable
+              disabled={!detail?.imageUrl}
+              onPress={() => {
+                if (detail?.imageUrl) {
+                  setImagePreviewVisible(true);
+                }
+              }}
+              style={[styles.imageWrap, { backgroundColor: surfaceMuted }]}>
               {detail?.imageUrl ? <Image contentFit="cover" source={detail.imageUrl} style={styles.image} /> : null}
-            </View>
+              {detail?.imageUrl ? (
+                <View style={styles.imagePreviewHintBadge}>
+                  <ThemedText style={styles.imagePreviewHintText} type="defaultSemiBold">
+                    点击预览
+                  </ThemedText>
+                </View>
+              ) : null}
+            </Pressable>
             <View style={styles.heroCopy}>
               <ThemedText style={styles.heroEyebrow}>PRODUCT DETAIL</ThemedText>
               <View style={styles.heroTitleRow}>
@@ -1659,6 +1684,23 @@ export default function ProductDetailScreen() {
         ) : null}
       </ScrollView>
       <Modal
+        animationType="fade"
+        onRequestClose={() => setImagePreviewVisible(false)}
+        transparent
+        visible={imagePreviewVisible}>
+        <View style={styles.imagePreviewBackdrop}>
+          <Pressable onPress={() => setImagePreviewVisible(false)} style={styles.imagePreviewDismissLayer} />
+          <View style={styles.imagePreviewContent}>
+            <Pressable onPress={() => setImagePreviewVisible(false)} style={styles.imagePreviewCloseButton}>
+              <ThemedText style={styles.imagePreviewCloseText} type="defaultSemiBold">
+                关闭
+              </ThemedText>
+            </Pressable>
+            {detail?.imageUrl ? <Image contentFit="contain" source={detail.imageUrl} style={styles.imagePreviewImage} /> : null}
+          </View>
+        </View>
+      </Modal>
+      <Modal
         animationType="slide"
         onRequestClose={() => {
           setWarehousePickerVisible(false);
@@ -1974,7 +2016,22 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     height: 76,
     overflow: 'hidden',
+    position: 'relative',
     width: 76,
+  },
+  imagePreviewHintBadge: {
+    backgroundColor: 'rgba(15,23,42,0.72)',
+    borderRadius: 999,
+    bottom: 6,
+    left: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    position: 'absolute',
+  },
+  imagePreviewHintText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    lineHeight: 12,
   },
   image: {
     height: '100%',
@@ -2527,6 +2584,35 @@ const styles = StyleSheet.create({
   },
   footerPrimaryText: {
     color: '#FFFFFF',
+  },
+  imagePreviewBackdrop: {
+    backgroundColor: 'rgba(2,6,23,0.92)',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  imagePreviewDismissLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  imagePreviewContent: {
+    alignItems: 'center',
+    gap: 18,
+    paddingHorizontal: 20,
+  },
+  imagePreviewCloseButton: {
+    alignSelf: 'flex-end',
+    backgroundColor: 'rgba(15,23,42,0.72)',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  imagePreviewCloseText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+  },
+  imagePreviewImage: {
+    height: '72%',
+    maxWidth: '100%',
+    width: '100%',
   },
   modalBackdrop: {
     backgroundColor: 'rgba(15,23,42,0.28)',

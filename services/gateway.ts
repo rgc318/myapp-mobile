@@ -374,6 +374,14 @@ export async function searchProducts(
             : typeof row.item_image === 'string'
               ? row.item_image
               : null,
+        {
+          version:
+            typeof row.modified === 'string'
+              ? row.modified
+              : typeof row.creation === 'string'
+                ? row.creation
+                : null,
+        },
       ),
       description: typeof row.description === 'string' ? row.description : null,
       nickname: typeof row.nickname === 'string' ? row.nickname : null,

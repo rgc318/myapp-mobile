@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -27,6 +28,7 @@ type AuthContextValue = {
   roles: string[];
   signIn: (params: { username: string; password: string }) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -42,6 +44,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [roles, setRoles] = useState<string[]>([]);
 
+  const refreshSession = useCallback(async () => {
+    const currentUser = await getLoggedUser(authToken);
+    const [currentProfile, currentRoles] = currentUser
+      ? await Promise.all([
+          getCurrentUserProfile(currentUser, authToken),
+          getCurrentUserRoles(authToken),
+        ])
+      : [null, []];
+
+    setUsername(currentUser);
+    setProfile(currentProfile);
+    setRoles(currentRoles);
+    saveStoredUsername(currentUser);
+    if (!currentUser) {
+      setAuthToken(null);
+      saveStoredToken(null);
+      saveStoredCsrfToken(null);
+      setAuthMode('session');
+      saveStoredAuthMode('session');
+      setProfile(null);
+      setRoles([]);
+    }
+  }, [authToken]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -53,7 +79,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             getCurrentUserRoles(authToken),
           ])
         : [null, []];
-
       if (!cancelled) {
         setUsername(currentUser);
         setProfile(currentProfile);
@@ -120,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         roles,
         signIn,
         signOut,
+        refreshSession,
       }}>
       {children}
     </AuthContext.Provider>

@@ -299,6 +299,14 @@ function mapProductRow(
         : typeof data.image_url === 'string'
           ? data.image_url
           : '',
+      {
+        version:
+          typeof data.modified === 'string'
+            ? data.modified
+            : typeof data.creation === 'string'
+              ? data.creation
+              : null,
+      },
     ),
     disabled: Boolean(data.disabled),
     nickname: typeof data.nickname === 'string' ? data.nickname : '',

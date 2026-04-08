@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
@@ -210,9 +210,11 @@ export default function ProductsScreen() {
     [deferredQuery, disabledFilter, showError],
   );
 
-  useEffect(() => {
-    void loadItems();
-  }, [loadItems]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadItems();
+    }, [loadItems]),
+  );
 
   const handleBarcodeMatched = async (scannedValue: string) => {
     const normalized = scannedValue.trim();
