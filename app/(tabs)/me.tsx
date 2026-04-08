@@ -6,7 +6,6 @@ import { AppShell } from '@/components/app-shell';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getAppPreferences } from '@/lib/app-preferences';
 import { useAuth } from '@/providers/auth-provider';
 
 function StatusBadge({
@@ -112,8 +111,7 @@ function MenuRow({
 
 export default function MeTabScreen() {
   const router = useRouter();
-  const { isAuthenticated, profile, refreshSession, roles, signOut, username } = useAuth();
-  const preferences = getAppPreferences();
+  const { isAuthenticated, profile, refreshSession, roles, signOut, username, workspacePreferences } = useAuth();
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
@@ -187,7 +185,7 @@ export default function MeTabScreen() {
 
             <ThemedText style={styles.heroSubtitle}>{profileHint}</ThemedText>
             <ThemedText style={styles.heroMeta}>
-              {preferences.defaultCompany} · {preferences.defaultWarehouse}
+              {workspacePreferences.defaultCompany} · {workspacePreferences.defaultWarehouse}
             </ThemedText>
             <ThemedText style={styles.heroMetaSecondary}>{roleSummary}</ThemedText>
           </View>
@@ -236,13 +234,13 @@ export default function MeTabScreen() {
           <View style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>默认公司</ThemedText>
             <ThemedText style={styles.summaryValue} type="defaultSemiBold">
-              {preferences.defaultCompany}
+              {workspacePreferences.defaultCompany}
             </ThemedText>
           </View>
           <View style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>默认仓库</ThemedText>
             <ThemedText style={styles.summaryValue} type="defaultSemiBold">
-              {preferences.defaultWarehouse}
+              {workspacePreferences.defaultWarehouse}
             </ThemedText>
           </View>
         </View>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -126,6 +126,19 @@ export function LinkOptionInput({
 
         {dropdownOpen ? (
           <View style={[styles.dropdown, { backgroundColor: surface, borderColor }]}>
+            <View style={[styles.dropdownHeader, { borderBottomColor: borderColor }]}>
+              <ThemedText style={styles.dropdownHeaderText} type="defaultSemiBold">
+                候选项
+              </ThemedText>
+              <ThemedText style={[styles.dropdownHeaderMeta, { color: tintColor }]}>
+                {loading ? '正在更新' : `${options.length} 项`}
+              </ThemedText>
+            </View>
+            <ScrollView
+              bounces={options.length > 4}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+              style={styles.dropdownScroll}>
             {loading ? (
               <View style={styles.optionRow}>
                 <ThemedText>正在读取候选项...</ThemedText>
@@ -154,6 +167,7 @@ export function LinkOptionInput({
                 </View>
               )
             )}
+            </ScrollView>
           </View>
         ) : null}
       </View>
@@ -222,15 +236,34 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
     shadowRadius: 18,
+    maxHeight: 280,
+  },
+  dropdownHeader: {
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  dropdownHeaderText: {
+    fontSize: 13,
+  },
+  dropdownHeaderMeta: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dropdownScroll: {
+    maxHeight: 224,
   },
   optionRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
     justifyContent: 'space-between',
-    minHeight: 54,
+    minHeight: 52,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
   },
   optionText: {
     flex: 1,

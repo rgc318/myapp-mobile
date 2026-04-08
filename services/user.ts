@@ -1,5 +1,6 @@
-import { callFrappeMethod } from '@/lib/api-client';
+import { callFrappeMethod, callGatewayMethod } from '@/lib/api-client';
 import { getApiBaseUrl } from '@/lib/config';
+import type { AppPreferences } from '@/lib/app-preferences';
 
 export type UserProfile = {
   username: string;
@@ -8,6 +9,8 @@ export type UserProfile = {
   mobileNo: string | null;
   userImage: string | null;
 };
+
+export type UserWorkspacePreferences = AppPreferences;
 
 function normalizeImageUrl(userImage: string | null) {
   if (!userImage) {
@@ -71,4 +74,39 @@ export async function getCurrentUserProfile(username: string, authToken?: string
       userImage: null,
     } satisfies UserProfile;
   }
+}
+
+function normalizeWorkspacePreferences(payload: Record<string, unknown> | null | undefined): UserWorkspacePreferences {
+  return {
+    defaultCompany:
+      typeof payload?.default_company === 'string' && payload.default_company.trim() ? payload.default_company.trim() : '',
+    defaultWarehouse:
+      typeof payload?.default_warehouse === 'string' && payload.default_warehouse.trim()
+        ? payload.default_warehouse.trim()
+        : '',
+  } satisfies UserWorkspacePreferences;
+}
+
+export async function getCurrentUserWorkspacePreferences(authToken?: string | null) {
+  const data = await callGatewayMethod<Record<string, unknown>>(
+    'myapp.api.gateway.get_current_user_workspace_preferences_v1',
+    {},
+    { authToken },
+  );
+  return normalizeWorkspacePreferences(data);
+}
+
+export async function updateCurrentUserWorkspacePreferences(
+  payload: Partial<UserWorkspacePreferences>,
+  authToken?: string | null,
+) {
+  const data = await callGatewayMethod<Record<string, unknown>>(
+    'myapp.api.gateway.update_current_user_workspace_preferences_v1',
+    {
+      default_company: payload.defaultCompany ?? null,
+      default_warehouse: payload.defaultWarehouse ?? null,
+    },
+    { authToken },
+  );
+  return normalizeWorkspacePreferences(data);
 }

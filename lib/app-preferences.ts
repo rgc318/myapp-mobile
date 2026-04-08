@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { loadStoredUsername } from '@/lib/auth-storage';
 
 export type AppPreferences = {
   defaultCompany: string;
@@ -6,13 +7,14 @@ export type AppPreferences = {
 };
 
 const STORAGE_KEY = 'myapp-mobile.app-preferences';
+const DEFAULT_OWNER = '__default__';
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   defaultCompany: 'rgc (Demo)',
   defaultWarehouse: 'Stores - RD',
 };
 
-let memoryPreferences: AppPreferences | null = null;
+let memoryPreferencesByOwner: Record<string, AppPreferences> | null = null;
 
 function canUseWebStorage() {
   return Platform.OS === 'web' && typeof window !== 'undefined' && !!window.localStorage;
@@ -30,52 +32,96 @@ function normalizePreferences(partial?: Partial<AppPreferences> | null): AppPref
   };
 }
 
+function normalizeOwner(owner?: string | null) {
+	const resolved = owner?.trim() || loadStoredUsername()?.trim();
+	return resolved || DEFAULT_OWNER;
+}
+
+function normalizePreferenceMap(raw: unknown) {
+	if (!raw || typeof raw !== 'object') {
+		return {} as Record<string, AppPreferences>;
+	}
+
+	if ('defaultCompany' in (raw as Record<string, unknown>) || 'defaultWarehouse' in (raw as Record<string, unknown>)) {
+		return {
+			[DEFAULT_OWNER]: normalizePreferences(raw as Partial<AppPreferences>),
+		} as Record<string, AppPreferences>;
+	}
+
+	const next: Record<string, AppPreferences> = {};
+	for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+		next[key] = normalizePreferences(value as Partial<AppPreferences>);
+	}
+	return next;
+}
+
+function getPreferenceMap() {
+	if (memoryPreferencesByOwner) {
+		return memoryPreferencesByOwner;
+	}
+
+	if (canUseWebStorage()) {
+		try {
+			const raw = window.localStorage.getItem(STORAGE_KEY);
+			if (raw) {
+				memoryPreferencesByOwner = normalizePreferenceMap(JSON.parse(raw));
+				return memoryPreferencesByOwner;
+			}
+		} catch {
+			// Ignore malformed storage and fall back to defaults.
+		}
+	}
+
+	memoryPreferencesByOwner = {};
+	return memoryPreferencesByOwner;
+}
+
+function persistPreferenceMap(next: Record<string, AppPreferences>) {
+	memoryPreferencesByOwner = next;
+	if (canUseWebStorage()) {
+		window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+	}
+}
+
 export function getDefaultPreferences() {
   return { ...DEFAULT_PREFERENCES };
 }
 
-export function getAppPreferences() {
-  if (memoryPreferences) {
-    return memoryPreferences;
-  }
-
-  if (canUseWebStorage()) {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        memoryPreferences = normalizePreferences(JSON.parse(raw));
-        return memoryPreferences;
-      }
-    } catch {
-      // Ignore malformed storage and fall back to defaults.
-    }
-  }
-
-  memoryPreferences = getDefaultPreferences();
-  return memoryPreferences;
+export function getStoredAppPreferences(options?: { owner?: string | null }) {
+  const owner = normalizeOwner(options?.owner);
+  const map = getPreferenceMap();
+  return map[owner] || map[DEFAULT_OWNER] || null;
 }
 
-export function setAppPreferences(next: Partial<AppPreferences>) {
+export function getAppPreferences(options?: { owner?: string | null }) {
+  return getStoredAppPreferences(options) || getDefaultPreferences();
+}
+
+export function setAppPreferences(next: Partial<AppPreferences>, options?: { owner?: string | null }) {
+  const owner = normalizeOwner(options?.owner);
   const merged = normalizePreferences({
-    ...getAppPreferences(),
+    ...getAppPreferences({ owner }),
     ...next,
   });
-
-  memoryPreferences = merged;
-
-  if (canUseWebStorage()) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-  }
-
+  const map = {
+    ...getPreferenceMap(),
+    [owner]: merged,
+  };
+  persistPreferenceMap(map);
   return merged;
 }
 
-export function resetAppPreferences() {
-  memoryPreferences = getDefaultPreferences();
+export function replaceAppPreferences(next: Partial<AppPreferences>, options?: { owner?: string | null }) {
+  const owner = normalizeOwner(options?.owner);
+  const merged = normalizePreferences(next);
+  const map = {
+    ...getPreferenceMap(),
+    [owner]: merged,
+  };
+  persistPreferenceMap(map);
+  return merged;
+}
 
-  if (canUseWebStorage()) {
-    window.localStorage.removeItem(STORAGE_KEY);
-  }
-
-  return memoryPreferences;
+export function resetAppPreferences(options?: { owner?: string | null }) {
+  return replaceAppPreferences(getDefaultPreferences(), options);
 }

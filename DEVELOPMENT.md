@@ -219,6 +219,50 @@ This round turned the mobile product flow from "search-only helper pages" into a
     - `fetchProductDetail()`
     - `createProduct()`
 
+## Account Workspace Preferences (2026-04-08)
+
+This round split the old mixed local settings into account-level workspace preferences and device-level environment settings.
+
+### Current Rules
+
+- account-level
+  - default company
+  - default warehouse
+- device-level
+  - backend base URL / debug environment
+
+### Implemented Behavior
+
+- mobile now reads current-user workspace preferences after sign-in
+  - files:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/providers/auth-provider.tsx`
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/user.ts`
+- the settings page now saves default company / default warehouse to backend account preferences instead of device-only local storage
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/settings.tsx`
+- local app preferences were reshaped into owner-aware storage
+  - old data remains compatible
+  - different signed-in accounts on the same device no longer share one global company / warehouse pair
+  - file:
+    - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/app-preferences.ts`
+- backend base URL remains device-local and is not synced with the account
+
+### Company / Warehouse Link Rules
+
+- warehouse options in settings now follow the selected company
+- if the user switches company and the old warehouse does not belong to that company anymore:
+  - the warehouse is automatically cleared
+  - the page asks the user to re-select a valid warehouse
+- this avoids saving cross-company invalid combinations such as:
+  - company `rgc`
+  - warehouse `Stores - RD`
+
+### User Module Direction
+
+- `环境设置` is now the single settings entry on the `我的` page
+- `默认公司 / 默认仓库` should be treated as user workspace context
+- `后端地址` should be treated as device environment context
+
 ## Product Specification Field Alignment (2026-04-05)
 
 This round aligned the mobile product module with the new backend `custom_specification` field, while keeping the current modeling rule that different sellable specs are still separate products.

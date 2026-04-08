@@ -1,23 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppShell } from '@/components/app-shell';
 import { LinkOptionInput } from '@/components/link-option-input';
 import { ThemedText } from '@/components/themed-text';
-import { getAppPreferences, getDefaultPreferences, setAppPreferences } from '@/lib/app-preferences';
+import { getDefaultPreferences } from '@/lib/app-preferences';
 import { getApiBaseUrl, getDefaultBaseUrl, setApiBaseUrl } from '@/lib/config';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAuth } from '@/providers/auth-provider';
 import { useFeedback } from '@/providers/feedback-provider';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
+import { getWarehouseCompany, searchWarehouses } from '@/services/purchases';
 
 export default function SettingsScreen() {
+  const { saveWorkspacePreferences, workspacePreferences } = useAuth();
   const currentValue = getApiBaseUrl();
   const defaultValue = getDefaultBaseUrl();
-  const currentPreferences = getAppPreferences();
   const defaultPreferences = getDefaultPreferences();
   const [baseUrl, setBaseUrlValue] = useState(currentValue);
-  const [defaultCompany, setDefaultCompany] = useState(currentPreferences.defaultCompany);
-  const [defaultWarehouse, setDefaultWarehouse] = useState(currentPreferences.defaultWarehouse);
+  const [defaultCompany, setDefaultCompany] = useState(workspacePreferences.defaultCompany);
+  const [defaultWarehouse, setDefaultWarehouse] = useState(workspacePreferences.defaultWarehouse);
   const [savedMessage, setSavedMessage] = useState('');
   const [companyError, setCompanyError] = useState('');
   const [warehouseError, setWarehouseError] = useState('');
@@ -28,7 +30,12 @@ export default function SettingsScreen() {
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
 
-  const handleSavePreferences = async (next?: Partial<ReturnType<typeof getAppPreferences>>) => {
+  useEffect(() => {
+    setDefaultCompany(workspacePreferences.defaultCompany);
+    setDefaultWarehouse(workspacePreferences.defaultWarehouse);
+  }, [workspacePreferences.defaultCompany, workspacePreferences.defaultWarehouse]);
+
+  const handleSavePreferences = async (next?: { defaultCompany?: string; defaultWarehouse?: string }) => {
     const candidateCompany = (next?.defaultCompany ?? defaultCompany).trim();
     const candidateWarehouse = (next?.defaultWarehouse ?? defaultWarehouse).trim();
     setCompanyError('');
@@ -42,7 +49,9 @@ export default function SettingsScreen() {
       return false;
     }
 
-    if (!(await checkLinkOptionExists('Warehouse', candidateWarehouse))) {
+    let resolvedWarehouse = candidateWarehouse;
+
+    if (resolvedWarehouse && !(await checkLinkOptionExists('Warehouse', resolvedWarehouse))) {
       const message = '仓库不存在，请从候选项中选择或输入有效仓库名称。';
       setWarehouseError(message);
       setSavedMessage('');
@@ -50,22 +59,34 @@ export default function SettingsScreen() {
       return false;
     }
 
-    const nextPreferences = setAppPreferences({
-      defaultCompany,
-      defaultWarehouse,
+    if (resolvedWarehouse && candidateCompany) {
+      const warehouseCompany = await getWarehouseCompany(resolvedWarehouse);
+      if (warehouseCompany && warehouseCompany !== candidateCompany) {
+        resolvedWarehouse = '';
+        setDefaultWarehouse('');
+        setWarehouseError('');
+      }
+    }
+
+    const nextPreferences = await saveWorkspacePreferences({
+      defaultCompany: candidateCompany,
+      defaultWarehouse: resolvedWarehouse,
       ...next,
     });
     setDefaultCompany(nextPreferences.defaultCompany);
     setDefaultWarehouse(nextPreferences.defaultWarehouse);
-    const message = '工作偏好已更新，后续业务页面会优先使用这些默认值。';
+    const warehouseAutoCleared = Boolean(candidateWarehouse) && !resolvedWarehouse;
+    const message = warehouseAutoCleared
+      ? '默认公司已更新，原默认仓库不属于该公司，已自动清空，请重新选择仓库。'
+      : '工作偏好已更新，后续业务页面会优先使用这些默认值。';
     setSavedMessage(message);
     showSuccess(message);
     return true;
   };
 
-  const handleResetPreferences = () => {
+  const handleResetPreferences = async () => {
     const defaultPrefs = getDefaultPreferences();
-    const nextPreferences = setAppPreferences(defaultPrefs);
+    const nextPreferences = await saveWorkspacePreferences(defaultPrefs);
     setDefaultCompany(nextPreferences.defaultCompany);
     setDefaultWarehouse(nextPreferences.defaultWarehouse);
     const message = '已恢复默认公司和默认仓库。';
@@ -120,12 +141,12 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <View style={styles.section}>
+      <View style={[styles.section, styles.raisedSection]}>
         <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
           业务默认值
         </ThemedText>
 
-        <View style={[styles.groupCard, { backgroundColor: surface, borderColor }]}>
+        <View style={[styles.groupCard, styles.raisedGroupCard, { backgroundColor: surface, borderColor }]}>
           <LinkOptionInput
             errorText={companyError}
             helperText={`建议默认值：${defaultPreferences.defaultCompany}`}
@@ -150,7 +171,7 @@ export default function SettingsScreen() {
             errorText={warehouseError}
             helperText={`建议默认值：${defaultPreferences.defaultWarehouse}`}
             label="默认仓库"
-            loadOptions={(query) => searchLinkOptions('Warehouse', query, ['warehouse_name'])}
+            loadOptions={(query) => searchWarehouses(query, defaultCompany.trim() || undefined)}
             onChangeText={(value) => {
               setDefaultWarehouse(value);
               if (warehouseError) {
@@ -173,7 +194,7 @@ export default function SettingsScreen() {
               </ThemedText>
             </Pressable>
 
-            <Pressable onPress={handleResetPreferences} style={[styles.inlineButton, styles.inlineSecondary, { borderColor }]}>
+            <Pressable onPress={() => void handleResetPreferences()} style={[styles.inlineButton, styles.inlineSecondary, { borderColor }]}>
               <ThemedText type="defaultSemiBold">恢复默认</ThemedText>
             </Pressable>
           </View>
@@ -242,6 +263,10 @@ const styles = StyleSheet.create({
   section: {
     gap: 10,
   },
+  raisedSection: {
+    elevation: 6,
+    zIndex: 20,
+  },
   sectionTitle: {
     paddingHorizontal: 4,
   },
@@ -300,6 +325,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 18,
     padding: 18,
+  },
+  raisedGroupCard: {
+    overflow: 'visible',
   },
   block: {
     gap: 8,
