@@ -6888,6 +6888,46 @@ The print/PDF flow now distinguishes routine download from explicit archival so 
 - saving every generated PDF would make the server-side `File` table and private-files directory grow continuously
 - separating stream mode from archive mode keeps preview fast while reserving persistent storage for true traceability cases
 
+## Account Workspace Refresh (2026-04-08)
+
+The account/settings area has been refocused from a loose collection of debug-style pages into a clearer user workspace.
+
+### Updated Pages
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/me.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/account-info.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/system-info.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/settings.tsx`
+
+### Current Direction
+
+- the `我的` tab now acts as a compact workspace instead of a mixed settings/debug page
+- repeated entry points were removed:
+  - `环境设置` remains the single settings entry
+  - technical details are pushed down into `系统信息`
+- historic flow-mode preferences were removed from app-level settings because current sales/purchase flows are now decided dynamically in-page
+- account/system/settings pages now share the same card-based visual language and lighter information hierarchy
+
+## Product Image Camera Support (2026-04-08)
+
+The shared product-image field now supports both media-library upload and direct camera capture.
+
+### Updated File
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/item-image-field.tsx`
+
+### Current Behavior
+
+- create-product and product-detail edit screens both reuse the same image field
+- operators can now:
+  - upload from photo library
+  - open the system camera and capture a new image
+- captured photos go through the same compression/upload pipeline as library images:
+  - request permission
+  - capture/select image
+  - compress to the current upload policy
+  - upload and immediately reflect the resulting image URL
+
 ### Validation
 
 - real-site verification has confirmed:

@@ -1,13 +1,8 @@
 import { Platform } from 'react-native';
 
-export type SalesFlowMode = 'step' | 'quick';
-export type PurchaseFlowMode = 'deferred' | 'immediate';
-
 export type AppPreferences = {
   defaultCompany: string;
   defaultWarehouse: string;
-  salesFlowMode: SalesFlowMode;
-  purchaseFlowMode: PurchaseFlowMode;
 };
 
 const STORAGE_KEY = 'myapp-mobile.app-preferences';
@@ -15,8 +10,6 @@ const STORAGE_KEY = 'myapp-mobile.app-preferences';
 const DEFAULT_PREFERENCES: AppPreferences = {
   defaultCompany: 'rgc (Demo)',
   defaultWarehouse: 'Stores - RD',
-  salesFlowMode: 'step',
-  purchaseFlowMode: 'deferred',
 };
 
 let memoryPreferences: AppPreferences | null = null;
@@ -34,8 +27,6 @@ function normalizePreferences(partial?: Partial<AppPreferences> | null): AppPref
   return {
     defaultCompany: normalizeText(partial?.defaultCompany, DEFAULT_PREFERENCES.defaultCompany),
     defaultWarehouse: normalizeText(partial?.defaultWarehouse, DEFAULT_PREFERENCES.defaultWarehouse),
-    salesFlowMode: partial?.salesFlowMode === 'quick' ? 'quick' : 'step',
-    purchaseFlowMode: partial?.purchaseFlowMode === 'immediate' ? 'immediate' : 'deferred',
   };
 }
 

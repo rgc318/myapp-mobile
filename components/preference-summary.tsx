@@ -6,12 +6,10 @@ import { getAppPreferences } from '@/lib/app-preferences';
 
 type PreferenceSummaryProps = {
   title?: string;
-  modeLabel?: string;
 };
 
 export function PreferenceSummary({
   title = '当前默认设置',
-  modeLabel,
 }: PreferenceSummaryProps) {
   const preferences = getAppPreferences();
   const borderColor = useThemeColor({}, 'border');
@@ -31,13 +29,6 @@ export function PreferenceSummary({
           <ThemedText style={styles.label}>默认仓库</ThemedText>
           <ThemedText style={styles.value}>{preferences.defaultWarehouse}</ThemedText>
         </View>
-
-        {modeLabel ? (
-          <View style={styles.row}>
-            <ThemedText style={styles.label}>流程模式</ThemedText>
-            <ThemedText style={styles.value}>{modeLabel}</ThemedText>
-          </View>
-        ) : null}
       </View>
     </View>
   );

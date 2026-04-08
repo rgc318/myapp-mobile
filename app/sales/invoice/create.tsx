@@ -6,7 +6,6 @@ import { AppShell } from '@/components/app-shell';
 import { PreferenceSummary } from '@/components/preference-summary';
 import { SalesInvoiceSheet } from '@/components/sales-invoice-sheet';
 import { ThemedText } from '@/components/themed-text';
-import { getAppPreferences } from '@/lib/app-preferences';
 import { getPaymentResultHandoff } from '@/lib/payment-result-handoff';
 import { resolveDisplayUom } from '@/lib/display-uom';
 import { buildQuantityComposition } from '@/lib/uom-display';
@@ -141,7 +140,6 @@ export default function SalesInvoiceCreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ sourceName?: string; salesInvoice?: string; notice?: string }>();
   const lockedSourceName = typeof params.sourceName === 'string' ? params.sourceName.trim() : '';
-  const preferences = getAppPreferences();
   const { showError, showInfo, showSuccess } = useFeedback();
   const [sourceName, setSourceName] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -431,7 +429,7 @@ export default function SalesInvoiceCreateScreen() {
             </Pressable>
           </View>
         }>
-        <PreferenceSummary title="当前销售模式" modeLabel={preferences.salesFlowMode === 'quick' ? '快捷结算' : '分步处理'} />
+        <PreferenceSummary title="当前默认设置" />
 
         {isLoadingSourceOrder ? (
           <View style={styles.previewLoadingCard}>

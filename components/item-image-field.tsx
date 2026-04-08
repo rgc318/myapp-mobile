@@ -136,6 +136,37 @@ function InnerItemImageField({
   const [isDeleting, setIsDeleting] = React.useState(false);
   const isCover = variant === 'cover';
 
+  const uploadAsset = React.useCallback(
+    async (asset: ImagePicker.ImagePickerAsset) => {
+      const processed = await compressPickedImage(asset);
+      if (typeof processed.fileSize === 'number' && processed.fileSize > MAX_IMAGE_SIZE_BYTES) {
+        throw new Error('图片请控制在 5MB 以内后再上传。');
+      }
+
+      setIsUploading(true);
+      try {
+        const uploaded = itemCode
+          ? await replaceItemImage({
+              itemCode,
+              filename: processed.fileName,
+              fileContentBase64: processed.base64,
+              contentType: processed.mimeType,
+            })
+          : await uploadItemImage({
+              filename: processed.fileName,
+              fileContentBase64: processed.base64,
+              contentType: processed.mimeType,
+            });
+
+        onChange(uploaded.fileUrl);
+        showSuccess(itemCode ? '商品图片已替换' : '商品图片已上传');
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [itemCode, onChange, showSuccess],
+  );
+
   const handlePickImage = async () => {
     if (disabled || isUploading || isDeleting) {
       return;
@@ -158,32 +189,37 @@ function InnerItemImageField({
         return;
       }
 
-      const asset = result.assets[0];
-      const processed = await compressPickedImage(asset);
-      if (typeof processed.fileSize === 'number' && processed.fileSize > MAX_IMAGE_SIZE_BYTES) {
-        throw new Error('图片请控制在 5MB 以内后再上传。');
-      }
-
-      setIsUploading(true);
-      const uploaded = itemCode
-        ? await replaceItemImage({
-            itemCode,
-            filename: processed.fileName,
-            fileContentBase64: processed.base64,
-            contentType: processed.mimeType,
-          })
-        : await uploadItemImage({
-            filename: processed.fileName,
-            fileContentBase64: processed.base64,
-            contentType: processed.mimeType,
-          });
-
-      onChange(uploaded.fileUrl);
-      showSuccess(itemCode ? '商品图片已替换' : '商品图片已上传');
+      await uploadAsset(result.assets[0]);
     } catch (error) {
       showError(error instanceof Error ? error.message : '商品图片上传失败');
-    } finally {
-      setIsUploading(false);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    if (disabled || isUploading || isDeleting) {
+      return;
+    }
+
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error('请先允许访问相机，才能直接拍照上传商品图片。');
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        base64: true,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.82,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      await uploadAsset(result.assets[0]);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : '商品图片拍照上传失败');
     }
   };
 
@@ -254,7 +290,15 @@ function InnerItemImageField({
               ]}>
               {isUploading ? <ActivityIndicator color="#fff" size="small" /> : null}
               <ThemedText style={styles.primaryActionText} type="defaultSemiBold">
-                {isUploading ? '上传中…' : value ? '更换图片' : '上传图片'}
+                {isUploading ? '上传中…' : value ? '相册更换' : '相册上传'}
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              disabled={disabled || isUploading || isDeleting}
+              onPress={() => void handleTakePhoto()}
+              style={[styles.secondaryAction, isCover ? styles.coverSecondaryAction : null, { borderColor }]}>
+              <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                拍照上传
               </ThemedText>
             </Pressable>
             {value ? (
@@ -270,7 +314,7 @@ function InnerItemImageField({
             ) : null}
           </View>
           <ThemedText style={[styles.hint, { color: textMuted }]}>
-            当前先支持从相册选择图片，建议单张控制在 5MB 以内。
+            当前支持相册上传和相机拍照，建议单张控制在 5MB 以内。
           </ThemedText>
           {value ? (
             <ThemedText numberOfLines={2} style={[styles.urlText, { color: textMuted }]}>
