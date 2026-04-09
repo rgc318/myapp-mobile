@@ -225,7 +225,7 @@ cd android
 
 当前仓库已经补充主仓库级 workflow：
 
-- [/home/rgc318/python-project/frappe_docker/.github/workflows/mobile_release_apk.yml](/home/rgc318/python-project/frappe_docker/.github/workflows/mobile_release_apk.yml)
+- [/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/.github/workflows/build_release_apk.yml](/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/.github/workflows/build_release_apk.yml)
 
 这条 workflow 的目标是：
 
