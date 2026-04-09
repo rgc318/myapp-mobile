@@ -49,6 +49,13 @@
 - 由 GitHub Actions 触发远程构建
 - 产出可分发的 `release-apk`
 
+补充说明：
+
+- `expo doctor` 不建议把 `eas-cli` 安装在项目依赖里
+- 推荐使用：
+  - 全局安装的 `eas-cli`
+  - 或 `npx eas-cli ...`
+
 ---
 
 ## 3. GitHub Actions 触发方式
@@ -109,7 +116,65 @@ npx eas build --platform android --profile release-apk --non-interactive --wait
 
 ---
 
-## 6. 当前建议
+## 6. Android release 连接 HTTP 后端
+
+当前 staging 后端还是：
+
+- `http://<局域网IP>:28080`
+
+如果 release APK 需要直连这个 HTTP 地址，Android release 默认可能会拦截明文流量。
+
+为了解决这个问题，当前已经在：
+
+- [/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/src/main/AndroidManifest.xml](/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/src/main/AndroidManifest.xml)
+
+的 `<application>` 上加入：
+
+```xml
+android:usesCleartextTraffic="true"
+```
+
+这意味着：
+
+- 当前 release APK 可以访问内网 `http://...` 后端
+- 等后面后端切到 HTTPS 后，可以再考虑去掉这项放行
+
+---
+
+## 7. 手动打包命令
+
+### 7.1 云端 EAS 构建 release APK
+
+推荐命令：
+
+```bash
+npx eas-cli build --platform android --profile release-apk
+```
+
+或者如果你全局安装了 `eas-cli`：
+
+```bash
+eas build --platform android --profile release-apk
+```
+
+### 7.2 本地原生构建 release APK
+
+如果仓库里已经有 `android/` 原生工程，可以直接：
+
+```bash
+cd android
+./gradlew assembleRelease
+```
+
+注意：
+
+- 当前本地 `assembleRelease` 仍然使用 debug keystore 的 release 配置
+- 适合本地验证
+- 更正式的测试发布仍建议优先走 EAS
+
+---
+
+## 8. 当前建议
 
 当前阶段建议这样使用：
 
