@@ -1,0 +1,63 @@
+name: Build release APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-release-apk:
+    name: Build Android release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint app
+        run: npm run lint
+
+      - name: Set up Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android release APK
+        run: npx eas build --platform android --profile release-apk --non-interactive --wait --json > eas-build-result.json
+
+      - name: Export build metadata
+        run: |
+          node -e "
+          const fs = require('fs');
+          const raw = fs.readFileSync('eas-build-result.json', 'utf8').trim();
+          const result = JSON.parse(raw);
+          const build = Array.isArray(result) ? result[0] : result;
+          if (!build) {
+            throw new Error('Missing EAS build result');
+          }
+          fs.appendFileSync(process.env.GITHUB_ENV, 'EAS_BUILD_ID=' + (build.id || '') + '\n');
+          fs.appendFileSync(process.env.GITHUB_ENV, 'EAS_BUILD_URL=' + (build.artifacts?.buildUrl || build.webUrl || '') + '\n');
+          "
+
+      - name: Upload build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-build-metadata
+          path: eas-build-result.json
+
+      - name: Print download location
+        run: |
+          echo "EAS build id: ${EAS_BUILD_ID}"
+          echo "EAS artifact URL: ${EAS_BUILD_URL}"
