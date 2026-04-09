@@ -219,6 +219,36 @@ This round turned the mobile product flow from "search-only helper pages" into a
     - `fetchProductDetail()`
     - `createProduct()`
 
+## App Update Check (2026-04-10)
+
+This round added the first app-update check path for Android test distribution.
+
+### Current Direction
+
+- mobile settings page now checks updates through backend
+- frontend does not read GitHub Releases directly
+- backend currently acts as the stable version-info adapter
+
+### Current Entry Points
+
+- frontend page:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/settings.tsx`
+- frontend service:
+  - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/user.ts`
+- backend gateway:
+  - `myapp.api.gateway.get_mobile_release_info_v1`
+
+### Why This Shape
+
+- keeps frontend decoupled from GitHub API details
+- allows later migration from GitHub Releases to object storage / CDN without changing app UI code
+- makes private-repo token handling possible on backend instead of putting it in the app
+
+### Current Limitation
+
+- app-side version comparison is still mainly based on `app.json` version
+- if multiple test APKs are published under the same app version, the current app cannot always distinguish them as different builds
+
 ## Account Workspace Preferences (2026-04-08)
 
 This round split the old mixed local settings into account-level workspace preferences and device-level environment settings.

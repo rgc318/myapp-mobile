@@ -218,12 +218,156 @@ cd android
 注意：
 
 - 当前本地 `assembleRelease` 仍然使用 debug keystore 的 release 配置
-- 适合本地验证
-- 更正式的测试发布仍建议优先走 EAS
 
 ---
 
-## 8. 当前建议
+## 8. GitHub Actions 自动打包 release APK
+
+当前仓库已经补充主仓库级 workflow：
+
+- [/home/rgc318/python-project/frappe_docker/.github/workflows/mobile_release_apk.yml](/home/rgc318/python-project/frappe_docker/.github/workflows/mobile_release_apk.yml)
+
+这条 workflow 的目标是：
+
+- 在 `main` 分支有 `frontend/myapp-mobile/**` 相关变更时自动构建
+- 也支持手动触发 `workflow_dispatch`
+- 在 GitHub Actions 中直接构建 Android `release APK`
+- 构建完成后把 APK 作为 artifact 上传
+- 构建完成后自动发布到 GitHub Release
+
+当前流程不依赖 EAS 配额，更适合测试阶段高频出包。
+
+### 8.1 需要准备的 GitHub Secrets
+
+在仓库 `Settings -> Secrets and variables -> Actions` 中添加：
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+说明：
+
+- `ANDROID_KEYSTORE_BASE64`
+  - 是 Android release keystore 文件的 base64 编码结果
+- `ANDROID_KEYSTORE_PASSWORD`
+  - keystore 密码
+- `ANDROID_KEY_ALIAS`
+  - key alias
+- `ANDROID_KEY_PASSWORD`
+  - alias 对应的 key 密码
+
+### 8.2 如何生成 release keystore
+
+如果当前还没有正式 keystore，可以在本地执行：
+
+```bash
+keytool -genkeypair \
+  -v \
+  -storetype PKCS12 \
+  -keystore myapp-mobile-release.keystore \
+  -alias myappmobile \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 3650
+```
+
+执行过程中会提示输入：
+
+- keystore 密码
+- key 密码
+- 证书信息
+
+建议：
+
+- 把 keystore 文件保存在安全位置，不要提交到仓库
+- 记录好密码和 alias
+- 团队内至少保留一份安全备份，否则后续无法延续同一签名
+
+### 8.3 如何生成 `ANDROID_KEYSTORE_BASE64`
+
+Linux / macOS / WSL 可执行：
+
+```bash
+base64 -w 0 myapp-mobile-release.keystore > myapp-mobile-release.keystore.base64
+```
+
+如果当前环境的 `base64` 不支持 `-w`，可以改用：
+
+```bash
+base64 myapp-mobile-release.keystore | tr -d '\n' > myapp-mobile-release.keystore.base64
+```
+
+然后把生成文件中的整行内容复制到 GitHub Secret `ANDROID_KEYSTORE_BASE64`。
+
+### 8.4 workflow 里实际会做什么
+
+这条 workflow 会自动完成：
+
+1. checkout 仓库
+2. 安装 Node.js
+3. 安装 JDK 17
+4. 安装 Android SDK
+5. 执行 `npm ci`
+6. 执行 `npm run lint`
+7. 从 `ANDROID_KEYSTORE_BASE64` 还原 `release.keystore`
+8. 执行：
+
+```bash
+cd frontend/myapp-mobile/android
+./gradlew assembleRelease
+```
+
+9. 上传生成的 `release APK`
+10. 自动创建一个新的 GitHub Release，并把 APK 作为 release asset 上传
+
+### 8.5 构建成功后去哪里下载 APK
+
+构建成功后有两个下载入口。
+
+第一种是在 GitHub Actions 对应的 workflow run 页面中找到 artifact：
+
+- `myapp-mobile-release-apk`
+
+第二种是在仓库的 `Releases` 页面下载本次自动发布的 release asset。
+
+当前自动发布策略：
+
+- 每次成功构建都会创建一个新的 release
+- tag 形如：
+  - `mobile-v1.0.0+build.123`
+- release 名称形如：
+  - `myapp-mobile v1.0.0 build 123`
+
+如果后续移动端要做“检查更新”，更推荐读取 GitHub Releases，而不是直接读 workflow artifact。
+
+### 8.6 当前签名配置说明
+
+当前 Android release 构建已经支持通过 CI 参数注入签名：
+
+- [/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/build.gradle](/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/android/app/build.gradle)
+
+逻辑是：
+
+- 如果 GitHub Actions 提供了完整的 release keystore 参数，则使用正式签名
+- 如果没有提供，则本地仍可回退到 debug 签名配置
+
+建议：
+
+- CI 自动打包始终使用正式 keystore
+- 本地开发调试继续使用 debug keystore 即可
+
+### 8.7 当前注意事项
+
+- 不建议把 keystore 文件直接提交到仓库
+- 不建议把密码写进 `gradle.properties`
+- 如果本地需要代理下载 Gradle 依赖，请把代理配置写到用户目录下的：
+  - `~/.gradle/gradle.properties`
+- 不要把本机专用代理地址提交进项目，否则 GitHub Actions 中可能会因为访问 `127.0.0.1` 代理而构建失败
+
+---
+
+## 9. 当前建议
 
 当前阶段建议这样使用：
 
@@ -238,3 +382,71 @@ cd android
 - 应用商店发布
 
 清晰分开。
+
+---
+
+## 10. App 内“检查更新”配置
+
+当前移动端“检查更新”已经改成：
+
+- 前端调用后端统一接口：
+  - `myapp.api.gateway.get_mobile_release_info_v1`
+- 后端再去读取 GitHub Releases
+
+这样做的好处是：
+
+- 前端不用直接依赖 GitHub API
+- 后续如果从 GitHub Releases 切换到对象存储/CDN，前端不用改
+- 私有仓库场景也更容易通过后端统一处理鉴权
+
+### 10.1 后端需要的站点配置
+
+至少需要在站点配置中提供：
+
+- `myapp_mobile_release_repo`
+
+示例：
+
+```json
+{
+  "myapp_mobile_release_repo": "your-org/your-repo"
+}
+```
+
+后端会默认读取：
+
+- `https://api.github.com/repos/<owner>/<repo>/releases/latest`
+
+### 10.2 可选配置
+
+如果你们后面需要更细一点的控制，还可以补：
+
+- `myapp_mobile_release_api_url`
+  - 手工指定完整 Release API 地址
+- `myapp_mobile_release_token`
+  - 如果 Release 源是私有仓库，可用 token 让后端访问 GitHub API
+- `myapp_mobile_release_asset_suffix`
+  - 默认是 `.apk`
+- `myapp_mobile_release_include_prerelease`
+  - 是否允许读取 prerelease
+
+### 10.3 当前版本比较规则
+
+当前前后端会优先比较：
+
+- `version`
+
+也会尝试从 GitHub Release 的 tag / name 中识别：
+
+- `build.<number>`
+
+但要注意：
+
+- 你们当前 App 自身的版本号还主要是 `app.json` 中的 `version`
+- 如果连续发布多个相同 `version` 的测试 APK，当前 App 端暂时不能稳定识别“同版本号下的新构建”
+
+所以现阶段建议：
+
+- 每次准备发测试包时，同步维护 `frontend/myapp-mobile/app.json` 里的 `version`
+
+后续如果要把“同版本多次测试构建”的更新判断做得更准，再补 Android 原生 build number 策略会更稳。

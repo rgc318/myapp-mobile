@@ -1,5 +1,7 @@
+import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import * as Linking from 'expo-linking';
 
 import { AppShell } from '@/components/app-shell';
 import { LinkOptionInput } from '@/components/link-option-input';
@@ -11,6 +13,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { useFeedback } from '@/providers/feedback-provider';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
 import { getWarehouseCompany, searchWarehouses } from '@/services/purchases';
+import { getMobileReleaseInfo, type MobileReleaseInfo } from '@/services/user';
 
 export default function SettingsScreen() {
   const { saveWorkspacePreferences, workspacePreferences } = useAuth();
@@ -23,7 +26,10 @@ export default function SettingsScreen() {
   const [savedMessage, setSavedMessage] = useState('');
   const [companyError, setCompanyError] = useState('');
   const [warehouseError, setWarehouseError] = useState('');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [releaseInfo, setReleaseInfo] = useState<MobileReleaseInfo | null>(null);
   const { showError, showSuccess } = useFeedback();
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
 
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const surface = useThemeColor({}, 'surface');
@@ -109,6 +115,48 @@ export default function SettingsScreen() {
     setSavedMessage(message);
     showSuccess(message);
   };
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const nextReleaseInfo = await getMobileReleaseInfo({ currentVersion: appVersion });
+      setReleaseInfo(nextReleaseInfo);
+
+      if (!nextReleaseInfo.enabled) {
+        showError('服务端还没有配置移动端 Release 源，请先补充站点配置。');
+        return;
+      }
+
+      if (nextReleaseInfo.hasUpdate) {
+        showSuccess(`发现新版本 ${nextReleaseInfo.latestVersion || nextReleaseInfo.latestTag}。`);
+        return;
+      }
+
+      showSuccess('当前已经是已知最新版本。');
+    } catch (error) {
+      showError(error instanceof Error ? error.message : '检查更新失败，请稍后重试。');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleOpenUpdateLink = async () => {
+    const targetUrl = releaseInfo?.downloadUrl || releaseInfo?.releasePageUrl;
+    if (!targetUrl) {
+      showError('当前没有可用的下载地址。');
+      return;
+    }
+
+    try {
+      await Linking.openURL(targetUrl);
+    } catch {
+      showError('无法打开下载链接，请检查设备网络或链接配置。');
+    }
+  };
+
+  const publishedText = releaseInfo?.publishedAt
+    ? new Date(releaseInfo.publishedAt).toLocaleString()
+    : '尚未检查';
 
   return (
     <AppShell
@@ -247,6 +295,70 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+          应用更新
+        </ThemedText>
+
+        <View style={[styles.groupCard, { backgroundColor: surface, borderColor }]}>
+          <View style={styles.metaBlock}>
+            <ThemedText style={styles.metaLabel}>当前版本</ThemedText>
+            <ThemedText style={styles.metaValue}>{appVersion}</ThemedText>
+          </View>
+
+          <View style={styles.metaBlock}>
+            <ThemedText style={styles.metaLabel}>最新版本</ThemedText>
+            <ThemedText style={styles.metaValue}>
+              {releaseInfo?.latestVersion || releaseInfo?.latestTag || '尚未检查'}
+            </ThemedText>
+          </View>
+
+          <View style={styles.metaBlock}>
+            <ThemedText style={styles.metaLabel}>发布时间</ThemedText>
+            <ThemedText style={styles.metaValue}>{publishedText}</ThemedText>
+          </View>
+
+          <View style={styles.metaBlock}>
+            <ThemedText style={styles.metaLabel}>更新来源</ThemedText>
+            <ThemedText style={styles.metaValue}>{releaseInfo?.repo || '未配置 GitHub Release 源'}</ThemedText>
+          </View>
+
+          {releaseInfo?.releaseNotes ? (
+            <View style={styles.metaBlock}>
+              <ThemedText style={styles.metaLabel}>更新说明</ThemedText>
+              <ThemedText style={styles.metaValue}>{releaseInfo.releaseNotes}</ThemedText>
+            </View>
+          ) : null}
+
+          <View style={styles.inlineActions}>
+            <Pressable
+              disabled={checkingUpdate}
+              onPress={() => void handleCheckUpdate()}
+              style={[styles.inlineButton, { backgroundColor: tintColor }, checkingUpdate ? styles.disabledButton : null]}>
+              <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
+                {checkingUpdate ? '检查中...' : '检查更新'}
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              disabled={!releaseInfo?.downloadUrl && !releaseInfo?.releasePageUrl}
+              onPress={() => void handleOpenUpdateLink()}
+              style={[
+                styles.inlineButton,
+                styles.inlineSecondary,
+                { borderColor },
+                !releaseInfo?.downloadUrl && !releaseInfo?.releasePageUrl ? styles.disabledSecondaryButton : null,
+              ]}>
+              <ThemedText type="defaultSemiBold">打开下载页</ThemedText>
+            </Pressable>
+          </View>
+
+          <ThemedText style={styles.helperText}>
+            当前实现由后端统一读取 GitHub Releases。若连续发布同一 `version` 的测试包，App 端暂时只能识别到同版本，不会自动判断为更新。
+          </ThemedText>
+        </View>
+      </View>
+
       {savedMessage ? <ThemedText style={styles.savedMessage}>{savedMessage}</ThemedText> : null}
 
       <View style={[styles.tipCard, { backgroundColor: surface, borderColor }]}>
@@ -369,8 +481,19 @@ const styles = StyleSheet.create({
   inlineSecondary: {
     borderWidth: 1,
   },
+  disabledButton: {
+    opacity: 0.7,
+  },
+  disabledSecondaryButton: {
+    opacity: 0.5,
+  },
   primaryButtonText: {
     color: '#FFF',
+  },
+  helperText: {
+    color: '#74879D',
+    fontSize: 12,
+    lineHeight: 18,
   },
   savedMessage: {
     color: '#2F7D4A',

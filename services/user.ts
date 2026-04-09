@@ -12,6 +12,27 @@ export type UserProfile = {
 
 export type UserWorkspacePreferences = AppPreferences;
 
+export type MobileReleaseInfo = {
+  enabled: boolean;
+  provider: string;
+  repo: string;
+  currentVersion: string;
+  currentBuildNumber: number | null;
+  latestVersion: string;
+  latestBuildNumber: number | null;
+  latestTag: string;
+  releaseName: string;
+  releaseNotes: string;
+  publishedAt: string | null;
+  downloadUrl: string;
+  releasePageUrl: string;
+  assetName: string;
+  assetSize: number | null;
+  isPrerelease: boolean;
+  hasUpdate: boolean;
+  forceUpdate: boolean;
+};
+
 function normalizeImageUrl(userImage: string | null) {
   if (!userImage) {
     return null;
@@ -109,4 +130,42 @@ export async function updateCurrentUserWorkspacePreferences(
     { authToken },
   );
   return normalizeWorkspacePreferences(data);
+}
+
+function normalizeMobileReleaseInfo(payload: Record<string, unknown> | null | undefined): MobileReleaseInfo {
+  return {
+    enabled: Boolean(payload?.enabled),
+    provider: typeof payload?.provider === 'string' ? payload.provider : 'github',
+    repo: typeof payload?.repo === 'string' ? payload.repo : '',
+    currentVersion: typeof payload?.current_version === 'string' ? payload.current_version : '',
+    currentBuildNumber: typeof payload?.current_build_number === 'number' ? payload.current_build_number : null,
+    latestVersion: typeof payload?.latest_version === 'string' ? payload.latest_version : '',
+    latestBuildNumber: typeof payload?.latest_build_number === 'number' ? payload.latest_build_number : null,
+    latestTag: typeof payload?.latest_tag === 'string' ? payload.latest_tag : '',
+    releaseName: typeof payload?.release_name === 'string' ? payload.release_name : '',
+    releaseNotes: typeof payload?.release_notes === 'string' ? payload.release_notes : '',
+    publishedAt: typeof payload?.published_at === 'string' ? payload.published_at : null,
+    downloadUrl: typeof payload?.download_url === 'string' ? payload.download_url : '',
+    releasePageUrl: typeof payload?.release_page_url === 'string' ? payload.release_page_url : '',
+    assetName: typeof payload?.asset_name === 'string' ? payload.asset_name : '',
+    assetSize: typeof payload?.asset_size === 'number' ? payload.asset_size : null,
+    isPrerelease: Boolean(payload?.is_prerelease),
+    hasUpdate: Boolean(payload?.has_update),
+    forceUpdate: Boolean(payload?.force_update),
+  } satisfies MobileReleaseInfo;
+}
+
+export async function getMobileReleaseInfo(
+  payload?: { currentVersion?: string | null; currentBuildNumber?: number | null },
+  authToken?: string | null,
+) {
+  const data = await callGatewayMethod<Record<string, unknown>>(
+    'myapp.api.gateway.get_mobile_release_info_v1',
+    {
+      current_version: payload?.currentVersion ?? null,
+      current_build_number: payload?.currentBuildNumber ?? null,
+    },
+    { authToken },
+  );
+  return normalizeMobileReleaseInfo(data);
 }
