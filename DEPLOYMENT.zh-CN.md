@@ -116,6 +116,55 @@ npx eas build --platform android --profile release-apk --non-interactive --wait
 
 ---
 
+## 5.1 后端地址配置位置
+
+当前 mobile 连接后端的基础地址主要配置在：
+
+- [/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/config.ts](/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/config.ts)
+
+优先级是：
+
+1. `EXPO_PUBLIC_API_BASE_URL`
+2. `lib/config.ts` 中的默认地址
+3. App 设置页中的运行时覆盖值
+
+注意：
+
+- 打包后的 APK 不能使用 `127.0.0.1`
+- 必须使用手机能够访问到的局域网 IP 或公网域名
+- 如果手机浏览器能访问后端，但 App 连不上，优先检查：
+  - base URL 是否写对
+  - Android release 是否允许明文 HTTP
+
+---
+
+## 5.2 iOS 构建限制
+
+当前 iOS 构建如果使用：
+
+```bash
+npx eas-cli build --platform ios --profile preview
+```
+
+还需要满足 Apple 开发者体系要求。
+
+如果 EAS 报：
+
+- `You have no team associated with your Apple account`
+
+通常表示：
+
+- 当前 Apple ID 没有加入 Apple Developer Team
+- 或没有 Apple Developer Program 付费资格
+
+这意味着：
+
+- Android 可以比较自由地打测试 APK
+- iOS 如果没有开发者团队，通常只能先做本地开发/模拟器调试
+- 不能顺利继续走正式的云端签名与分发构建
+
+---
+
 ## 6. Android release 连接 HTTP 后端
 
 当前 staging 后端还是：
