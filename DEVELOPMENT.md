@@ -3152,6 +3152,10 @@ This round focused on making sales and purchase creation flows behave more like 
   - the outer `扫码添加` card was removed
   - sales order now keeps a single `选择商品` entry
   - the order page clearly points users into the shared product-search page for both search and future scan-add flows
+  - customer selection no longer uses an inline dropdown under the input
+    - the customer field now opens a bottom-sheet style selector
+    - the selector provides search, loading, empty state, scrolling, and current selection state
+    - this avoids Android keyboard / blur / nested-scroll conflicts seen with inline customer dropdowns
   - the fixed bottom action bar was rebuilt for real mobile widths:
     - `订单总额` and amount now live on the first row
     - action buttons now live on a dedicated second row
@@ -3176,6 +3180,8 @@ This round focused on making sales and purchase creation flows behave more like 
   - right-side inline action text is now supported
   - dropdown open/close state no longer relies only on raw input focus
   - inline action can now act as a true open/close control instead of a second pseudo-input
+  - dropdown taps now persist through keyboard focus changes more reliably
+  - this component is still best suited for lightweight link fields; larger mobile pickers should prefer a bottom sheet or dedicated search page
 - purchase-order create flow was tightened:
   - the top intro and repeated guidance blocks were reduced
   - optional fields moved later in the form
@@ -6894,6 +6900,9 @@ This round focused on making product creation practical on mobile while keeping 
     - building `uomConversions` for submission
 - product detail edit flow was corrected around warehouse and conversion state:
   - detail screen now honors the warehouse passed from product creation, even when initial stock quantity is `0`
+  - switching the current warehouse now counts as an inventory edit even if the quantity input is left empty
+  - if the selected warehouse has no existing stock record, saving with an empty quantity sends target quantity `0`
+  - this lets the backend initialize a real zero-stock warehouse record instead of treating the save as "no changes"
   - conversion summary cards and edit inputs now share the same display semantics instead of maintaining separate ad-hoc logic
 - barcode flow feedback was made less abrupt:
   - barcode miss no longer jumps directly into product creation
