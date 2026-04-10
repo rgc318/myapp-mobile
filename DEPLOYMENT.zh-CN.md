@@ -246,6 +246,18 @@ cd android
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
+另外建议在同一页面的 `Variables` 中添加：
+
+- `EXPO_PUBLIC_API_BASE_URL`
+
+说明：
+
+- `EXPO_PUBLIC_API_BASE_URL`
+  - 用于在 GitHub Actions 打包时注入移动端默认后端地址
+  - 例如：
+    - `http://39.104.204.79:18888`
+  - 这类地址属于构建配置，更适合放在 `Variables` 而不是 `Secrets`
+
 说明：
 
 - `ANDROID_KEYSTORE_BASE64`
