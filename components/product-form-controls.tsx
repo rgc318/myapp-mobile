@@ -3,6 +3,12 @@ import { KeyboardTypeOptions, Modal, Pressable, ScrollView, StyleSheet, TextInpu
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
+export type PickerOption = {
+  value: string;
+  label: string;
+  description?: string | null;
+};
+
 export function ProductTextField({
   label,
   value,
@@ -70,6 +76,8 @@ export function ProductSelectorField({
   onPress,
   required = false,
   disabled = false,
+  helperText,
+  errorText,
 }: {
   label: string;
   value: string;
@@ -78,10 +86,14 @@ export function ProductSelectorField({
   onPress: () => void;
   required?: boolean;
   disabled?: boolean;
+  helperText?: string;
+  errorText?: string;
 }) {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
+  const dangerColor = useThemeColor({}, 'danger');
+  const textMuted = useThemeColor({}, 'icon');
 
   return (
     <View style={[styles.fieldBlock, disabled ? styles.fieldBlockDisabled : null]}>
@@ -98,14 +110,26 @@ export function ProductSelectorField({
       <Pressable
         disabled={disabled}
         onPress={onPress}
-        style={[styles.selectorField, { backgroundColor: surfaceMuted, borderColor }, disabled ? styles.inputDisabled : null]}>
-        <ThemedText numberOfLines={1} style={styles.selectorFieldValue} type="defaultSemiBold">
+        style={[
+          styles.selectorField,
+          {
+            backgroundColor: surfaceMuted,
+            borderColor: errorText ? dangerColor : borderColor,
+          },
+          disabled ? styles.inputDisabled : null,
+        ]}>
+        <ThemedText
+          numberOfLines={1}
+          style={[styles.selectorFieldValue, !value ? { color: textMuted } : null]}
+          type="defaultSemiBold">
           {value || placeholder}
         </ThemedText>
         <ThemedText style={{ color: tintColor, opacity: disabled ? 0.5 : 1 }} type="defaultSemiBold">
           {disabled ? '只读' : actionLabel}
         </ThemedText>
       </Pressable>
+      {errorText ? <ThemedText style={[styles.helperText, { color: dangerColor }]}>{errorText}</ThemedText> : null}
+      {!errorText && helperText ? <ThemedText style={[styles.helperText, { color: textMuted }]}>{helperText}</ThemedText> : null}
     </View>
   );
 }
@@ -196,6 +220,113 @@ export function ProductPickerSheet({
   );
 }
 
+export function EntityPickerSheet({
+  visible,
+  title,
+  hint,
+  placeholder,
+  query,
+  onChangeQuery,
+  onClose,
+  options,
+  selectedValue,
+  onSelect,
+  isLoading = false,
+  emptyText = '没有找到匹配项',
+}: {
+  visible: boolean;
+  title: string;
+  hint: string;
+  placeholder: string;
+  query: string;
+  onChangeQuery: (value: string) => void;
+  onClose: () => void;
+  options: PickerOption[];
+  selectedValue?: string;
+  onSelect: (value: string) => void;
+  isLoading?: boolean;
+  emptyText?: string;
+}) {
+  const surface = useThemeColor({}, 'surface');
+  const surfaceMuted = useThemeColor({}, 'surfaceMuted');
+  const borderColor = useThemeColor({}, 'border');
+  const tintColor = useThemeColor({}, 'tint');
+  const textMuted = useThemeColor({}, 'icon');
+
+  return (
+    <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.modalBackdrop}>
+        <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
+        <View style={[styles.modalSheet, { backgroundColor: surface }]}>
+          <View style={styles.modalHandle} />
+          <View style={styles.modalHeader}>
+            <ThemedText style={styles.modalTitle} type="title">
+              {title}
+            </ThemedText>
+            <ThemedText style={styles.modalHint}>{hint}</ThemedText>
+          </View>
+          <View style={[styles.modalSearchWrap, { backgroundColor: surfaceMuted, borderColor }]}>
+            <TextInput
+              autoCorrect={false}
+              onChangeText={onChangeQuery}
+              placeholder={placeholder}
+              placeholderTextColor="rgba(31,42,55,0.38)"
+              style={styles.modalSearchInput}
+              value={query}
+            />
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.modalList}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            {isLoading ? (
+              <View style={[styles.emptyState, { backgroundColor: surfaceMuted }]}>
+                <ThemedText type="defaultSemiBold">正在读取候选项...</ThemedText>
+                <ThemedText style={styles.modalHint}>请稍候。</ThemedText>
+              </View>
+            ) : options.length ? (
+              options.map((option) => {
+                const active = option.value === selectedValue;
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => onSelect(option.value)}
+                    style={[
+                      styles.modalOption,
+                      {
+                        backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted,
+                        borderColor,
+                      },
+                    ]}>
+                    <View style={styles.modalOptionCopy}>
+                      <ThemedText numberOfLines={1} style={styles.modalOptionValue} type="defaultSemiBold">
+                        {option.label}
+                      </ThemedText>
+                      {option.description ? (
+                        <ThemedText numberOfLines={2} style={[styles.modalOptionDescription, { color: textMuted }]}>
+                          {option.description}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                      {active ? '当前' : '选择'}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })
+            ) : (
+              <View style={[styles.emptyState, { backgroundColor: surfaceMuted }]}>
+                <ThemedText type="defaultSemiBold">{emptyText}</ThemedText>
+                <ThemedText style={styles.modalHint}>换个关键词试试。</ThemedText>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   fieldBlock: {
     gap: 8,
@@ -246,6 +377,11 @@ const styles = StyleSheet.create({
   selectorFieldValue: {
     flex: 1,
     paddingRight: 12,
+  },
+  helperText: {
+    fontSize: 13,
+    lineHeight: 18,
+    paddingLeft: 4,
   },
   modalBackdrop: {
     backgroundColor: 'rgba(15,23,42,0.28)',
@@ -301,9 +437,17 @@ const styles = StyleSheet.create({
     minHeight: 58,
     paddingHorizontal: 14,
   },
-  modalOptionValue: {
+  modalOptionCopy: {
     flex: 1,
+    gap: 2,
     paddingRight: 12,
+  },
+  modalOptionValue: {
+    flexShrink: 1,
+  },
+  modalOptionDescription: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   emptyState: {
     borderRadius: 18,

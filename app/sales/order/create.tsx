@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinkOptionInput } from '@/components/link-option-input';
 import { DateFieldInput } from '@/components/date-field-input';
 import { MobilePageHeader } from '@/components/mobile-page-header';
+import { EntityPickerSheet, ProductSelectorField, type PickerOption } from '@/components/product-form-controls';
 import { SalesOrderItemEditor } from '@/components/sales-order-item-editor';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -303,6 +304,10 @@ export default function SalesOrderCreateScreen() {
   const [customerError, setCustomerError] = useState('');
   const [companyError, setCompanyError] = useState('');
   const [showOrderMeta, setShowOrderMeta] = useState(false);
+  const [customerPickerVisible, setCustomerPickerVisible] = useState(false);
+  const [customerPickerQuery, setCustomerPickerQuery] = useState('');
+  const [customerPickerOptions, setCustomerPickerOptions] = useState<PickerOption[]>([]);
+  const [isLoadingCustomerPicker, setIsLoadingCustomerPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMode, setSubmitMode] = useState<SubmitMode>('save');
   const [showQuickCreateConfirm, setShowQuickCreateConfirm] = useState(false);
@@ -531,6 +536,44 @@ export default function SalesOrderCreateScreen() {
     }
   }, [draftItems, message, messageTone]);
 
+  useEffect(() => {
+    if (!customerPickerVisible) {
+      setCustomerPickerQuery('');
+      setCustomerPickerOptions([]);
+      setIsLoadingCustomerPicker(false);
+      return;
+    }
+
+    let active = true;
+    setIsLoadingCustomerPicker(true);
+    const timer = setTimeout(() => {
+      void searchCustomers(customerPickerQuery)
+        .then((options) => {
+          if (!active) {
+            return;
+          }
+
+          setCustomerPickerOptions(
+            options.map((option) => ({
+              value: option.value,
+              label: option.label,
+              description: option.description ?? null,
+            })),
+          );
+        })
+        .finally(() => {
+          if (active) {
+            setIsLoadingCustomerPicker(false);
+          }
+        });
+    }, 180);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [customerPickerQuery, customerPickerVisible]);
+
 
 
   useEffect(() => {
@@ -710,8 +753,20 @@ export default function SalesOrderCreateScreen() {
   const freightAmount = 0;
   const receivableAmount = goodsAmount - discountAmount + freightAmount;
 
-  const loadCustomers = (query: string) => searchCustomers(query);
   const loadCompanies = (query: string) => searchCompanies(query);
+
+  const openCustomerPicker = () => {
+    setCustomerPickerVisible(true);
+  };
+
+  const closeCustomerPicker = () => {
+    setCustomerPickerVisible(false);
+  };
+
+  const handleCustomerSelect = (value: string) => {
+    handleCustomerChange(value);
+    closeCustomerPicker();
+  };
 
   const validateLinks = async () => {
     let valid = true;
@@ -996,13 +1051,14 @@ export default function SalesOrderCreateScreen() {
             </View>
           </View>
 
-          <TopFieldRow
+          <ProductSelectorField
+            actionLabel="选择"
             errorText={customerError}
-            helperText="选择当前订单的往来客户"
+            helperText="点击后在弹层中搜索并选择当前订单的往来客户"
             label="客户"
-            loadOptions={loadCustomers}
-            onChangeText={handleCustomerChange}
+            onPress={openCustomerPicker}
             placeholder="请选择客户"
+            required
             value={customer}
           />
 
@@ -1467,6 +1523,21 @@ export default function SalesOrderCreateScreen() {
         </View>
       </Modal>
 
+      <EntityPickerSheet
+        emptyText="没有匹配的客户"
+        hint="搜索后选择一个客户，选中后会自动带入默认联系人和地址。"
+        isLoading={isLoadingCustomerPicker}
+        onChangeQuery={setCustomerPickerQuery}
+        onClose={closeCustomerPicker}
+        onSelect={handleCustomerSelect}
+        options={customerPickerOptions}
+        placeholder="搜索客户名称"
+        query={customerPickerQuery}
+        selectedValue={customer}
+        title="选择客户"
+        visible={customerPickerVisible}
+      />
+
       <Modal
         animationType="fade"
         onRequestClose={() => setShowQuickForceConfirm(false)}
@@ -1718,6 +1789,7 @@ const styles = StyleSheet.create({
   },
   quickActionButton: {
     alignItems: 'center',
+    flex: 1,
     flexDirection: 'row',
     gap: 10,
     justifyContent: 'flex-start',
@@ -1726,7 +1798,9 @@ const styles = StyleSheet.create({
   },
   quickActionCopy: {
     flex: 1,
+    flexShrink: 1,
     minWidth: 0,
+    paddingRight: 4,
   },
   quickActionIcon: {
     alignItems: 'center',

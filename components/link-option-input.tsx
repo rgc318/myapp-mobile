@@ -34,6 +34,8 @@ export function LinkOptionInput({
   const [loading, setLoading] = useState(false);
   const [hasTypedSinceFocus, setHasTypedSinceFocus] = useState(false);
   const inputRef = useRef<TextInput | null>(null);
+  const closeDropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectingOptionRef = useRef(false);
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const dangerColor = useThemeColor({}, 'danger');
@@ -63,13 +65,44 @@ export function LinkOptionInput({
     };
   }, [dropdownOpen, hasTypedSinceFocus, loadOptions, value]);
 
+  useEffect(() => {
+    return () => {
+      if (closeDropdownTimerRef.current) {
+        clearTimeout(closeDropdownTimerRef.current);
+      }
+    };
+  }, []);
+
+  const closeDropdown = () => {
+    setFocused(false);
+    setDropdownOpen(false);
+  };
+
+  const scheduleCloseDropdown = () => {
+    if (closeDropdownTimerRef.current) {
+      clearTimeout(closeDropdownTimerRef.current);
+    }
+    closeDropdownTimerRef.current = setTimeout(() => {
+      if (selectingOptionRef.current) {
+        return;
+      }
+      closeDropdown();
+    }, 180);
+  };
+
   const handleSelect = (nextValue: string) => {
+    selectingOptionRef.current = true;
+    if (closeDropdownTimerRef.current) {
+      clearTimeout(closeDropdownTimerRef.current);
+    }
     onChangeText(nextValue);
     onOptionSelect?.(nextValue);
     setOptions([]);
-    setFocused(false);
-    setDropdownOpen(false);
+    closeDropdown();
     inputRef.current?.blur();
+    setTimeout(() => {
+      selectingOptionRef.current = false;
+    }, 0);
   };
 
   return (
@@ -84,16 +117,14 @@ export function LinkOptionInput({
             onChangeText(nextValue);
           }}
           onFocus={() => {
+            if (closeDropdownTimerRef.current) {
+              clearTimeout(closeDropdownTimerRef.current);
+            }
             setFocused(true);
             setDropdownOpen(true);
             setHasTypedSinceFocus(false);
           }}
-          onBlur={() => {
-            setTimeout(() => {
-              setFocused(false);
-              setDropdownOpen(false);
-            }, 120);
-          }}
+          onBlur={scheduleCloseDropdown}
           placeholder={placeholder}
           style={[
             styles.input,
@@ -136,6 +167,8 @@ export function LinkOptionInput({
             </View>
             <ScrollView
               bounces={options.length > 4}
+              keyboardDismissMode="none"
+              keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
               showsVerticalScrollIndicator={false}
               style={styles.dropdownScroll}>
@@ -147,7 +180,12 @@ export function LinkOptionInput({
               options.length ? (
                 options.map((option, index) => (
                   <View key={`${option.value}-${index}`}>
-                    <Pressable onPress={() => handleSelect(option.value)} style={styles.optionRow}>
+                    <Pressable
+                      onPress={() => handleSelect(option.value)}
+                      onPressIn={() => {
+                        selectingOptionRef.current = true;
+                      }}
+                      style={styles.optionRow}>
                       <View style={styles.optionText}>
                         <ThemedText type="defaultSemiBold">{option.label}</ThemedText>
                         {option.description ? (

@@ -719,10 +719,13 @@ export default function ProductDetailScreen() {
         retailFactorChanged;
 
       const warehouseStockQtyValue = toNumberOrNull(draftWarehouseStockQty);
+      const inventoryWarehouseChanged =
+        normalizeComparableText(trimmedWarehouse) !== normalizeComparableText(detail.warehouse);
       const inventoryQtyChanged = !areOptionalNumbersEqual(warehouseStockQtyValue, selectedWarehouseQty);
       const inventoryUomChanged =
         normalizeComparableText(trimmedWarehouseStockUom) !== normalizeComparableText(currentDisplayStockUom);
-      const inventoryChanged = inventoryQtyChanged || (warehouseStockQtyValue != null && inventoryUomChanged);
+      const inventoryChanged =
+        inventoryWarehouseChanged || inventoryQtyChanged || (warehouseStockQtyValue != null && inventoryUomChanged);
 
       if (!baseInfoChanged && !standardRateChanged && !wholesaleRateChanged && !retailRateChanged && !buyingRateChanged && !salesConfigChanged && !inventoryChanged) {
         showSuccess('没有检测到需要保存的修改');
@@ -808,8 +811,10 @@ export default function ProductDetailScreen() {
       }
 
       if (inventoryChanged) {
+        const nextWarehouseStockQty =
+          warehouseStockQtyValue ?? selectedWarehouseQty ?? 0;
         payload.warehouse = trimmedWarehouse;
-        payload.warehouseStockQty = warehouseStockQtyValue;
+        payload.warehouseStockQty = nextWarehouseStockQty;
         payload.warehouseStockUom = trimmedWarehouseStockUom || trimmedStockUom;
       }
 
