@@ -69,14 +69,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return next;
       }
 
-      const remotePreferences = await getCurrentUserWorkspacePreferences(token);
       const storedPreferences = getStoredAppPreferences({ owner: currentUser });
       const fallbackDefaults = getDefaultPreferences();
+      let remotePreferences: AppPreferences | null = null;
+
+      try {
+        remotePreferences = await getCurrentUserWorkspacePreferences(token);
+      } catch {
+        remotePreferences = null;
+      }
+
       const resolved = {
         defaultCompany:
-          remotePreferences.defaultCompany || storedPreferences?.defaultCompany || fallbackDefaults.defaultCompany,
+          remotePreferences?.defaultCompany || storedPreferences?.defaultCompany || fallbackDefaults.defaultCompany,
         defaultWarehouse:
-          remotePreferences.defaultWarehouse || storedPreferences?.defaultWarehouse || fallbackDefaults.defaultWarehouse,
+          remotePreferences?.defaultWarehouse || storedPreferences?.defaultWarehouse || fallbackDefaults.defaultWarehouse,
       } satisfies AppPreferences;
 
       replaceAppPreferences(resolved, { owner: currentUser });
@@ -84,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const shouldMigrateStoredPreferences =
         Boolean(storedPreferences) &&
+        Boolean(remotePreferences) &&
         (!remotePreferences.defaultCompany || !remotePreferences.defaultWarehouse);
 
       if (shouldMigrateStoredPreferences) {

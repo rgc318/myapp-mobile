@@ -2,11 +2,22 @@ import { Platform } from 'react-native';
 
 const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 const API_BASE_URL_KEY = 'myapp-mobile.api-base-url';
+const WEB_BACKEND_PORT = '18081';
 
 let memoryOverride: string | null = null;
 
+function getWebDefaultApiBaseUrl() {
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:${WEB_BACKEND_PORT}`;
+  }
+
+  return 'http://192.168.31.63:18081';
+}
+
 function getDefaultApiBaseUrl() {
-  return envBaseUrl || (Platform.OS === 'web' ? 'http://192.168.31.63:18081' : 'http://192.168.31.63:18081');
+  return envBaseUrl || (Platform.OS === 'web' ? getWebDefaultApiBaseUrl() : 'http://192.168.31.63:18081');
+  // return envBaseUrl || (Platform.OS === 'web' ? `${window.location.protocol}//${window.location.hostname}:28080` : 'http://192.168.31.229:28080');
+  // return envBaseUrl || (Platform.OS === 'web' ? `${window.location.protocol}//${window.location.hostname}:18888` : 'http://39.104.204.79:18888');
 }
 
 function canUseWebStorage() {

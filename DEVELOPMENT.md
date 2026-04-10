@@ -267,6 +267,9 @@ This round split the old mixed local settings into account-level workspace prefe
   - files:
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/providers/auth-provider.tsx`
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/user.ts`
+- if the workspace-preferences request fails during login or session bootstrap:
+  - frontend now falls back to owner-local stored preferences or built-in defaults
+  - this failure no longer blocks sign-in by itself
 - the settings page now saves default company / default warehouse to backend account preferences instead of device-only local storage
   - file:
     - `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/settings.tsx`
@@ -2832,6 +2835,11 @@ Therefore:
 - browser local storage is not shared between them
 - cached backend URL is not shared between them
 - session/cors behavior must be validated separately for each origin
+- web preview should not hardcode one LAN backend host for every browser origin
+  - current default behavior now derives the backend target from the active browser hostname
+  - examples:
+    - `http://localhost:8081` -> `http://localhost:18081`
+    - `http://192.168.31.63:8081` -> `http://192.168.31.63:18081`
 
 If LAN login appears broken while localhost login works:
 
@@ -3306,13 +3314,15 @@ Do not use references as:
   - login endpoint: `POST /api/method/login`
   - session restore endpoint: `GET /api/method/frappe.auth.get_logged_user`
   - logout endpoint: `POST /api/method/logout`
-  - auth layer already reserves optional token mode
-  - if future login response contains `token` or `access_token`, frontend will automatically switch to token mode
-  - if no token is returned, frontend keeps using ERPNext session mode
-  - frontend should use `EXPO_PUBLIC_API_BASE_URL` to point to the current backend
-  - for local web preview, default backend target is `http://localhost:8080`
-  - web preview additionally stores the last logged-in username in browser local storage to improve refresh recovery
-  - local web preview requires backend `allow_cors` to include `http://localhost:8081`
+- auth layer already reserves optional token mode
+- if future login response contains `token` or `access_token`, frontend will automatically switch to token mode
+- if no token is returned, frontend keeps using ERPNext session mode
+- frontend should use `EXPO_PUBLIC_API_BASE_URL` to point to the current backend
+- for local web preview, default backend target now follows the current browser hostname and maps to port `18081`
+  - `localhost` preview defaults to `http://localhost:18081`
+  - LAN preview defaults to `http://<current-host>:18081`
+- web preview additionally stores the last logged-in username in browser local storage to improve refresh recovery
+- local web preview requires backend `allow_cors` to include `http://localhost:8081`
 
 ### Home
 
