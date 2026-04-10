@@ -421,7 +421,7 @@ cd frontend/myapp-mobile/android
 
 ```json
 {
-  "myapp_mobile_release_repo": "your-org/your-repo"
+  "myapp_mobile_release_repo": "rgc318/myapp-mobile"
 }
 ```
 
