@@ -30,6 +30,14 @@ export default function SettingsScreen() {
   const [releaseInfo, setReleaseInfo] = useState<MobileReleaseInfo | null>(null);
   const { showError, showSuccess } = useFeedback();
   const appVersion = Constants.expoConfig?.version || '1.0.0';
+  const currentBuildNumber = (() => {
+    const candidate = Constants.nativeBuildVersion;
+    if (typeof candidate !== 'string' || !candidate.trim()) {
+      return null;
+    }
+    const parsed = Number.parseInt(candidate, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  })();
 
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const surface = useThemeColor({}, 'surface');
@@ -119,7 +127,10 @@ export default function SettingsScreen() {
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
     try {
-      const nextReleaseInfo = await getMobileReleaseInfo({ currentVersion: appVersion });
+      const nextReleaseInfo = await getMobileReleaseInfo({
+        currentVersion: appVersion,
+        currentBuildNumber,
+      });
       setReleaseInfo(nextReleaseInfo);
 
       if (!nextReleaseInfo.enabled) {
@@ -156,6 +167,9 @@ export default function SettingsScreen() {
 
   const publishedText = releaseInfo?.publishedAt
     ? new Date(releaseInfo.publishedAt).toLocaleString()
+    : '尚未检查';
+  const releaseSourceText = releaseInfo
+    ? releaseInfo.repo || '未配置 GitHub Release 源'
     : '尚未检查';
 
   return (
@@ -303,7 +317,9 @@ export default function SettingsScreen() {
         <View style={[styles.groupCard, { backgroundColor: surface, borderColor }]}>
           <View style={styles.metaBlock}>
             <ThemedText style={styles.metaLabel}>当前版本</ThemedText>
-            <ThemedText style={styles.metaValue}>{appVersion}</ThemedText>
+            <ThemedText style={styles.metaValue}>
+              {currentBuildNumber ? `${appVersion}+build.${currentBuildNumber}` : appVersion}
+            </ThemedText>
           </View>
 
           <View style={styles.metaBlock}>
@@ -320,7 +336,7 @@ export default function SettingsScreen() {
 
           <View style={styles.metaBlock}>
             <ThemedText style={styles.metaLabel}>更新来源</ThemedText>
-            <ThemedText style={styles.metaValue}>{releaseInfo?.repo || '未配置 GitHub Release 源'}</ThemedText>
+            <ThemedText style={styles.metaValue}>{releaseSourceText}</ThemedText>
           </View>
 
           {releaseInfo?.releaseNotes ? (
@@ -354,7 +370,8 @@ export default function SettingsScreen() {
           </View>
 
           <ThemedText style={styles.helperText}>
-            当前实现由后端统一读取 GitHub Releases。若连续发布同一 `version` 的测试包，App 端暂时只能识别到同版本，不会自动判断为更新。
+            当前实现由后端统一读取 GitHub Releases。Android release 构建应同步递增内部 build number，这样同一 `version`
+            下的新测试包才能被稳定识别为更新。
           </ThemedText>
         </View>
       </View>

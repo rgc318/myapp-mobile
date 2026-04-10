@@ -249,6 +249,18 @@ This round added the first app-update check path for Android test distribution.
 - app-side version comparison is still mainly based on `app.json` version
 - if multiple test APKs are published under the same app version, the current app cannot always distinguish them as different builds
 
+### Android Build Number Rule
+
+- GitHub Release tag/name may contain `build.<run_number>`, but that alone does not change the installed APK identity
+- Android-side update comparison only becomes reliable when the packaged APK also increments its internal `versionCode`
+- current release workflow now passes:
+  - `MYAPP_ANDROID_VERSION_CODE=${GITHUB_RUN_NUMBER}`
+  - `MYAPP_ANDROID_VERSION_NAME=<package.json version>`
+- settings page now sends both:
+  - `currentVersion`
+  - `currentBuildNumber`
+  to the backend release-info API
+
 ## Account Workspace Preferences (2026-04-08)
 
 This round split the old mixed local settings into account-level workspace preferences and device-level environment settings.

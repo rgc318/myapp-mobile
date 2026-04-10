@@ -3,8 +3,15 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 import java.text.SimpleDateFormat
+import java.util.Properties
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -91,11 +98,13 @@ android {
 
     namespace 'com.anonymous.myappmobile'
     defaultConfig {
+        def resolvedVersionCode = (findProperty("MYAPP_ANDROID_VERSION_CODE") ?: "1").toInteger()
+        def resolvedVersionName = String.valueOf(findProperty("MYAPP_ANDROID_VERSION_NAME") ?: "1.0.0")
         applicationId 'com.anonymous.myappmobile'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode resolvedVersionCode
+        versionName resolvedVersionName
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -107,10 +116,10 @@ android {
             keyPassword 'android'
         }
         release {
-            def releaseStoreFile = findProperty("MYAPP_UPLOAD_STORE_FILE")
-            def releaseStorePassword = findProperty("MYAPP_UPLOAD_STORE_PASSWORD")
-            def releaseKeyAlias = findProperty("MYAPP_UPLOAD_KEY_ALIAS")
-            def releaseKeyPassword = findProperty("MYAPP_UPLOAD_KEY_PASSWORD")
+            def releaseStoreFile = findProperty("MYAPP_UPLOAD_STORE_FILE") ?: keystoreProperties.getProperty("MYAPP_UPLOAD_STORE_FILE")
+            def releaseStorePassword = findProperty("MYAPP_UPLOAD_STORE_PASSWORD") ?: keystoreProperties.getProperty("MYAPP_UPLOAD_STORE_PASSWORD")
+            def releaseKeyAlias = findProperty("MYAPP_UPLOAD_KEY_ALIAS") ?: keystoreProperties.getProperty("MYAPP_UPLOAD_KEY_ALIAS")
+            def releaseKeyPassword = findProperty("MYAPP_UPLOAD_KEY_PASSWORD") ?: keystoreProperties.getProperty("MYAPP_UPLOAD_KEY_PASSWORD")
 
             if (releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword) {
                 storeFile file(releaseStoreFile)

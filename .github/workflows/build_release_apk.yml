@@ -80,9 +80,12 @@ jobs:
           MYAPP_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           MYAPP_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
           chmod +x android/gradlew
           cd android
           ./gradlew assembleRelease \
+            -PMYAPP_ANDROID_VERSION_CODE="${GITHUB_RUN_NUMBER}" \
+            -PMYAPP_ANDROID_VERSION_NAME="$APP_VERSION" \
             -PMYAPP_UPLOAD_STORE_FILE="$MYAPP_UPLOAD_STORE_FILE" \
             -PMYAPP_UPLOAD_STORE_PASSWORD="$MYAPP_UPLOAD_STORE_PASSWORD" \
             -PMYAPP_UPLOAD_KEY_ALIAS="$MYAPP_UPLOAD_KEY_ALIAS" \
