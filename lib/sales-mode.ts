@@ -62,13 +62,7 @@ export function getAvailableUoms(source: SalesModeDefaultsSource) {
   ]);
 }
 
-function firstMeaningfulNumber(values: (number | null | undefined)[]) {
-  for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-      return value;
-    }
-  }
-
+function firstFiniteNumber(values: (number | null | undefined)[]) {
   for (const value of values) {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return value;
@@ -80,20 +74,13 @@ function firstMeaningfulNumber(values: (number | null | undefined)[]) {
 
 export function getModeDefaultRate(source: SalesModeDefaultsSource, mode: SalesMode) {
   const summary = source.priceSummary;
-  const preferred =
-    mode === 'retail'
-      ? firstMeaningfulNumber([
-          summary?.retailRate ?? null,
-          summary?.currentRate ?? null,
-          source.price ?? null,
-          summary?.standardSellingRate ?? null,
-        ])
-      : firstMeaningfulNumber([
-          summary?.wholesaleRate ?? null,
-          summary?.currentRate ?? null,
-          source.price ?? null,
-          summary?.standardSellingRate ?? null,
-        ]);
+  const modeRate = mode === 'retail' ? summary?.retailRate : summary?.wholesaleRate;
+  const preferred = firstFiniteNumber([
+    modeRate ?? null,
+    summary?.currentRate ?? null,
+    source.price ?? null,
+    summary?.standardSellingRate ?? null,
+  ]);
 
   return preferred;
 }

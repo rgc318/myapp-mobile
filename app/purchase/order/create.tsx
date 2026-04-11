@@ -166,6 +166,7 @@ export default function PurchaseOrderCreateScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMode, setSubmitMode] = useState<SubmitMode>('save');
   const [showQuickCreateConfirm, setShowQuickCreateConfirm] = useState(false);
+  const [submitErrorMessage, setSubmitErrorMessage] = useState('');
   const [quickCreateMode, setQuickCreateMode] = useState<QuickCreateMode>('invoice');
   const [quickPaymentMethod, setQuickPaymentMethod] = useState<(typeof QUICK_PAYMENT_METHODS)[number]>('微信支付');
   const [supplierError, setSupplierError] = useState('');
@@ -191,6 +192,12 @@ export default function PurchaseOrderCreateScreen() {
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
+  const effectivePurchaseCurrency =
+    supplierContext?.suggestions.currency ?? supplierContext?.supplier.defaultCurrency ?? null;
+  const supplierDefaultCurrency = supplierContext?.supplier.defaultCurrency ?? null;
+  const showCurrencyMismatchHint =
+    Boolean(effectivePurchaseCurrency && supplierDefaultCurrency) &&
+    effectivePurchaseCurrency !== supplierDefaultCurrency;
 
   useEffect(() => {
     if (typeof supplierParam === 'string' && supplierParam.trim()) {
@@ -761,6 +768,7 @@ export default function PurchaseOrderCreateScreen() {
 
     setSupplierError('');
     setCompanyError('');
+    setSubmitErrorMessage('');
 
     if (!trimmedSupplier) {
       setSupplierError('请先选择供应商。');
@@ -781,7 +789,7 @@ export default function PurchaseOrderCreateScreen() {
     }
 
     if (firstInvalidSection) {
-      showError(
+      setSubmitErrorMessage(
         firstInvalidSection === 'basic'
           ? !isValidIsoDate(transactionDate)
             ? '请先选择有效下单日期。'
@@ -823,7 +831,7 @@ export default function PurchaseOrderCreateScreen() {
       );
 
       if (warehouses.includes(false)) {
-        showError('有采购明细使用了不存在的仓库，请检查后再提交。');
+        setSubmitErrorMessage('有采购明细使用了不存在的仓库，请检查后再提交。');
         return;
       }
 
@@ -836,7 +844,7 @@ export default function PurchaseOrderCreateScreen() {
               transactionDate,
               scheduleDate,
               defaultWarehouse: normalizeOptionalText(defaultWarehouse),
-              currency: supplierContext?.suggestions.currency ?? supplierContext?.supplier.defaultCurrency ?? null,
+              currency: effectivePurchaseCurrency,
               supplierRef,
               remarks,
               immediateReceive: true,
@@ -851,7 +859,7 @@ export default function PurchaseOrderCreateScreen() {
               transactionDate,
               scheduleDate,
               defaultWarehouse: normalizeOptionalText(defaultWarehouse),
-              currency: supplierContext?.suggestions.currency ?? supplierContext?.supplier.defaultCurrency ?? null,
+              currency: effectivePurchaseCurrency,
               supplierRef,
               remarks,
             }) };
@@ -894,7 +902,7 @@ export default function PurchaseOrderCreateScreen() {
         });
       }
     } catch (error) {
-      showError(normalizeAppError(error).message);
+      setSubmitErrorMessage(normalizeAppError(error).message);
     } finally {
       setIsSubmitting(false);
       setSubmitMode('save');
@@ -973,7 +981,8 @@ export default function PurchaseOrderCreateScreen() {
             value={company}
           />
 
-          {supplierContext && (supplierContext.suggestions.company || supplierContext.suggestions.warehouse) ? (
+          {supplierContext &&
+          (supplierContext.suggestions.company || supplierContext.suggestions.warehouse || effectivePurchaseCurrency) ? (
             <View style={[styles.inlineHintCard, { backgroundColor: surfaceMuted }]}>
               <View style={styles.inlineHintHeader}>
                 <ThemedText style={styles.inlineHintTitle} type="defaultSemiBold">
@@ -994,7 +1003,24 @@ export default function PurchaseOrderCreateScreen() {
                     {supplierContext.suggestions.warehouse || '未建议仓库'}
                   </ThemedText>
                 </View>
+                <View style={[styles.inlineHintChip, { backgroundColor: surface }]}>
+                  <ThemedText style={styles.inlineHintLabel}>交易币种</ThemedText>
+                  <ThemedText type="defaultSemiBold">
+                    {effectivePurchaseCurrency || '按系统默认'}
+                  </ThemedText>
+                </View>
               </View>
+              {showCurrencyMismatchHint ? (
+                <View style={styles.currencyHintCard}>
+                  <ThemedText style={styles.currencyHintTitle} type="defaultSemiBold">
+                    币种提醒
+                  </ThemedText>
+                  <ThemedText style={styles.currencyHintText}>
+                    供应商默认币种是 {supplierDefaultCurrency}，但当前公司应付账户要求使用{' '}
+                    {effectivePurchaseCurrency}。请确认公司/供应商账户配置，或改用同币种公司。
+                  </ThemedText>
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -1435,6 +1461,32 @@ export default function PurchaseOrderCreateScreen() {
 
       <Modal
         animationType="fade"
+        onRequestClose={() => setSubmitErrorMessage('')}
+        transparent
+        visible={Boolean(submitErrorMessage)}>
+        <View style={styles.dialogBackdrop}>
+          <View style={[styles.dialogCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.dialogTitle} type="defaultSemiBold">
+              无法提交采购单
+            </ThemedText>
+            <ThemedText style={styles.dialogText}>
+              {submitErrorMessage}
+            </ThemedText>
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setSubmitErrorMessage('')}
+                style={[styles.dialogButton, styles.dialogPrimaryButton, { backgroundColor: tintColor }]}>
+                <ThemedText style={styles.dialogPrimaryText} type="defaultSemiBold">
+                  我知道了
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
         onRequestClose={() => setShowLeaveConfirm(false)}
         transparent
         visible={showLeaveConfirm}>
@@ -1627,18 +1679,41 @@ const styles = StyleSheet.create({
   },
   inlineHintGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   inlineHintChip: {
     borderRadius: 14,
     flex: 1,
     gap: 4,
+    minWidth: 120,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   inlineHintLabel: {
     color: '#64748B',
     fontSize: 12,
+  },
+  currencyHintCard: {
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  currencyHintTitle: {
+    color: '#C2410C',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  currencyHintText: {
+    color: '#B45309',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   dateGrid: {
     flexDirection: 'row',

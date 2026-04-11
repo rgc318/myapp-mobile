@@ -60,6 +60,7 @@ export type SupplierPurchaseContext = {
 export type PurchaseCompanyContext = {
   company: string | null;
   warehouse: string | null;
+  currency: string | null;
 };
 
 export type PurchaseOrderItemInput = {
@@ -692,6 +693,7 @@ export async function fetchPurchaseCompanyContext(company?: string): Promise<Pur
   return {
     company: typeof data.company === 'string' ? data.company : null,
     warehouse: typeof data.warehouse === 'string' ? data.warehouse : null,
+    currency: typeof data.currency === 'string' ? data.currency : null,
   };
 }
 

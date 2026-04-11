@@ -7108,3 +7108,29 @@ Search-heavy pages now expose refresh in the places where users naturally expect
 - account workspace and product detail use this pattern for real refresh instead of nested-scroll no-op behavior
 - product search and purchase item search now support pull-to-refresh while keeping current search keyword and filters
 - sales-order item cards now show a clearer default “无图” placeholder instead of a blank image slot when no product image exists
+
+## Purchase Currency And Picker UX Alignment (2026-04-11)
+
+Purchase create now treats currency mismatches as an explicit business configuration issue instead of letting ERPNext surface a late, generic validation error.
+
+### Updated Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/purchase/order/create.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/services/purchases.ts`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/components/link-option-input.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/lib/sales-mode.ts`
+
+### Current Behavior
+
+- purchase create reads `suggestions.currency` from supplier context and sends the same effective transaction currency in both normal save and quick-create payloads
+- the supplier suggestion card now shows the effective transaction currency next to suggested company and warehouse
+- if supplier default currency and the current company's supplier payable-account currency differ, the page shows a centered in-page currency reminder before submission
+- purchase submit failures on the create page now open a centered dialog instead of relying only on the global top toast
+- lightweight link fields using `LinkOptionInput` now open a searchable modal picker instead of an inline dropdown, so customer/supplier/company/warehouse style fields are easier to use on mobile and can scroll normally
+- sales mode default-rate resolution now treats an explicit `0` wholesale or retail price as a valid configured price instead of skipping it and falling back to another positive price
+
+### Design Notes
+
+- the backend remains the source of truth for ERPNext currency validation
+- the mobile app should explain likely configuration mismatches early, but it should not silently convert currencies or perform exchange-rate calculations
+- for current staging and test workflows, keeping supplier, company, and party-account currency aligned is still the preferred data setup

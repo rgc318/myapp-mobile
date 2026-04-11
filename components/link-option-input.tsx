@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -29,30 +29,26 @@ export function LinkOptionInput({
   value,
 }: LinkOptionInputProps) {
   const [options, setOptions] = useState<LinkOption[]>([]);
-  const [focused, setFocused] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [hasTypedSinceFocus, setHasTypedSinceFocus] = useState(false);
-  const inputRef = useRef<TextInput | null>(null);
-  const closeDropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectingOptionRef = useRef(false);
   const surfaceMuted = useThemeColor({}, 'surfaceMuted');
   const borderColor = useThemeColor({}, 'border');
   const dangerColor = useThemeColor({}, 'danger');
   const surface = useThemeColor({}, 'surface');
   const tintColor = useThemeColor({}, 'tint');
+  const textMuted = useThemeColor({}, 'icon');
 
   useEffect(() => {
-    if (!dropdownOpen) {
+    if (!pickerOpen) {
       setLoading(false);
       return;
     }
 
-    const query = !hasTypedSinceFocus && value.trim() ? '' : value;
     let cancelled = false;
     setLoading(true);
     const timer = setTimeout(async () => {
-      const nextOptions = await loadOptions(query);
+      const nextOptions = await loadOptions(pickerQuery);
       if (!cancelled) {
         setOptions(nextOptions);
         setLoading(false);
@@ -63,152 +59,117 @@ export function LinkOptionInput({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [dropdownOpen, hasTypedSinceFocus, loadOptions, value]);
+  }, [loadOptions, pickerOpen, pickerQuery]);
 
-  useEffect(() => {
-    return () => {
-      if (closeDropdownTimerRef.current) {
-        clearTimeout(closeDropdownTimerRef.current);
-      }
-    };
-  }, []);
-
-  const closeDropdown = () => {
-    setFocused(false);
-    setDropdownOpen(false);
-  };
-
-  const scheduleCloseDropdown = () => {
-    if (closeDropdownTimerRef.current) {
-      clearTimeout(closeDropdownTimerRef.current);
-    }
-    closeDropdownTimerRef.current = setTimeout(() => {
-      if (selectingOptionRef.current) {
-        return;
-      }
-      closeDropdown();
-    }, 180);
+  const closePicker = () => {
+    setPickerOpen(false);
+    setPickerQuery('');
+    setOptions([]);
   };
 
   const handleSelect = (nextValue: string) => {
-    selectingOptionRef.current = true;
-    if (closeDropdownTimerRef.current) {
-      clearTimeout(closeDropdownTimerRef.current);
-    }
     onChangeText(nextValue);
     onOptionSelect?.(nextValue);
-    setOptions([]);
-    closeDropdown();
-    inputRef.current?.blur();
-    setTimeout(() => {
-      selectingOptionRef.current = false;
-    }, 0);
+    closePicker();
+  };
+
+  const handleQueryChange = (nextValue: string) => {
+    setPickerQuery(nextValue);
+    onChangeText(nextValue);
   };
 
   return (
-    <View style={[styles.block, focused || dropdownOpen ? styles.blockActive : null]}>
-      <ThemedText type="defaultSemiBold">{label}</ThemedText>
-      <View style={[styles.inputWrap, focused || dropdownOpen ? styles.inputWrapActive : null]}>
-        <TextInput
-          autoCorrect={false}
-          ref={inputRef}
-          onChangeText={(nextValue) => {
-            setHasTypedSinceFocus(true);
-            onChangeText(nextValue);
-          }}
-          onFocus={() => {
-            if (closeDropdownTimerRef.current) {
-              clearTimeout(closeDropdownTimerRef.current);
-            }
-            setFocused(true);
-            setDropdownOpen(true);
-            setHasTypedSinceFocus(false);
-          }}
-          onBlur={scheduleCloseDropdown}
-          placeholder={placeholder}
-          style={[
-            styles.input,
-            inputActionText ? styles.inputWithAction : null,
-            { backgroundColor: surfaceMuted, borderColor: errorText ? dangerColor : borderColor },
-            Platform.OS === 'web' ? ({ outlineWidth: 0 } as any) : null,
-          ]}
-          value={value}
-        />
+    <View style={styles.block}>
+      {label ? <ThemedText type="defaultSemiBold">{label}</ThemedText> : null}
+      <Pressable
+        onPress={() => setPickerOpen(true)}
+        style={[
+          styles.selectorField,
+          { backgroundColor: surfaceMuted, borderColor: errorText ? dangerColor : borderColor },
+        ]}>
+        <ThemedText
+          numberOfLines={1}
+          style={[styles.selectorValue, !value ? { color: textMuted } : null]}
+          type="defaultSemiBold">
+          {value || placeholder}
+        </ThemedText>
+        <ThemedText style={[styles.inputActionText, { color: tintColor }]} type="defaultSemiBold">
+          {inputActionText || '选择'}
+        </ThemedText>
+      </Pressable>
 
-        {inputActionText ? (
-          <Pressable
-            onPress={() => {
-              if (dropdownOpen) {
-                setDropdownOpen(false);
-                setFocused(false);
-                inputRef.current?.blur();
-                return;
-              }
-
-              setDropdownOpen(true);
-              setHasTypedSinceFocus(false);
-            }}
-            style={styles.inputAction}>
-            <ThemedText style={[styles.inputActionText, { color: tintColor }]} type="defaultSemiBold">
-              {inputActionText}
-            </ThemedText>
-          </Pressable>
-        ) : null}
-
-        {dropdownOpen ? (
-          <View style={[styles.dropdown, { backgroundColor: surface, borderColor }]}>
-            <View style={[styles.dropdownHeader, { borderBottomColor: borderColor }]}>
-              <ThemedText style={styles.dropdownHeaderText} type="defaultSemiBold">
-                候选项
+      <Modal animationType="slide" onRequestClose={closePicker} transparent visible={pickerOpen}>
+        <View style={styles.modalBackdrop}>
+          <Pressable onPress={closePicker} style={StyleSheet.absoluteFill} />
+          <View style={[styles.modalSheet, { backgroundColor: surface }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle} type="title">
+                {label || '选择候选项'}
               </ThemedText>
-              <ThemedText style={[styles.dropdownHeaderMeta, { color: tintColor }]}>
-                {loading ? '正在更新' : `${options.length} 项`}
+              <ThemedText style={[styles.modalHint, { color: textMuted }]}>
+                搜索并选择系统中已有记录，避免手工录错。
               </ThemedText>
             </View>
+            <View style={[styles.modalSearchWrap, { backgroundColor: surfaceMuted, borderColor }]}>
+              <TextInput
+                autoCorrect={false}
+                onChangeText={handleQueryChange}
+                placeholder={placeholder}
+                placeholderTextColor="rgba(31,42,55,0.38)"
+                style={[
+                  styles.modalSearchInput,
+                  Platform.OS === 'web' ? ({ outlineWidth: 0 } as never) : null,
+                ]}
+                value={pickerQuery}
+              />
+            </View>
             <ScrollView
-              bounces={options.length > 4}
-              keyboardDismissMode="none"
+              contentContainerStyle={styles.modalList}
               keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-              style={styles.dropdownScroll}>
-            {loading ? (
-              <View style={styles.optionRow}>
-                <ThemedText>正在读取候选项...</ThemedText>
-              </View>
-            ) : (
-              options.length ? (
-                options.map((option, index) => (
-                  <View key={`${option.value}-${index}`}>
+              showsVerticalScrollIndicator={false}>
+              {loading ? (
+                <View style={[styles.emptyState, { backgroundColor: surfaceMuted }]}>
+                  <ThemedText type="defaultSemiBold">正在读取候选项...</ThemedText>
+                  <ThemedText style={[styles.modalHint, { color: textMuted }]}>请稍候。</ThemedText>
+                </View>
+              ) : options.length ? (
+                options.map((option, index) => {
+                  const active = option.value === value;
+                  return (
                     <Pressable
+                      key={`${option.value}-${index}`}
                       onPress={() => handleSelect(option.value)}
-                      onPressIn={() => {
-                        selectingOptionRef.current = true;
-                      }}
-                      style={styles.optionRow}>
+                      style={[
+                        styles.modalOption,
+                        { backgroundColor: active ? 'rgba(59,130,246,0.08)' : surfaceMuted, borderColor },
+                      ]}>
                       <View style={styles.optionText}>
-                        <ThemedText type="defaultSemiBold">{option.label}</ThemedText>
+                        <ThemedText numberOfLines={1} style={styles.modalOptionValue} type="defaultSemiBold">
+                          {option.label}
+                        </ThemedText>
                         {option.description ? (
-                          <ThemedText style={styles.optionDesc}>{option.description}</ThemedText>
+                          <ThemedText numberOfLines={2} style={[styles.optionDesc, { color: textMuted }]}>
+                            {option.description}
+                          </ThemedText>
                         ) : null}
                       </View>
-                      <ThemedText style={[styles.optionAction, { color: tintColor }]}>选择</ThemedText>
+                      <ThemedText style={[styles.optionAction, { color: tintColor }]} type="defaultSemiBold">
+                        {active ? '当前' : '选择'}
+                      </ThemedText>
                     </Pressable>
-                    {index < options.length - 1 ? (
-                      <View style={[styles.separator, { backgroundColor: borderColor }]} />
-                    ) : null}
-                  </View>
-                ))
+                  );
+                })
               ) : (
-                <View style={styles.optionRow}>
-                  <ThemedText>没有匹配的候选项</ThemedText>
+                <View style={[styles.emptyState, { backgroundColor: surfaceMuted }]}>
+                  <ThemedText type="defaultSemiBold">没有匹配的候选项</ThemedText>
+                  <ThemedText style={[styles.modalHint, { color: textMuted }]}>换个关键词试试。</ThemedText>
                 </View>
-              )
-            )}
+              )}
             </ScrollView>
           </View>
-        ) : null}
-      </View>
+        </View>
+      </Modal>
 
       {errorText ? <ThemedText style={[styles.helperText, { color: dangerColor }]}>{errorText}</ThemedText> : null}
       {!errorText && helperText ? <ThemedText style={styles.helperText}>{helperText}</ThemedText> : null}
@@ -219,37 +180,21 @@ export function LinkOptionInput({
 const styles = StyleSheet.create({
   block: {
     gap: 8,
-    position: 'relative',
-    zIndex: 1,
   },
-  blockActive: {
-    zIndex: 200,
-  },
-  inputWrap: {
-    position: 'relative',
-    zIndex: 20,
-  },
-  inputWrapActive: {
-    zIndex: 220,
-  },
-  input: {
+  selectorField: {
+    alignItems: 'center',
     borderRadius: 16,
     borderWidth: 1,
-    fontSize: 15,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
     minHeight: 52,
     paddingHorizontal: 15,
     paddingVertical: 12,
   },
-  inputWithAction: {
-    paddingRight: 74,
-  },
-  inputAction: {
-    alignItems: 'center',
-    bottom: 0,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 14,
-    top: 0,
+  selectorValue: {
+    flex: 1,
+    fontSize: 15,
   },
   inputActionText: {
     fontSize: 13,
@@ -260,55 +205,74 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingLeft: 4,
   },
-  dropdown: {
-    borderRadius: 14,
-    borderWidth: 1,
-    elevation: 16,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    zIndex: 240,
-    top: 58,
-    overflow: 'hidden',
-    shadowColor: '#101828',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    maxHeight: 280,
+  modalBackdrop: {
+    backgroundColor: 'rgba(15,23,42,0.34)',
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  dropdownHeader: {
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  modalSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '78%',
+    paddingBottom: 22,
+    paddingHorizontal: 20,
+    paddingTop: 10,
   },
-  dropdownHeaderText: {
+  modalHandle: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(148,163,184,0.55)',
+    borderRadius: 999,
+    height: 4,
+    marginBottom: 18,
+    width: 44,
+  },
+  modalHeader: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  modalTitle: {
+    fontSize: 22,
+  },
+  modalHint: {
     fontSize: 13,
+    lineHeight: 19,
   },
-  dropdownHeaderMeta: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  dropdownScroll: {
-    maxHeight: 224,
-  },
-  optionRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'space-between',
-    minHeight: 52,
+  modalSearchWrap: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 14,
     paddingHorizontal: 14,
-    paddingVertical: 9,
+  },
+  modalSearchInput: {
+    color: '#1F2937',
+    fontSize: 15,
+    minHeight: 50,
+    paddingVertical: 12,
+  },
+  modalList: {
+    gap: 10,
+    paddingBottom: 18,
+  },
+  modalOption: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
   },
   optionText: {
     flex: 1,
     gap: 2,
   },
   optionDesc: {
-    color: '#71859D',
     fontSize: 13,
     lineHeight: 18,
   },
@@ -316,8 +280,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 14,
+  modalOptionValue: {
+    fontSize: 15,
+  },
+  emptyState: {
+    borderRadius: 16,
+    gap: 6,
+    padding: 18,
   },
 });
