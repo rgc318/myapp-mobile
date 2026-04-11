@@ -7134,3 +7134,34 @@ Purchase create now treats currency mismatches as an explicit business configura
 - the backend remains the source of truth for ERPNext currency validation
 - the mobile app should explain likely configuration mismatches early, but it should not silently convert currencies or perform exchange-rate calculations
 - for current staging and test workflows, keeping supplier, company, and party-account currency aligned is still the preferred data setup
+
+## Home Header And Update Prompt Polish (2026-04-11)
+
+The home tab and settings update experience were lightly refined without changing the core navigation structure.
+
+### Updated Files
+
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/(tabs)/index.tsx`
+- `/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/app/settings.tsx`
+
+### Current Behavior
+
+- the home hero no longer shows the old pseudo-action wording (`有订单要处理 / 去处理`)
+- the top banner now uses a neutral welcome message and a static `业务首页` badge instead of implying a fake pending-task CTA
+- the home shortcut labeled `销售台` now opens the real sales workbench tab instead of duplicating the `销售开单` entry
+- the home hero typography, spacing, and stats-card layout were tightened so the page keeps the original structure but reads more clearly
+- the settings update card now behaves more like a real release-check surface:
+  - page-level status shows whether release info is unconfigured, unchecked, checking, latest, or update available
+  - `打开下载页` no longer depends on the user having already run a manual check in the same session
+  - if no release info is cached yet, the app first fetches release info and then opens the resolved download URL or release page
+  - when a newer release is detected, the app immediately opens a centered update dialog with version comparison, publish time, and release notes
+  - the `立即下载` action currently opens the GitHub release asset URL (or falls back to the release page) instead of trying to perform a native in-app APK install flow
+
+### Design Notes
+
+- this is intentionally not Google Play In-App Update because the current Android distribution channel is GitHub Releases rather than Play Store delivery
+- for the current test-stage workflow, the preferred UX is:
+  - check release metadata inside the app
+  - show a clear confirmation dialog when a new version exists
+  - then jump directly to the downloadable APK or release page
+- the settings version formatter now avoids repeating the build suffix when the release version text already contains `+build.<number>`

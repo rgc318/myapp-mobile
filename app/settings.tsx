@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import * as Linking from 'expo-linking';
 
 import { AppShell } from '@/components/app-shell';
@@ -15,6 +15,16 @@ import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data
 import { getWarehouseCompany, searchWarehouses } from '@/services/purchases';
 import { getMobileReleaseInfo, type MobileReleaseInfo } from '@/services/user';
 
+function formatVersionText(version: string, buildNumber: number | null) {
+  if (!version) {
+    return '';
+  }
+  if (/\+build\.\d+$/i.test(version)) {
+    return version;
+  }
+  return buildNumber ? `${version}+build.${buildNumber}` : version;
+}
+
 export default function SettingsScreen() {
   const { saveWorkspacePreferences, workspacePreferences } = useAuth();
   const currentValue = getApiBaseUrl();
@@ -28,7 +38,8 @@ export default function SettingsScreen() {
   const [warehouseError, setWarehouseError] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [releaseInfo, setReleaseInfo] = useState<MobileReleaseInfo | null>(null);
-  const { showError, showSuccess } = useFeedback();
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const { showError, showInfo, showSuccess } = useFeedback();
   const appVersion = Constants.expoConfig?.version || '1.0.0';
   const currentBuildNumber = (() => {
     const candidate = Constants.nativeBuildVersion;
@@ -43,6 +54,8 @@ export default function SettingsScreen() {
   const surface = useThemeColor({}, 'surface');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
+  const successColor = useThemeColor({}, 'success');
+  const dangerColor = useThemeColor({}, 'danger');
 
   useEffect(() => {
     setDefaultCompany(workspacePreferences.defaultCompany);
@@ -124,7 +137,7 @@ export default function SettingsScreen() {
     showSuccess(message);
   };
 
-  const handleCheckUpdate = async () => {
+  const checkForUpdate = async () => {
     setCheckingUpdate(true);
     try {
       const nextReleaseInfo = await getMobileReleaseInfo({
@@ -135,42 +148,88 @@ export default function SettingsScreen() {
 
       if (!nextReleaseInfo.enabled) {
         showError('服务端还没有配置移动端 Release 源，请先补充站点配置。');
-        return;
+        return nextReleaseInfo;
       }
 
       if (nextReleaseInfo.hasUpdate) {
+        setShowUpdateModal(true);
         showSuccess(`发现新版本 ${nextReleaseInfo.latestVersion || nextReleaseInfo.latestTag}。`);
-        return;
+        return nextReleaseInfo;
       }
 
       showSuccess('当前已经是已知最新版本。');
+      return nextReleaseInfo;
     } catch (error) {
       showError(error instanceof Error ? error.message : '检查更新失败，请稍后重试。');
+      return null;
     } finally {
       setCheckingUpdate(false);
     }
   };
 
+  const handleCheckUpdate = async () => {
+    await checkForUpdate();
+  };
+
   const handleOpenUpdateLink = async () => {
-    const targetUrl = releaseInfo?.downloadUrl || releaseInfo?.releasePageUrl;
+    const resolvedReleaseInfo = releaseInfo ?? (await checkForUpdate());
+    const targetUrl = resolvedReleaseInfo?.downloadUrl || resolvedReleaseInfo?.releasePageUrl;
     if (!targetUrl) {
-      showError('当前没有可用的下载地址。');
+      showError('当前没有可用的下载地址，请先确认 Release 源配置和发布内容。');
       return;
     }
 
     try {
+      showInfo('正在打开下载页...');
+      if (Platform.OS === 'web' && typeof globalThis.open === 'function') {
+        globalThis.open(targetUrl, '_blank');
+        return;
+      }
       await Linking.openURL(targetUrl);
     } catch {
       showError('无法打开下载链接，请检查设备网络或链接配置。');
     }
   };
 
+  const currentVersionText = formatVersionText(appVersion, currentBuildNumber);
   const publishedText = releaseInfo?.publishedAt
     ? new Date(releaseInfo.publishedAt).toLocaleString()
     : '尚未检查';
   const releaseSourceText = releaseInfo
     ? releaseInfo.repo || '未配置 GitHub Release 源'
     : '尚未检查';
+  const latestVersionText = releaseInfo
+    ? formatVersionText(releaseInfo.latestVersion || releaseInfo.latestTag || '未知版本', releaseInfo.latestBuildNumber)
+    : '尚未检查';
+  const updateStatus = checkingUpdate
+    ? { label: '检查中', color: tintColor, backgroundColor: `${tintColor}12` }
+    : !releaseInfo
+      ? { label: '尚未检查', color: '#64748B', backgroundColor: '#F1F5F9' }
+      : !releaseInfo.enabled
+        ? { label: '未配置更新源', color: dangerColor, backgroundColor: `${dangerColor}12` }
+        : releaseInfo.hasUpdate
+          ? { label: '发现新版本', color: tintColor, backgroundColor: `${tintColor}12` }
+          : { label: '已是最新版本', color: successColor, backgroundColor: `${successColor}12` };
+  const updateButtonLabel = checkingUpdate
+    ? '检查中...'
+    : releaseInfo?.hasUpdate
+      ? '重新检查'
+      : '检查更新';
+  const downloadButtonLabel = checkingUpdate
+    ? '请稍候'
+    : releaseInfo?.hasUpdate
+      ? '下载新版本'
+      : '打开下载页';
+  const downloadHintText = !releaseInfo
+    ? '先检查更新，页面会展示版本、发布时间和更新说明。'
+    : !releaseInfo.enabled
+      ? '当前服务端还没有配置 GitHub Release 源。'
+      : releaseInfo.hasUpdate
+        ? '检测到新版本后，可以直接跳转到 APK 下载页。'
+        : '即使当前已是最新版本，也可以打开 Release 页面查看安装包与历史说明。';
+  const releaseNotesPreview = releaseInfo?.releaseNotes?.trim()
+    ? releaseInfo.releaseNotes.trim()
+    : '本次版本暂无额外更新说明。';
 
   return (
     <AppShell
@@ -315,18 +374,30 @@ export default function SettingsScreen() {
         </ThemedText>
 
         <View style={[styles.groupCard, { backgroundColor: surface, borderColor }]}>
+          <View style={[styles.updateStatusCard, { backgroundColor: surfaceMuted, borderColor }]}>
+            <View style={styles.updateStatusHeader}>
+              <View>
+                <ThemedText type="defaultSemiBold">版本检查</ThemedText>
+                <ThemedText style={styles.updateStatusDescription}>
+                  先确认当前版本，再检查是否存在新的 Release 安装包。
+                </ThemedText>
+              </View>
+              <View style={[styles.updateStatusBadge, { backgroundColor: updateStatus.backgroundColor }]}>
+                <ThemedText style={[styles.updateStatusBadgeText, { color: updateStatus.color }]} type="defaultSemiBold">
+                  {updateStatus.label}
+                </ThemedText>
+              </View>
+            </View>
+          </View>
+
           <View style={styles.metaBlock}>
             <ThemedText style={styles.metaLabel}>当前版本</ThemedText>
-            <ThemedText style={styles.metaValue}>
-              {currentBuildNumber ? `${appVersion}+build.${currentBuildNumber}` : appVersion}
-            </ThemedText>
+            <ThemedText style={styles.metaValue}>{currentVersionText}</ThemedText>
           </View>
 
           <View style={styles.metaBlock}>
             <ThemedText style={styles.metaLabel}>最新版本</ThemedText>
-            <ThemedText style={styles.metaValue}>
-              {releaseInfo?.latestVersion || releaseInfo?.latestTag || '尚未检查'}
-            </ThemedText>
+            <ThemedText style={styles.metaValue}>{latestVersionText}</ThemedText>
           </View>
 
           <View style={styles.metaBlock}>
@@ -352,26 +423,28 @@ export default function SettingsScreen() {
               onPress={() => void handleCheckUpdate()}
               style={[styles.inlineButton, { backgroundColor: tintColor }, checkingUpdate ? styles.disabledButton : null]}>
               <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
-                {checkingUpdate ? '检查中...' : '检查更新'}
+                {updateButtonLabel}
               </ThemedText>
             </Pressable>
 
             <Pressable
-              disabled={!releaseInfo?.downloadUrl && !releaseInfo?.releasePageUrl}
+              disabled={checkingUpdate}
               onPress={() => void handleOpenUpdateLink()}
               style={[
                 styles.inlineButton,
                 styles.inlineSecondary,
                 { borderColor },
-                !releaseInfo?.downloadUrl && !releaseInfo?.releasePageUrl ? styles.disabledSecondaryButton : null,
+                checkingUpdate ? styles.disabledSecondaryButton : null,
               ]}>
-              <ThemedText type="defaultSemiBold">打开下载页</ThemedText>
+              <ThemedText type="defaultSemiBold">{downloadButtonLabel}</ThemedText>
             </Pressable>
           </View>
 
+          <ThemedText style={styles.helperText}>{downloadHintText}</ThemedText>
+
           <ThemedText style={styles.helperText}>
-            当前实现由后端统一读取 GitHub Releases。Android release 构建应同步递增内部 build number，这样同一 `version`
-            下的新测试包才能被稳定识别为更新。
+            当前实现由后端统一读取 GitHub Releases。Android release 构建应同步递增内部 build number，
+            这样同一 `version` 下的新测试包才能被稳定识别为更新。
           </ThemedText>
         </View>
       </View>
@@ -384,6 +457,48 @@ export default function SettingsScreen() {
         <ThemedText>真机或局域网调试时，请改成设备可访问的 IP 地址。</ThemedText>
         <ThemedText>默认公司和默认仓库会作为商品、销售、采购等页面的首选值。</ThemedText>
       </View>
+
+      <Modal animationType="fade" onRequestClose={() => setShowUpdateModal(false)} transparent visible={showUpdateModal}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: surface, borderColor }]}>
+            <ThemedText style={styles.modalEyebrow}>NEW VERSION</ThemedText>
+            <ThemedText style={styles.modalTitle} type="subtitle">
+              发现新版本
+            </ThemedText>
+            <ThemedText style={styles.modalDescription}>
+              当前版本 {currentVersionText}，最新版本 {latestVersionText}。
+            </ThemedText>
+
+            <View style={[styles.modalMetaCard, { backgroundColor: surfaceMuted, borderColor }]}>
+              <ThemedText style={styles.metaLabel}>发布时间</ThemedText>
+              <ThemedText style={styles.metaValue}>{publishedText}</ThemedText>
+              <ThemedText style={[styles.metaLabel, styles.modalMetaSpacing]}>更新说明</ThemedText>
+              <ScrollView nestedScrollEnabled style={styles.modalNotesScroll}>
+                <ThemedText style={styles.modalNotesText}>{releaseNotesPreview}</ThemedText>
+              </ScrollView>
+            </View>
+
+            <View style={styles.inlineActions}>
+              <Pressable
+                onPress={() => setShowUpdateModal(false)}
+                style={[styles.inlineButton, styles.inlineSecondary, { borderColor }]}>
+                <ThemedText type="defaultSemiBold">稍后再说</ThemedText>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowUpdateModal(false);
+                  void handleOpenUpdateLink();
+                }}
+                style={[styles.inlineButton, { backgroundColor: tintColor }]}>
+                <ThemedText style={styles.primaryButtonText} type="defaultSemiBold">
+                  立即下载
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AppShell>
   );
 }
@@ -482,6 +597,34 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
   },
+  updateStatusCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  updateStatusHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  updateStatusDescription: {
+    color: '#74879D',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+    maxWidth: '90%',
+  },
+  updateStatusBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  updateStatusBadgeText: {
+    fontSize: 12,
+  },
   inlineActions: {
     flexDirection: 'row',
     gap: 10,
@@ -511,6 +654,54 @@ const styles = StyleSheet.create({
     color: '#74879D',
     fontSize: 12,
     lineHeight: 18,
+  },
+  modalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.36)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    maxWidth: 420,
+    padding: 20,
+    width: '100%',
+  },
+  modalEyebrow: {
+    color: '#356AE6',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  modalTitle: {
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  modalDescription: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  modalMetaCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  modalMetaSpacing: {
+    marginTop: 12,
+  },
+  modalNotesScroll: {
+    marginTop: 6,
+    maxHeight: 180,
+  },
+  modalNotesText: {
+    color: '#0F172A',
+    fontSize: 14,
+    lineHeight: 21,
   },
   savedMessage: {
     color: '#2F7D4A',

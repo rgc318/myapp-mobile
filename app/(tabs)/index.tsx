@@ -73,8 +73,8 @@ export default function HomeScreen() {
     ...(canUseSales
       ? [
           {
-            href: { pathname: '/sales/order/create', params: { returnTo: '/(tabs)' } } as Href,
-            label: '销售',
+            href: '/(tabs)/sales',
+            label: '销售台',
             icon: 'cart.fill' as const,
           },
         ]
@@ -109,21 +109,26 @@ export default function HomeScreen() {
           <View style={styles.hero}>
             <View style={styles.heroOverlay} />
             <View style={styles.heroTop}>
-              <View>
-                <ThemedText style={styles.heroQuestion}>有订单要处理？</ThemedText>
+              <View style={styles.heroCopy}>
+                <ThemedText style={styles.heroKicker}>RGC FLOW</ThemedText>
+                <ThemedText style={styles.heroQuestion}>欢迎回来</ThemedText>
                 <ThemedText style={styles.heroSubline}>
                   {profile?.fullName || profile?.username || '当前操作员'}
                 </ThemedText>
+                <ThemedText style={styles.heroHint}>从这里进入今天最常用的业务入口。</ThemedText>
               </View>
-              <Pressable style={styles.heroChip}>
-                <ThemedText style={styles.heroChipText}>去处理</ThemedText>
-              </Pressable>
+              <View style={styles.heroChip}>
+                <ThemedText style={styles.heroChipText}>业务首页</ThemedText>
+              </View>
             </View>
           </View>
 
           <View style={[styles.statsPanel, { backgroundColor: surface, borderColor }]}>
             <View style={styles.statsHeader}>
-              <ThemedText type="defaultSemiBold">关键数据</ThemedText>
+              <View style={styles.statsTitleGroup}>
+                <ThemedText type="defaultSemiBold">关键数据</ThemedText>
+                <ThemedText style={styles.statsCaption}>业务页面会优先读取这里的默认配置。</ThemedText>
+              </View>
               <ThemedText style={styles.statsDate}>更新于 {new Date().toISOString().slice(0, 10)}</ThemedText>
             </View>
             <View style={styles.statsGrid}>
@@ -179,15 +184,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: 12,
+    gap: 14,
     paddingBottom: 40,
   },
   hero: {
     backgroundColor: '#F97316',
-    minHeight: 164,
+    minHeight: 178,
     overflow: 'hidden',
     paddingHorizontal: 16,
-    paddingTop: 18,
+    paddingBottom: 20,
+    paddingTop: 20,
   },
   heroOverlay: {
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -199,58 +205,101 @@ const styles = StyleSheet.create({
     width: 220,
   },
   heroTop: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  heroCopy: {
+    flex: 1,
+    gap: 4,
+    paddingRight: 12,
+  },
+  heroKicker: {
+    color: 'rgba(255,248,241,0.74)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    marginBottom: 2,
+  },
   heroQuestion: {
     color: '#FFF8F1',
-    fontSize: 18,
+    fontSize: 28,
     fontWeight: '700',
   },
   heroSubline: {
     color: 'rgba(255,248,241,0.9)',
-    marginTop: 6,
+    fontSize: 17,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  heroHint: {
+    color: 'rgba(255,248,241,0.84)',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 10,
+    maxWidth: 260,
   },
   heroChip: {
     backgroundColor: '#FFE083',
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
   heroChipText: {
     color: '#7C2D12',
+    fontSize: 14,
     fontWeight: '700',
   },
   statsPanel: {
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1,
-    gap: 12,
+    gap: 14,
     marginHorizontal: 12,
     marginTop: -34,
-    padding: 16,
+    padding: 18,
   },
   statsHeader: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  statsTitleGroup: {
+    flex: 1,
+    gap: 4,
+    paddingRight: 12,
+  },
+  statsCaption: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+  },
   statsDate: {
-    opacity: 0.62,
+    color: '#64748B',
+    fontSize: 12,
   },
   statsGrid: {
     flexDirection: 'row',
     gap: 12,
   },
   statCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    borderWidth: 1,
     flex: 1,
     gap: 8,
+    minHeight: 92,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   statLabel: {
-    opacity: 0.6,
+    color: '#64748B',
+    fontSize: 13,
   },
   statValue: {
     fontSize: 18,
+    lineHeight: 25,
   },
   primaryActions: {
     flexDirection: 'row',
@@ -260,7 +309,7 @@ const styles = StyleSheet.create({
   primaryCard: {
     borderRadius: 16,
     flex: 1,
-    minHeight: 72,
+    minHeight: 82,
     paddingHorizontal: 16,
     paddingVertical: 18,
     textDecorationLine: 'none',
@@ -273,7 +322,7 @@ const styles = StyleSheet.create({
   },
   primaryCardText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
   searchBar: {
@@ -283,11 +332,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginHorizontal: 12,
-    minHeight: 52,
+    minHeight: 56,
     paddingHorizontal: 14,
   },
   searchInput: {
     flex: 1,
+    fontSize: 15,
     minHeight: 36,
     paddingVertical: 0,
   },
@@ -302,17 +352,19 @@ const styles = StyleSheet.create({
   },
   shortcutItem: {
     alignItems: 'center',
+    borderRadius: 18,
     justifyContent: 'center',
-    minHeight: 62,
+    minHeight: 76,
     width: '29%',
   },
   shortcutInner: {
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     justifyContent: 'center',
   },
   shortcutLabel: {
     fontSize: 13,
+    lineHeight: 18,
     textAlign: 'center',
   },
 });
