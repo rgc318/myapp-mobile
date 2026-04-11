@@ -60,14 +60,31 @@
 
 ## 3. GitHub Actions 触发方式
 
-新增 workflow：
+当前移动端 workflow 分为两类。
+
+检查类 workflow：
+
+- [/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/.github/workflows/mobile_checks.yml](/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/.github/workflows/mobile_checks.yml)
+
+触发方式：
+
+- `develop` 分支有移动端相关变更时自动触发
+- 面向 `main` 或 `develop` 的 Pull Request 自动触发
+- 也支持手动触发：
+  - `workflow_dispatch`
+
+执行内容：
+
+- 安装依赖
+- 运行 `npm run lint`
+
+发布类 workflow：
 
 - [/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/.github/workflows/build_release_apk.yml](/home/rgc318/python-project/frappe_docker/frontend/myapp-mobile/.github/workflows/build_release_apk.yml)
 
 触发方式：
 
-- 当以下路径在 `main` 分支有变更时自动触发：
-  - `frontend/myapp-mobile/**`
+- 当移动端相关路径在 `main` 分支有变更时自动触发
 - 也支持手动触发：
   - `workflow_dispatch`
 
@@ -75,15 +92,25 @@
 
 1. checkout 仓库
 2. 安装 Node.js 依赖
-3. 运行 `npm run lint`
-4. 登录 Expo / EAS
-5. 执行：
+3. 安装 JDK 17 和 Android SDK
+4. 运行 `npm run lint`
+5. 从 GitHub Secrets 还原 Android release keystore
+6. 执行：
 
 ```bash
-npx eas build --platform android --profile release-apk --non-interactive --wait
+cd android
+./gradlew assembleRelease
 ```
 
-6. 输出 EAS 构建结果和下载地址
+7. 上传 APK artifact
+8. 创建 GitHub Release 并上传 APK
+
+分支约定：
+
+- `develop` 用于日常集成检查，不自动发布 APK
+- `main` 用于稳定发布，推送后会构建 release APK 并发布到 GitHub Release
+- 功能开发建议从 `develop` 拉 `feature/*` 或 `fix/*` 分支，验证后再合入 `develop`
+- 准备正式测试包时，再把 `develop` 合入 `main`
 
 ---
 

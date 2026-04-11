@@ -1,0 +1,68 @@
+name: Mobile checks
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - .github/workflows/mobile_checks.yml
+      - android/**
+      - app/**
+      - assets/**
+      - components/**
+      - constants/**
+      - hooks/**
+      - lib/**
+      - providers/**
+      - services/**
+      - package.json
+      - package-lock.json
+      - app.json
+      - tsconfig.json
+      - eslint.config.js
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - .github/workflows/mobile_checks.yml
+      - android/**
+      - app/**
+      - assets/**
+      - components/**
+      - constants/**
+      - hooks/**
+      - lib/**
+      - providers/**
+      - services/**
+      - package.json
+      - package-lock.json
+      - app.json
+      - tsconfig.json
+      - eslint.config.js
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint mobile app
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint app
+        run: npm run lint
