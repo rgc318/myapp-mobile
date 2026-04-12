@@ -31,7 +31,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/myapp-mobile-web-preview
-  SERVER_PATH: /srv/myapp-mobile-preview
+  SERVER_PATH: /home/${{ secrets.STAGING_SSH_USER }}/myapp-mobile-preview
 
 jobs:
   deploy-preview:
@@ -122,8 +122,8 @@ jobs:
           script: |
             set -euo pipefail
 
-            mkdir -p "${SERVER_PATH:-/srv/myapp-mobile-preview}"
-            cd "${SERVER_PATH:-/srv/myapp-mobile-preview}"
+            mkdir -p "${SERVER_PATH:-$HOME/myapp-mobile-preview}"
+            cd "${SERVER_PATH:-$HOME/myapp-mobile-preview}"
 
             cat > .env <<EOF
             EXPO_PUBLIC_API_BASE_URL=${EXPO_PUBLIC_API_BASE_URL}

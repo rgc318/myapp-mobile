@@ -17,7 +17,7 @@ develop push
   -> GitHub Actions 构建 myapp-mobile-web-preview 镜像
   -> 推送到 GHCR
   -> SSH 到 staging 服务器
-  -> 更新 /srv/myapp-mobile-preview 下的容器
+  -> 更新 /home/<ssh-user>/myapp-mobile-preview 下的容器
 
 mobile-web-preview
   -> 暴露 8081（宿主机默认映射 38081）
@@ -63,8 +63,8 @@ mobile-web-preview
 
 workflow 部署时会在服务器创建或更新：
 
-- `/srv/myapp-mobile-preview/.env`
-- `/srv/myapp-mobile-preview/compose.preview.yaml`
+- `/home/<ssh-user>/myapp-mobile-preview/.env`
+- `/home/<ssh-user>/myapp-mobile-preview/compose.preview.yaml`
 
 然后执行：
 
