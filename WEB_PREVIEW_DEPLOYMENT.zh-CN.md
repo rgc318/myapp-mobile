@@ -47,9 +47,10 @@ mobile-web-preview
 
 说明：
 
-- 预览 workflow 的“构建并推送镜像”与“服务器拉取镜像”两步都统一使用 `GHCR_USERNAME` + `GHCR_TOKEN`
-- 这样可以避免新建 GHCR package 时，仓库内置 `GITHUB_TOKEN` 对新包缺少 `write_package` 权限的问题
-- `GHCR_TOKEN` 建议至少具备 `read:packages` 和 `write:packages`
+- 预览 workflow 的“构建并推送镜像”使用 GitHub Actions 内置的 `GITHUB_TOKEN`
+- 服务器侧“拉取镜像并启动容器”使用 `GHCR_USERNAME` + `GHCR_TOKEN`
+- 因此 `GHCR_TOKEN` 只需具备 `read:packages`
+- 如果后续 GitHub Packages 权限模型变化，优先检查仓库的 `Settings -> Actions -> General -> Workflow permissions` 是否为 `Read and write permissions`
 
 ### Variables
 
