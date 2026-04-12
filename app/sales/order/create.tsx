@@ -1013,15 +1013,6 @@ export default function SalesOrderCreateScreen() {
           }
           returnToSalesHome();
         }}
-        rightAction={
-          <Pressable
-            onPress={() => setStatusMessage('AI 开单功能开发中。', 'info')}
-            style={styles.headerAction}>
-            <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
-              AI开单
-            </ThemedText>
-          </Pressable>
-        }
         showBack
         title="销售单"
       />
