@@ -45,6 +45,12 @@ mobile-web-preview
 - `GHCR_USERNAME`
 - `GHCR_TOKEN`
 
+说明：
+
+- 预览 workflow 的“构建并推送镜像”与“服务器拉取镜像”两步都统一使用 `GHCR_USERNAME` + `GHCR_TOKEN`
+- 这样可以避免新建 GHCR package 时，仓库内置 `GITHUB_TOKEN` 对新包缺少 `write_package` 权限的问题
+- `GHCR_TOKEN` 建议至少具备 `read:packages` 和 `write:packages`
+
 ### Variables
 
 - `EXPO_PUBLIC_API_BASE_URL_WEB_PREVIEW`
