@@ -122,20 +122,6 @@ jobs:
           script: |
             set -euo pipefail
 
-            retry() {
-              local attempts="$1"
-              shift
-              local n=1
-              until "$@"; do
-                if [ "$n" -ge "$attempts" ]; then
-                  return 1
-                fi
-                echo "Command failed (attempt ${n}/${attempts}): $*"
-                n=$((n + 1))
-                sleep 5
-              done
-            }
-
             mkdir -p "${SERVER_PATH:-$HOME/myapp-mobile-preview}"
             cd "${SERVER_PATH:-$HOME/myapp-mobile-preview}"
 
@@ -159,7 +145,6 @@ jobs:
                   PORT: 8081
             EOF
 
-            docker logout ghcr.io >/dev/null 2>&1 || true
-            retry 3 sh -c 'printf "%s" "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin'
-            retry 3 docker compose --env-file .env -f compose.preview.yaml pull
+            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+            docker compose --env-file .env -f compose.preview.yaml pull
             docker compose --env-file .env -f compose.preview.yaml up -d
