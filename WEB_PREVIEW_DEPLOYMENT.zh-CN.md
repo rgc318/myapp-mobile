@@ -89,7 +89,30 @@ http://<server-ip>:38081
 
 如果后续要接入自定义域名或反向代理，可再单独为该容器加 Nginx / Cloudflare / 隧道。
 
-## 7. 适用与限制
+## 7. 跨域与登录注意事项
+
+如果预览地址是公网 `IP:port`，例如：
+
+```text
+http://39.104.204.79:18089
+```
+
+那么后端 staging 需要把这个完整 origin 加进 `allow_cors`，否则浏览器会直接拦截接口请求。
+
+当前实战中已经验证过的 origin 包括：
+
+- `https://myapp-mobile-staging.pages.dev`
+- `https://mobile-staging.rgcdev.top`
+- `http://localhost:8081`
+- `http://39.104.204.79:18089`
+
+还需要注意：
+
+- 预览环境即使已经放开 CORS，浏览器登录态仍可能受跨站 Cookie / Session 策略影响
+- 如果前端使用公网 `IP:port`，而后端使用独立域名，登录成功后后续接口仍可能因为 session cookie 未稳定带上而被后端识别为 `Guest`
+- 对需要稳定登录的 Web 预览，仍然优先推荐与后端使用同主域名访问
+
+## 8. 适用与限制
 
 适合：
 
@@ -104,7 +127,7 @@ http://<server-ip>:38081
 - 若涉及浏览器 Cookie / Session 限制，仍需结合后端域名策略处理
 - 真机能力（扫码、安装更新、原生权限）仍以 APK 为准
 
-## 8. 建议流程
+## 9. 建议流程
 
 1. 开发代码合入 `develop`
 2. GitHub Actions 自动更新 Web 预览容器
