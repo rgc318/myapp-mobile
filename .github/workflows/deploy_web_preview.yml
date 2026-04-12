@@ -1,0 +1,150 @@
+name: Deploy mobile web preview
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - .github/workflows/deploy_web_preview.yml
+      - Dockerfile.preview
+      - .dockerignore
+      - deploy/preview/**
+      - app/**
+      - assets/**
+      - components/**
+      - constants/**
+      - hooks/**
+      - lib/**
+      - providers/**
+      - services/**
+      - package.json
+      - package-lock.json
+      - app.json
+      - tsconfig.json
+      - eslint.config.js
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/myapp-mobile-web-preview
+  SERVER_PATH: /srv/myapp-mobile-preview
+
+jobs:
+  deploy-preview:
+    name: Build and deploy mobile web preview
+    runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL_WEB_PREVIEW }}
+
+    steps:
+      - name: Validate deploy settings
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ env.EXPO_PUBLIC_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+
+          for key in \
+            STAGING_SSH_HOST \
+            STAGING_SSH_PORT \
+            STAGING_SSH_USER \
+            STAGING_SSH_PRIVATE_KEY \
+            GHCR_USERNAME \
+            GHCR_TOKEN \
+            EXPO_PUBLIC_API_BASE_URL; do
+            if [ -z "${!key:-}" ]; then
+              missing+=("${key}")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required GitHub Actions secrets or variables: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=develop-latest
+            type=sha,format=short
+
+      - name: Build and push preview image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.preview
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Deploy preview container over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ env.EXPO_PUBLIC_API_BASE_URL }}
+          MOBILE_WEB_PREVIEW_IMAGE: ${{ env.IMAGE_NAME }}:develop-latest
+          MOBILE_WEB_PREVIEW_PORT: ${{ vars.MOBILE_WEB_PREVIEW_PORT }}
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          envs: GHCR_USERNAME,GHCR_TOKEN,EXPO_PUBLIC_API_BASE_URL,MOBILE_WEB_PREVIEW_IMAGE,MOBILE_WEB_PREVIEW_PORT
+          script: |
+            set -euo pipefail
+
+            mkdir -p "${SERVER_PATH:-/srv/myapp-mobile-preview}"
+            cd "${SERVER_PATH:-/srv/myapp-mobile-preview}"
+
+            cat > .env <<EOF
+            EXPO_PUBLIC_API_BASE_URL=${EXPO_PUBLIC_API_BASE_URL}
+            MOBILE_WEB_PREVIEW_IMAGE=${MOBILE_WEB_PREVIEW_IMAGE}
+            MOBILE_WEB_PREVIEW_PORT=${MOBILE_WEB_PREVIEW_PORT:-38081}
+            EOF
+
+            cat > compose.preview.yaml <<'EOF'
+            services:
+              mobile-web-preview:
+                image: ${MOBILE_WEB_PREVIEW_IMAGE}
+                container_name: mobile-web-preview
+                restart: unless-stopped
+                ports:
+                  - "${MOBILE_WEB_PREVIEW_PORT:-38081}:8081"
+                environment:
+                  EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL}
+                  HOST: 0.0.0.0
+                  PORT: 8081
+            EOF
+
+            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+            docker compose --env-file .env -f compose.preview.yaml pull
+            docker compose --env-file .env -f compose.preview.yaml up -d

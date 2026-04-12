@@ -1,0 +1,11 @@
+services:
+  mobile-web-preview:
+    image: ${MOBILE_WEB_PREVIEW_IMAGE}
+    container_name: mobile-web-preview
+    restart: unless-stopped
+    ports:
+      - "${MOBILE_WEB_PREVIEW_PORT:-38081}:8081"
+    environment:
+      EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL}
+      HOST: 0.0.0.0
+      PORT: 8081
