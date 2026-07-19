@@ -26,6 +26,7 @@ export type ReturnSourceContextItem = {
   nickname?: string | null;
   specification?: string | null;
   uom: string;
+  uomDisplay?: string | null;
   warehouse: string;
   rate: number | null;
   amount: number | null;
@@ -189,6 +190,7 @@ export async function fetchReturnSourceContext(
                 ? item.custom_specification
                 : null,
           uom: String(item.uom ?? ''),
+          uomDisplay: typeof item.uom_display === 'string' ? item.uom_display : null,
           warehouse: String(item.warehouse ?? ''),
           rate: toOptionalNumber(item.rate),
           amount: toOptionalNumber(item.amount),

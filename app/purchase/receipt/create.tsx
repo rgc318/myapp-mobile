@@ -10,6 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
@@ -29,6 +30,7 @@ type EditableReceiptItem = {
   itemName: string;
   warehouse: string;
   uom: string;
+  uomDisplay?: string | null;
   orderedQty: number;
   receivedQty: number;
   pendingQty: number;
@@ -42,6 +44,7 @@ type ReceiptItemGroup = {
   itemCode: string;
   itemName: string;
   uom: string;
+  uomDisplay?: string | null;
   totalQty: number;
   totalAmount: number;
   lines: PurchaseReceiptDetail['items'];
@@ -266,6 +269,7 @@ export default function PurchaseReceiptCreateScreen() {
           itemName: item.itemName,
           warehouse: item.warehouse,
           uom: item.uom,
+          uomDisplay: item.uomDisplay,
           orderedQty,
           receivedQty,
           pendingQty,
@@ -445,6 +449,7 @@ export default function PurchaseReceiptCreateScreen() {
               itemCode: item.itemCode || '未编码',
               itemName: item.itemName || item.itemCode || '未命名商品',
               uom: item.uom || '',
+              uomDisplay: item.uomDisplay,
               totalQty: qtyValue,
               totalAmount: amountValue,
               lines: [item],
@@ -729,7 +734,7 @@ export default function PurchaseReceiptCreateScreen() {
 
                     <ThemedText style={styles.itemMeta}>
                       订单 {item.orderedQty} · 已收 {item.receivedQty} · 待收 {item.pendingQty} · 仓库{' '}
-                      {item.warehouse || '未设置'} · {item.uom || '库存单位'}
+                      {item.warehouse || '未设置'} · {resolveDisplayUom(item.uom, item.uomDisplay)}
                     </ThemedText>
                     <ThemedText style={styles.itemMeta}>
                       当前订单单价 {formatMoney(item.rate, orderDetail.currency || 'CNY')}
@@ -859,7 +864,7 @@ export default function PurchaseReceiptCreateScreen() {
                       <View style={styles.compactMetaRow}>
                         <ThemedText style={styles.itemMeta}>
                           数量 {formatQty(group.totalQty)}
-                          {group.uom ? ` ${group.uom}` : ''}
+                          {group.uom ? ` ${resolveDisplayUom(group.uom, group.uomDisplay)}` : ''}
                         </ThemedText>
                         <ThemedText style={styles.itemMeta}>
                           均价 {formatMoney(group.totalQty > 0 ? group.totalAmount / group.totalQty : null, receiptDetail.currency || 'CNY')}
@@ -893,7 +898,8 @@ export default function PurchaseReceiptCreateScreen() {
                                       {line.warehouse || '未设置仓库'}
                                     </ThemedText>
                                     <ThemedText style={styles.itemMeta}>
-                                      {formatQty(line.qty)} {line.uom || group.uom || ''} x{' '}
+                                      {formatQty(line.qty)}{' '}
+                                      {resolveDisplayUom(line.uom || group.uom, line.uomDisplay || group.uomDisplay)} x{' '}
                                       {formatMoney(line.rate, receiptDetail.currency || 'CNY')}
                                     </ThemedText>
                                   </View>

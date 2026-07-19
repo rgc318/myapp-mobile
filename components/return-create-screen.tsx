@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
+import { resolveDisplayUom } from '@/lib/display-uom';
 import { useFeedback } from '@/providers/feedback-provider';
 import {
   fetchReturnSourceContext,
@@ -549,8 +550,8 @@ export function ReturnCreateScreen({ businessType, title, description }: ReturnC
                         </View>
 
                         <View style={styles.itemMetrics}>
-                          <ThemedText style={styles.itemMetric}>{`来源数量 ${formatQty(item.sourceQty)} ${item.uom || ''}`}</ThemedText>
-                          <ThemedText style={styles.itemMetric}>{`可退数量 ${formatQty(item.maxReturnableQty)} ${item.uom || ''}`}</ThemedText>
+                          <ThemedText style={styles.itemMetric}>{`来源数量 ${formatQty(item.sourceQty)} ${resolveDisplayUom(item.uom, item.uomDisplay)}`}</ThemedText>
+                          <ThemedText style={styles.itemMetric}>{`可退数量 ${formatQty(item.maxReturnableQty)} ${resolveDisplayUom(item.uom, item.uomDisplay)}`}</ThemedText>
                         </View>
 
                         <View style={styles.qtyEditorRow}>
