@@ -1,4 +1,5 @@
 import { callFrappeMethod } from '@/lib/api-client';
+import { sortUomsByBusinessPriority } from '@/lib/display-uom';
 
 export type LinkOption = {
   label: string;
@@ -6,7 +7,11 @@ export type LinkOption = {
   description?: string | null;
 };
 
-export async function searchLinkOptions(doctype: string, query: string, extraFields: string[] = []) {
+export async function searchLinkOptions(
+  doctype: string,
+  query: string,
+  extraFields: string[] = [],
+): Promise<LinkOption[]> {
   const trimmedQuery = query.trim();
   const fields = ['name', ...extraFields];
 
@@ -21,28 +26,36 @@ export async function searchLinkOptions(doctype: string, query: string, extraFie
         doctype,
         fields,
         filters,
-        limit_page_length: 8,
+        limit_page_length: doctype === 'UOM' ? 100 : 8,
         order_by: 'modified desc',
       },
     );
     const rows = Array.isArray(message) ? message : [];
 
-    return rows
-      .map((row: Record<string, unknown>) => {
+    const options = rows.reduce<LinkOption[]>(
+      (result, row: Record<string, unknown>) => {
         const value = typeof row.name === 'string' ? row.name : '';
         if (!value) {
-          return null;
+          return result;
         }
 
-        const descriptionField = extraFields.find((field) => typeof row[field] === 'string' && row[field] !== value);
+        const descriptionField = extraFields.find(
+          (field) => typeof row[field] === 'string' && row[field] !== value,
+        );
 
-        return {
+        result.push({
           label: value,
           value,
           description: descriptionField ? String(row[descriptionField]) : null,
-        } satisfies LinkOption;
-      })
-      .filter((option: LinkOption | null): option is LinkOption => Boolean(option));
+        });
+        return result;
+      },
+      [],
+    );
+    return (doctype === 'UOM'
+      ? sortUomsByBusinessPriority(options, (option) => option.value)
+      : options
+    ).slice(0, 8);
   } catch {
     return [] as LinkOption[];
   }

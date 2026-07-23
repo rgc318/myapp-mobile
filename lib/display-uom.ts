@@ -1,3 +1,43 @@
+const UOM_BUSINESS_PRIORITY: Record<string, number> = {
+  BOX: 0,
+  BOXES: 0,
+  '\u7bb1': 0,
+  NOS: 1,
+  NO: 1,
+  PCS: 1,
+  PC: 1,
+  '\u4ef6': 1,
+};
+
+export function getUomBusinessPriority(
+  uom: string | null | undefined,
+  displayName?: string | null,
+) {
+  for (const value of [uom, displayName]) {
+    const normalized = typeof value === 'string' ? value.trim().toUpperCase() : '';
+    if (normalized && UOM_BUSINESS_PRIORITY[normalized] !== undefined) {
+      return UOM_BUSINESS_PRIORITY[normalized];
+    }
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+export function sortUomsByBusinessPriority<T>(
+  values: readonly T[],
+  getUom: (value: T) => string | null | undefined,
+  getDisplayName?: (value: T) => string | null | undefined,
+) {
+  return values
+    .map((value, index) => ({ index, value }))
+    .sort((left, right) => {
+      const priorityDifference =
+        getUomBusinessPriority(getUom(left.value), getDisplayName?.(left.value)) -
+        getUomBusinessPriority(getUom(right.value), getDisplayName?.(right.value));
+      return priorityDifference || left.index - right.index;
+    })
+    .map(({ value }) => value);
+}
+
 export function formatDisplayUom(uom: string | null | undefined) {
   const normalized = typeof uom === 'string' ? uom.trim() : '';
 

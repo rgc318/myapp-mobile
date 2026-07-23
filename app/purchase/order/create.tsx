@@ -14,7 +14,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { getAppPreferences } from '@/lib/app-preferences';
 import { getTodayIsoDate, isValidIsoDate } from '@/lib/date-value';
-import { resolveDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom, sortUomsByBusinessPriority } from '@/lib/display-uom';
 import { sanitizeDecimalInput } from '@/lib/numeric-input';
 import {
   clearPurchaseOrderDraft,
@@ -103,7 +103,7 @@ function getAvailableUoms(item: PurchaseOrderDraftItem) {
       values.add(uom);
     }
   });
-  return Array.from(values);
+  return sortUomsByBusinessPriority(Array.from(values), (uom) => uom);
 }
 
 function getDisplayUom(

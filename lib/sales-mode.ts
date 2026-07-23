@@ -1,3 +1,5 @@
+import { sortUomsByBusinessPriority } from '@/lib/display-uom';
+
 export type SalesMode = 'wholesale' | 'retail';
 
 export type PriceSummary = {
@@ -37,7 +39,10 @@ export function getSalesModeLabel(mode: SalesMode) {
 }
 
 function uniqueUoms(values: (string | null | undefined)[]) {
-  return Array.from(new Set(values.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean)));
+  return sortUomsByBusinessPriority(
+    Array.from(new Set(values.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean))),
+    (uom) => uom,
+  );
 }
 
 export function getModeDefaultUom(source: SalesModeDefaultsSource, mode: SalesMode) {

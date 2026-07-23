@@ -12,7 +12,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { normalizeAppError } from '@/lib/app-error';
 import { isValidIsoDate } from '@/lib/date-value';
-import { resolveDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom, sortUomsByBusinessPriority } from '@/lib/display-uom';
 import {
   clearPurchaseOrderDraft,
   getPurchaseOrderDraft,
@@ -365,7 +365,7 @@ function getAvailableUoms(item: EditablePurchaseOrderItem) {
       values.add(uom);
     }
   });
-  return Array.from(values);
+  return sortUomsByBusinessPriority(Array.from(values), (uom) => uom);
 }
 
 function getDisplayUom(

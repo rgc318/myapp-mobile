@@ -8,7 +8,7 @@ import { ItemImageField } from '@/components/item-image-field';
 import { ProductTextField as DetailField } from '@/components/product-form-controls';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { resolveDisplayUom } from '@/lib/display-uom';
+import { resolveDisplayUom, sortUomsByBusinessPriority } from '@/lib/display-uom';
 import { buildProductUomConversions, formatFactorInput, resolveDisplayConversionFactors, type StockSyncMode } from '@/lib/product-uom-sync';
 import { useFeedback } from '@/providers/feedback-provider';
 import { checkLinkOptionExists, searchLinkOptions } from '@/services/master-data';
@@ -421,7 +421,7 @@ export default function ProductDetailScreen() {
       values.add(draftRetailDefaultUom.trim());
     }
 
-    return Array.from(values);
+    return sortUomsByBusinessPriority(Array.from(values), (uom) => uom);
   }, [availableUoms, detail?.allUoms, detail?.stockUom, draftRetailDefaultUom, draftWholesaleDefaultUom]);
 
   const filteredUomOptions = useMemo(() => {

@@ -1,4 +1,5 @@
 import { callGatewayMethod } from '@/lib/api-client';
+import { sortUomsByBusinessPriority } from '@/lib/display-uom';
 import type { UomConversion } from '@/lib/uom-conversion';
 import { resolveMediaUrl } from '@/lib/media-url';
 import { searchProducts, type ProductSearchItem } from '@/services/gateway';
@@ -136,18 +137,21 @@ function mapUomNames(value: unknown) {
     return [] as string[];
   }
 
-  return value
-    .map((entry) => {
-      if (typeof entry === 'string') {
-        return entry.trim();
-      }
-      if (entry && typeof entry === 'object') {
-        const row = entry as Record<string, unknown>;
-        return typeof row.uom === 'string' ? row.uom.trim() : '';
-      }
-      return '';
-    })
-    .filter(Boolean);
+  return sortUomsByBusinessPriority(
+    value
+      .map((entry) => {
+        if (typeof entry === 'string') {
+          return entry.trim();
+        }
+        if (entry && typeof entry === 'object') {
+          const row = entry as Record<string, unknown>;
+          return typeof row.uom === 'string' ? row.uom.trim() : '';
+        }
+        return '';
+      })
+      .filter(Boolean),
+    (uom) => uom,
+  );
 }
 
 function mapUomDisplays(value: unknown): ProductUomDisplayMap {
@@ -174,29 +178,34 @@ function mapUomConversions(value: unknown): ProductUomConversion[] {
     return [];
   }
 
-  return value
-    .map((entry) => {
-      if (typeof entry === 'string') {
-        const uom = entry.trim();
-        return uom ? ({ uom, conversionFactor: null } satisfies ProductUomConversion) : null;
-      }
+  return sortUomsByBusinessPriority(
+    value
+      .map((entry) => {
+        if (typeof entry === 'string') {
+          const uom = entry.trim();
+          return uom
+            ? ({ uom, conversionFactor: null } satisfies ProductUomConversion)
+            : null;
+        }
 
-      if (!entry || typeof entry !== 'object') {
-        return null;
-      }
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
 
-      const row = entry as Record<string, unknown>;
-      const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
-      if (!uom) {
-        return null;
-      }
+        const row = entry as Record<string, unknown>;
+        const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
+        if (!uom) {
+          return null;
+        }
 
-      return {
-        uom,
-        conversionFactor: toOptionalNumber(row.conversion_factor),
-      } satisfies ProductUomConversion;
-    })
-    .filter((entry): entry is ProductUomConversion => Boolean(entry));
+        return {
+          uom,
+          conversionFactor: toOptionalNumber(row.conversion_factor),
+        } satisfies ProductUomConversion;
+      })
+      .filter((entry): entry is ProductUomConversion => Boolean(entry)),
+    (entry) => entry.uom,
+  );
 }
 
 function mapPriceSummary(value: unknown): PriceSummary | null {
