@@ -13,7 +13,7 @@ import { deleteItemImage, replaceItemImage, uploadItemImage } from '@/services/m
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1600;
-const COMPRESS_QUALITY = 0.78;
+const COMPRESS_QUALITY = 0.82;
 const PRODUCT_IMAGE_SIZE = 1600;
 
 type PreparedUploadImage = {
@@ -239,6 +239,7 @@ function InnerItemImageField({
 
         const result = await ImagePicker.launchImageLibraryAsync({
           allowsEditing: true,
+          aspect: [1, 1],
           base64: true,
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           quality: 0.82,
@@ -296,6 +297,7 @@ function InnerItemImageField({
 
         const result = await ImagePicker.launchCameraAsync({
           allowsEditing: true,
+          aspect: [1, 1],
           base64: true,
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           quality: 0.82,

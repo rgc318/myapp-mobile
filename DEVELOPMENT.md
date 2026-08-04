@@ -442,10 +442,10 @@ This round established the first migration-friendly image-upload boundary withou
 - the product detail edit page now places the image editor near the top of the base-info form, aligned with the create page instead of leaving image edits too far down
 - the product list page now renders product thumbnail images directly in each card instead of showing text-only rows
 - selected images are compressed before upload on mobile:
-  - longest edge is reduced to about `1600`
-  - image is re-encoded as `JPEG`
-  - quality is currently around `0.78`
-- backend still keeps the final `5MB` hard limit as a safety gate
+  - product images use a square `1600 x 1600` crop profile
+  - native input is re-encoded as `JPEG` before transport
+  - client quality is `0.82`
+- backend accepts source images up to `20MB`, performs real image decoding, and normalizes the formal file to `1600 x 1600 WebP`
 - product-search / product-list image URLs now normalize backend relative file paths before rendering, so `/files/...` assets can display correctly in mobile cards
 
 ### Native Dependency Note
@@ -7055,8 +7055,8 @@ The product-image flow has now moved from the lightweight system edit sheet to a
 - native mobile now prefers `react-native-image-crop-picker` for product-image selection and capture
 - product images are cropped to a consistent square output before upload:
   - target size: `1600 x 1600`
-  - compression quality: `0.78`
-- web still keeps the Expo fallback so browser-based debugging does not lose upload capability
+  - compression quality: `0.82`
+- web keeps the Expo fallback with `allowsEditing` and `aspect: [1, 1]`; backend normalization remains the final consistency boundary
 - the image action entry now uses a bottom action sheet instead of three flat inline buttons:
   - choose from library
   - capture from camera

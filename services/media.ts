@@ -4,11 +4,20 @@ import { resolveMediaUrl } from '@/lib/media-url';
 export type UploadedItemImage = {
   fileUrl: string;
   fileName: string | null;
+  fileSize: number | null;
   fileId: string | null;
   isPrivate: boolean;
   attachedToDoctype: string | null;
   attachedToName: string | null;
   storageProvider: string | null;
+  contentType: string | null;
+  height: number | null;
+  profile: string | null;
+  quality: number | null;
+  sourceFormat: string | null;
+  sourceHeight: number | null;
+  sourceWidth: number | null;
+  width: number | null;
 };
 
 export type DeletedItemImage = {
@@ -30,11 +39,20 @@ function mapUploadedItemImage(data: Record<string, unknown>): UploadedItemImage 
   return {
     fileUrl: resolveMediaUrl(typeof data.file_url === 'string' ? data.file_url : ''),
     fileName: typeof data.file_name === 'string' ? data.file_name : null,
+    fileSize: typeof data.file_size === 'number' ? data.file_size : null,
     fileId: typeof data.file_id === 'string' ? data.file_id : null,
     isPrivate: Boolean(data.is_private),
     attachedToDoctype: typeof data.attached_to_doctype === 'string' ? data.attached_to_doctype : null,
     attachedToName: typeof data.attached_to_name === 'string' ? data.attached_to_name : null,
     storageProvider: typeof data.storage_provider === 'string' ? data.storage_provider : null,
+    contentType: typeof data.content_type === 'string' ? data.content_type : null,
+    height: typeof data.height === 'number' ? data.height : null,
+    profile: typeof data.profile === 'string' ? data.profile : null,
+    quality: typeof data.quality === 'number' ? data.quality : null,
+    sourceFormat: typeof data.source_format === 'string' ? data.source_format : null,
+    sourceHeight: typeof data.source_height === 'number' ? data.source_height : null,
+    sourceWidth: typeof data.source_width === 'number' ? data.source_width : null,
+    width: typeof data.width === 'number' ? data.width : null,
   };
 }
 
