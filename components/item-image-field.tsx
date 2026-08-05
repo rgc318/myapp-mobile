@@ -16,6 +16,23 @@ const MAX_IMAGE_DIMENSION = 1600;
 const COMPRESS_QUALITY = 0.82;
 const PRODUCT_IMAGE_SIZE = 1600;
 
+type CropAspectKey = 'free' | 'square' | '4:3' | '3:2' | '16:9';
+
+type CropAspectOption = {
+  height: number | null;
+  key: CropAspectKey;
+  label: string;
+  width: number | null;
+};
+
+const CROP_ASPECT_OPTIONS: readonly CropAspectOption[] = [
+  { height: 1, key: 'square', label: '1:1', width: 1 },
+  { height: 3, key: '4:3', label: '4:3', width: 4 },
+  { height: 2, key: '3:2', label: '3:2', width: 3 },
+  { height: 9, key: '16:9', label: '16:9', width: 16 },
+  { height: null, key: 'free', label: '自由', width: null },
+];
+
 type PreparedUploadImage = {
   base64: string;
   mimeType: string;
@@ -23,6 +40,35 @@ type PreparedUploadImage = {
   fileSize: number | null;
   cleanupPath?: string | null;
 };
+
+function resolveCropDimensions(option: CropAspectOption, portrait: boolean) {
+  if (!option.width || !option.height) {
+    return {
+      aspect: undefined,
+      freeStyleCropEnabled: true,
+      height: PRODUCT_IMAGE_SIZE,
+      width: PRODUCT_IMAGE_SIZE,
+    };
+  }
+
+  const ratioWidth = portrait ? option.height : option.width;
+  const ratioHeight = portrait ? option.width : option.height;
+  const aspect = [ratioWidth, ratioHeight] as [number, number];
+  if (ratioWidth >= ratioHeight) {
+    return {
+      aspect,
+      freeStyleCropEnabled: false,
+      height: Math.round((PRODUCT_IMAGE_SIZE * ratioHeight) / ratioWidth),
+      width: PRODUCT_IMAGE_SIZE,
+    };
+  }
+  return {
+    aspect,
+    freeStyleCropEnabled: false,
+    height: PRODUCT_IMAGE_SIZE,
+    width: Math.round((PRODUCT_IMAGE_SIZE * ratioWidth) / ratioHeight),
+  };
+}
 
 async function getNativeCropPicker(): Promise<CropPickerModule> {
   const runtimeModule = await import('react-native-image-crop-picker');
@@ -72,6 +118,11 @@ function ensureFilename(fileName: string | null | undefined, mimeType?: string |
   return `item-image-${Date.now()}.${guessExtension(mimeType)}`;
 }
 
+function estimateBase64Bytes(value: string) {
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
+}
+
 async function compressPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<PreparedUploadImage> {
   if (!asset.uri) {
     throw new Error('未读取到图片文件，请重试。');
@@ -107,7 +158,7 @@ async function compressPickedImage(asset: ImagePicker.ImagePickerAsset): Promise
     base64: saved.base64,
     mimeType: 'image/jpeg',
     fileName: ensureFilename(asset.fileName, 'image/jpeg').replace(/\.[^.]+$/, '.jpg'),
-    fileSize: typeof saved.fileSize === 'number' ? saved.fileSize : null,
+    fileSize: estimateBase64Bytes(saved.base64),
   };
 }
 
@@ -180,7 +231,13 @@ function InnerItemImageField({
   const [isUploading, setIsUploading] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [showActionSheet, setShowActionSheet] = React.useState(false);
+  const [cropAspectKey, setCropAspectKey] = React.useState<CropAspectKey>('square');
+  const [cropPortrait, setCropPortrait] = React.useState(false);
   const isCover = variant === 'cover';
+  const cropAspectOption =
+    CROP_ASPECT_OPTIONS.find((option) => option.key === cropAspectKey) ??
+    CROP_ASPECT_OPTIONS[0];
+  const cropDimensions = resolveCropDimensions(cropAspectOption, cropPortrait);
 
   const closeActionSheet = React.useCallback(() => {
     setShowActionSheet(false);
@@ -239,7 +296,7 @@ function InnerItemImageField({
 
         const result = await ImagePicker.launchImageLibraryAsync({
           allowsEditing: true,
-          aspect: [1, 1],
+          ...(cropDimensions.aspect ? { aspect: cropDimensions.aspect } : {}),
           base64: true,
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           quality: 0.82,
@@ -257,8 +314,9 @@ function InnerItemImageField({
       const picked = await cropPicker.openPicker({
         cropping: true,
         mediaType: 'photo',
-        width: PRODUCT_IMAGE_SIZE,
-        height: PRODUCT_IMAGE_SIZE,
+        width: cropDimensions.width,
+        height: cropDimensions.height,
+        freeStyleCropEnabled: cropDimensions.freeStyleCropEnabled,
         includeBase64: true,
         forceJpg: true,
         compressImageMaxWidth: PRODUCT_IMAGE_SIZE,
@@ -297,7 +355,7 @@ function InnerItemImageField({
 
         const result = await ImagePicker.launchCameraAsync({
           allowsEditing: true,
-          aspect: [1, 1],
+          ...(cropDimensions.aspect ? { aspect: cropDimensions.aspect } : {}),
           base64: true,
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           quality: 0.82,
@@ -315,8 +373,9 @@ function InnerItemImageField({
       const captured = await cropPicker.openCamera({
         cropping: true,
         mediaType: 'photo',
-        width: PRODUCT_IMAGE_SIZE,
-        height: PRODUCT_IMAGE_SIZE,
+        width: cropDimensions.width,
+        height: cropDimensions.height,
+        freeStyleCropEnabled: cropDimensions.freeStyleCropEnabled,
         includeBase64: true,
         forceJpg: true,
         compressImageMaxWidth: PRODUCT_IMAGE_SIZE,
@@ -432,8 +491,49 @@ function InnerItemImageField({
                 {value ? '更换商品图片' : '上传商品图片'}
               </ThemedText>
               <ThemedText style={[styles.sheetHint, { color: textMuted }]}>
-                选择图片来源，再继续上传。
+                先选择裁剪比例，再选择图片来源。
               </ThemedText>
+            </View>
+
+            <View style={styles.cropAspectSection}>
+              <ThemedText style={styles.cropAspectTitle} type="defaultSemiBold">
+                裁剪比例
+              </ThemedText>
+              <View style={styles.cropAspectList}>
+                {CROP_ASPECT_OPTIONS.map((option) => {
+                  const selected = option.key === cropAspectKey;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      onPress={() => {
+                        setCropAspectKey(option.key);
+                        if (option.key === 'free' || option.key === 'square') {
+                          setCropPortrait(false);
+                        }
+                      }}
+                      style={[
+                        styles.cropAspectButton,
+                        {
+                          backgroundColor: selected ? `${tintColor}16` : surfaceMuted,
+                          borderColor: selected ? tintColor : borderColor,
+                        },
+                      ]}>
+                      <ThemedText style={selected ? { color: tintColor } : null} type="defaultSemiBold">
+                        {option.label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {cropAspectKey !== 'free' && cropAspectKey !== 'square' ? (
+                <Pressable
+                  onPress={() => setCropPortrait((current) => !current)}
+                  style={[styles.cropOrientationButton, { backgroundColor: surfaceMuted }]}>
+                  <ThemedText style={{ color: tintColor }} type="defaultSemiBold">
+                    {cropPortrait ? '当前纵向，切换为横向' : '当前横向，切换为纵向'}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
             </View>
 
             <View style={styles.sheetActionList}>
@@ -618,6 +718,31 @@ const styles = StyleSheet.create({
   sheetHint: {
     fontSize: 13,
     lineHeight: 19,
+  },
+  cropAspectSection: {
+    gap: 10,
+  },
+  cropAspectTitle: {
+    fontSize: 14,
+  },
+  cropAspectList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  cropAspectButton: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  cropOrientationButton: {
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   sheetActionList: {
     gap: 10,

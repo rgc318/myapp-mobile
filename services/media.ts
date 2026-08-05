@@ -2,6 +2,7 @@ import { callGatewayMethod } from '@/lib/api-client';
 import { resolveMediaUrl } from '@/lib/media-url';
 
 export type UploadedItemImage = {
+  aspectRatio: number | null;
   fileUrl: string;
   fileName: string | null;
   fileSize: number | null;
@@ -37,6 +38,7 @@ export type UploadItemImagePayload = {
 
 function mapUploadedItemImage(data: Record<string, unknown>): UploadedItemImage {
   return {
+    aspectRatio: typeof data.aspect_ratio === 'number' ? data.aspect_ratio : null,
     fileUrl: resolveMediaUrl(typeof data.file_url === 'string' ? data.file_url : ''),
     fileName: typeof data.file_name === 'string' ? data.file_name : null,
     fileSize: typeof data.file_size === 'number' ? data.file_size : null,
